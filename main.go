@@ -5,30 +5,34 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/tdeslauriers/carapace/standard"
+	"github.com/tdeslauriers/carapace/connect"
+	"github.com/tdeslauriers/carapace/diagnostics"
 )
 
 func main() {
-	pki := &standard.PkiCerts{
+	pki := &connect.Pki{
 		CertFile: os.Getenv("SERVER_CERT"),
 		KeyFile:  os.Getenv("SERVER_KEY"),
 	}
 
-	serverConfig := &standard.ServerPkiConfigurer{Config: pki}
-	tlsConfig, err := serverConfig.SetupPki()
+	tls, err := connect.NewTLSConfig("standard", pki)
 	if err != nil {
-		log.Fatalln("Failed to set up standard tls server config: ", err)
+		log.Fatalf("Failed to configure tls: %v", err)
 	}
 
-	server := &standard.Server{
-		Address:   ":8443",
-		TlsConfig: tlsConfig,
+	mux := http.NewServeMux()
+	mux.HandleFunc("/health", diagnostics.HealthCheckHandler)
+
+	server := &connect.TlsServer{
+		Addr:      ":8443",
+		Mux:       mux,
+		TlsConfig: tls,
 	}
 
 	go func() {
 
-		log.Printf("Starting mTLS server on %s...", server.Address[1:])
-		if err := server.Start(); err != http.ErrServerClosed {
+		log.Printf("Starting mTLS server on %s...", server.Addr[1:])
+		if err := server.Initialize(); err != http.ErrServerClosed {
 			log.Fatalln("Failed to start Erebor Gateway server: ", err)
 		}
 	}()
