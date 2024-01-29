@@ -6,12 +6,14 @@ import (
 	"os"
 
 	"github.com/tdeslauriers/carapace/connect"
+	"github.com/tdeslauriers/carapace/data"
 	"github.com/tdeslauriers/carapace/diagnostics"
+	"github.com/tdeslauriers/carapace/session"
 )
 
 const (
 	EnvCaCert       string = "EREBOR_CA_CERT"
-	EnvServerCert   string = "EREBOR_SERVER_CERT"
+	EnvServerCert   string = "EREBOR_SERVER_CERT" // external-facing (not mtls)
 	EnvServerKey    string = "EREBOR_SERVER_KEY"
 	EnvClientCert   string = "EREBOR_CLIENT_CERT"
 	EnvClientKey    string = "EREBOR_CLIENT_KEY"
@@ -21,6 +23,7 @@ const (
 	// ran s2s authn
 	EnvClientIdstring string = "EREBOR_AUTH_CLIENT_ID"
 	EnvClientSecret   string = "EREBOR_AUTH_CLIENT_SECRET"
+	EnvS2sTokenUrl    string = "EREBOR_S2S_AUTH_URL"
 
 	// db config
 	EnvDbUrl      string = "EREBOR_DATABASE_URL"
@@ -30,9 +33,11 @@ const (
 )
 
 func main() {
+
+	// front end server
 	serverPki := &connect.Pki{
-		CertFile: os.Getenv("SERVER_CERT"),
-		KeyFile:  os.Getenv("SERVER_KEY"),
+		CertFile: os.Getenv(EnvServerCert),
+		KeyFile:  os.Getenv(EnvServerKey),
 	}
 
 	tls, err := connect.NewTLSConfig("standard", serverPki)
@@ -40,8 +45,62 @@ func main() {
 		log.Fatalf("Failed to configure tls: %v", err)
 	}
 
+	// s2s client
+	clientPki := connect.Pki{
+		CertFile: os.Getenv(EnvClientCert),
+		KeyFile:  os.Getenv(EnvClientKey),
+		CaFiles:  []string{os.Getenv(EnvCaCert)},
+	}
+
+	clientConfig := connect.ClientConfig{Config: &clientPki}
+	client, err := clientConfig.NewTlsClient()
+	if err != nil {
+		log.Fatalf("Unable to create Erebor s2s client config: %v", err)
+	}
+
+	// db client
+	dbClientPki := connect.Pki{
+		CertFile: os.Getenv(EnvDbClientCert),
+		KeyFile:  os.Getenv(EnvDbClientKey),
+		CaFiles:  []string{os.Getenv(EnvCaCert)},
+	}
+	dbClientConfig := connect.ClientConfig{Config: &dbClientPki}
+
+	// db config
+	dbUrl := data.DbUrl{
+		Name:     os.Getenv(EnvDbName),
+		Addr:     os.Getenv(EnvDbUrl),
+		Username: os.Getenv(EnvDbUsername),
+		Password: os.Getenv(EnvDbPassword),
+	}
+
+	dbConnector := &data.MariaDbConnector{
+		TlsConfig:     dbClientConfig,
+		ConnectionUrl: dbUrl.Build(),
+	}
+
+	repository := data.MariaDbRepository{
+		SqlDb: dbConnector,
+	}
+
+	// s2s creds
+	cmd := session.S2sLoginCmd{
+		ClientId:     os.Getenv(EnvClientIdstring),
+		ClientSecret: os.Getenv(EnvClientSecret),
+	}
+
+	s2sProvider := session.S2sTokenProvider{
+		S2sServiceUrl: os.Getenv(EnvS2sTokenUrl),
+		Credentials:   cmd,
+		S2sClient:     client,
+		Dao:           &repository,
+	}
+
+	login := NewLoginHandler(s2sProvider)
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", diagnostics.HealthCheckHandler)
+	mux.HandleFunc("/login", login.HandleLogin)
 
 	server := &connect.TlsServer{
 		Addr:      ":8443",
