@@ -21,9 +21,9 @@ const (
 	EnvDbClientKey  string = "EREBOR_DB_CLIENT_KEY"
 
 	// ran s2s authn
-	EnvClientIdstring string = "EREBOR_AUTH_CLIENT_ID"
-	EnvClientSecret   string = "EREBOR_AUTH_CLIENT_SECRET"
 	EnvS2sTokenUrl    string = "EREBOR_S2S_AUTH_URL"
+	EnvClientIdstring string = "EREBOR_S2S_AUTH_CLIENT_ID"
+	EnvClientSecret   string = "EREBOR_S2S_AUTH_CLIENT_SECRET"
 
 	// db config
 	EnvDbUrl      string = "EREBOR_DATABASE_URL"
