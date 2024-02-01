@@ -27,7 +27,12 @@ CREATE INDEX idx_session_uuid_uxsession_access_xref ON uxsession_accesstoken(uxs
 CREATE TABLE servicetoken (
     uuid CHAR(36) PRIMARY KEY,
     service_token VARCHAR(1024),
-    service_expires TIMESTAMP,
-    refresh_token CHAR(36),
+    v refresh_token CHAR(36),
     refresh_expires TIMESTAMP
+);
+CREATE TABLE ouath_flow (
+    uuid CHAR(36) PRIMARY KEY,
+    state_param CHAR(36),
+    redirect_url VARCHAR(255),
+    created_at TIMESTAMP
 );
