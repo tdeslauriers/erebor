@@ -2,7 +2,7 @@ github.com/go-sql-driver/mysql v1.7.1 h1:lUIinVbN1DY0xBg0eMOzmmtGoHwWBbvnWubQUrt
 github.com/go-sql-driver/mysql v1.7.1/go.mod h1:OXbVy3sEdcQ2Doequ6Z5BW6fXNQTmx+9S1MCJN5yJMI=
 github.com/google/uuid v1.6.0 h1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=
 github.com/google/uuid v1.6.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
-github.com/tdeslauriers/carapace v0.0.11 h1:9uOsCseNmRFaNKGMtwJ7FO0y+hBEFoPDAOLKYWQ8OzE=
-github.com/tdeslauriers/carapace v0.0.11/go.mod h1:VVDLf+4HRejMQ8lbJXAQ+tF85frpP7u3JM4gvt/Bmyw=
+github.com/tdeslauriers/carapace v0.0.19 h1:9/sLzqaXVjZobG3INJOdmjFZOWNlHJ0JIT/ybbWUfvg=
+github.com/tdeslauriers/carapace v0.0.19/go.mod h1:VVDLf+4HRejMQ8lbJXAQ+tF85frpP7u3JM4gvt/Bmyw=
 golang.org/x/crypto v0.18.0 h1:PGVlW0xEltQnzFZ55hkuX5+KLyrMYhHld1YHO4AKcdc=
 golang.org/x/crypto v0.18.0/go.mod h1:R0j02AL6hcrfOiy9T4ZYp/rcWeMxM3L6QYxlOuEG1mg=

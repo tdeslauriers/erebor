@@ -11,8 +11,8 @@ CREATE TABLE uxsession (
 CREATE UNIQUE INDEX idx_session_token ON uxsession(session_token);
 CREATE TABLE accesstoken (
     uuid CHAR(36) PRIMARY KEY,
-    access_token VARCHAR(1024),
-    access_expires TIMESTAMP,
+    token VARCHAR(1024),
+    token_expires TIMESTAMP,
     refresh_token CHAR(36),
     refresh_expires TIMESTAMP
 );
@@ -27,7 +27,8 @@ CREATE INDEX idx_session_uuid_uxsession_access_xref ON uxsession_accesstoken(uxs
 CREATE TABLE servicetoken (
     uuid CHAR(36) PRIMARY KEY,
     service_token VARCHAR(1024),
-    v refresh_token CHAR(36),
+    service_expires TIMESTAMP,
+    refresh_token CHAR(36),
     refresh_expires TIMESTAMP
 );
 CREATE TABLE ouath_flow (

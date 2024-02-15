@@ -1,6 +1,7 @@
 package main
 
 import (
+	"erebor/auth"
 	"log"
 	"net/http"
 	"os"
@@ -96,7 +97,7 @@ func main() {
 		Dao:           &repository,
 	}
 
-	login := NewLoginHandler(s2sProvider)
+	login := auth.NewLoginHandler(s2sProvider)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", diagnostics.HealthCheckHandler)
