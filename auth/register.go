@@ -26,7 +26,7 @@ func (h *RegistrationHandler) HandleRegistration(w http.ResponseWriter, r *http.
 		return
 	}
 
-	var cmd session.RegisterCmd
+	var cmd session.UserRegisterCmd
 	if r.Method != "POST" {
 		http.Error(w, "Only POST method is allowed", http.StatusMethodNotAllowed)
 		return

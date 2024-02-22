@@ -9,10 +9,10 @@ import (
 )
 
 type LoginHandler struct {
-	S2s session.S2sTokenProvider
+	S2s *session.S2sTokenProvider
 }
 
-func NewLoginHandler(s2s session.S2sTokenProvider) *LoginHandler {
+func NewLoginHandler(s2s *session.S2sTokenProvider) *LoginHandler {
 	return &LoginHandler{
 		S2s: s2s,
 	}

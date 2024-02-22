@@ -90,12 +90,11 @@ func main() {
 		ClientSecret: os.Getenv(EnvClientSecret),
 	}
 
-	s2sProvider := session.S2sTokenProvider{
-		S2sServiceUrl: os.Getenv(EnvS2sTokenUrl),
-		Credentials:   cmd,
-		S2sClient:     client,
-		Dao:           &repository,
-	}
+	// s2s callers
+	ranCaller := connect.NewS2sCaller(os.Getenv(EnvS2sTokenUrl), "ran", client)
+
+	// s2s token provider
+	s2sProvider := session.NewS2sTokenProvider(ranCaller, cmd, &repository)
 
 	login := auth.NewLoginHandler(s2sProvider)
 
