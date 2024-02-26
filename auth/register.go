@@ -1,21 +1,23 @@
 package auth
 
 import (
-	"fmt"
+	"encoding/json"
 	"log"
 	"net/http"
 
+	"github.com/tdeslauriers/carapace/connect"
 	"github.com/tdeslauriers/carapace/session"
-	"github.com/tdeslauriers/carapace/validate"
 )
 
 type RegistrationHandler struct {
-	S2s session.S2STokenProvider
+	S2sProvider session.S2STokenProvider
+	Caller      connect.S2SCaller
 }
 
-func NewRegistrationHandler(session session.S2STokenProvider) *RegistrationHandler {
+func NewRegistrationHandler(provider session.S2STokenProvider, caller connect.S2SCaller) *RegistrationHandler {
 	return &RegistrationHandler{
-		S2s: session,
+		S2sProvider: provider,
+		Caller:      caller,
 	}
 }
 
@@ -33,41 +35,27 @@ func (h *RegistrationHandler) HandleRegistration(w http.ResponseWriter, r *http.
 	}
 
 	// input validation
-	if err := validate.IsValidEmail(cmd.Username); err != nil {
-		http.Error(w, fmt.Sprintf("invalid username: %v", err), http.StatusBadRequest)
-		return
-	}
-
-	if err := validate.IsValidName(cmd.Firstname); err != nil {
-		http.Error(w, fmt.Sprintf("invalid firstname: %v", err), http.StatusBadRequest)
-		return
-	}
-
-	if err := validate.IsValidName(cmd.Lastname); err != nil {
-		http.Error(w, fmt.Sprintf("invalid lastname: %v", err), http.StatusBadRequest)
-		return
-	}
-
-	if err := validate.IsValidBirthday(cmd.Birthdate); err != nil {
-		http.Error(w, fmt.Sprintf("invalid date of birth: %v", err), http.StatusBadRequest)
-		return
-	}
-
-	if cmd.Password != cmd.Confirm {
-		http.Error(w, "password does not match confirm password", http.StatusBadRequest)
-		return
-	}
-
-	if err := validate.IsValidPassword(cmd.Password); err != nil {
-		http.Error(w, fmt.Sprintf("invalid password: %v", err), http.StatusBadRequest)
+	if err := cmd.ValidateCmd(); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	// get service token
-	s2sToken, err := h.S2s.GetServiceToken()
+	s2sToken, err := h.S2sProvider.GetServiceToken()
 	if err != nil {
 		log.Printf("unable to retreive s2s token: %v", err)
-		http.Error(w, "unable to retrieve service token", http.StatusBadRequest)
+		http.Error(w, "registration unsuccessful", http.StatusInternalServerError)
 		return
 	}
+
+	var registered session.UserRegisterCmd
+	if err := h.Caller.PostToService("/register", s2sToken, "", cmd, &registered); err != nil {
+		log.Printf("registration call to user auth service failed for username %s: %v", cmd.Username, err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(registered)
 }

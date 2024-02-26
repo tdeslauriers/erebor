@@ -26,6 +26,9 @@ const (
 	EnvClientIdstring string = "EREBOR_S2S_AUTH_CLIENT_ID"
 	EnvClientSecret   string = "EREBOR_S2S_AUTH_CLIENT_SECRET"
 
+	// s2s services
+	EnvS2sUserAuthUrl string = "EREBOR_S2S_USER_AUTH_URL"
+
 	// db config
 	EnvDbUrl      string = "EREBOR_DATABASE_URL"
 	EnvDbName     string = "EREBOR_DATABASE_NAME"
@@ -92,14 +95,17 @@ func main() {
 
 	// s2s callers
 	ranCaller := connect.NewS2sCaller(os.Getenv(EnvS2sTokenUrl), "ran", client)
+	shawCaller := connect.NewS2sCaller(os.Getenv(EnvS2sUserAuthUrl), "shaw", client)
 
 	// s2s token provider
 	s2sProvider := session.NewS2sTokenProvider(ranCaller, cmd, &repository)
 
+	register := auth.NewRegistrationHandler(s2sProvider, shawCaller)
 	login := auth.NewLoginHandler(s2sProvider)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", diagnostics.HealthCheckHandler)
+	mux.HandleFunc("/register", register.HandleRegistration)
 	mux.HandleFunc("/login", login.HandleLogin)
 
 	server := &connect.TlsServer{
