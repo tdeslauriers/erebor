@@ -29,8 +29,9 @@ func (h *RegistrationHandler) HandleRegistration(w http.ResponseWriter, r *http.
 	}
 
 	var cmd session.UserRegisterCmd
-	if r.Method != "POST" {
-		http.Error(w, "Only POST method is allowed", http.StatusMethodNotAllowed)
+	err := json.NewDecoder(r.Body).Decode(&cmd)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -55,6 +56,7 @@ func (h *RegistrationHandler) HandleRegistration(w http.ResponseWriter, r *http.
 		return
 	}
 
+	// respond 201 + registered user
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(registered)
