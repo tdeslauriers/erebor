@@ -2,6 +2,7 @@ package auth
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 
@@ -24,20 +25,33 @@ func NewRegistrationHandler(provider session.S2STokenProvider, caller connect.S2
 func (h *RegistrationHandler) HandleRegistration(w http.ResponseWriter, r *http.Request) {
 
 	if r.Method != "POST" {
-		http.Error(w, "Only POST method is allowed", http.StatusMethodNotAllowed)
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusMethodNotAllowed,
+			Message:    "only POST requests are allowed",
+		}
+		e.SendJsonErr(w)
 		return
 	}
 
 	var cmd session.UserRegisterCmd
 	err := json.NewDecoder(r.Body).Decode(&cmd)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		log.Printf("unable to decode json in user registration request body: %v", err)
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusBadRequest,
+			Message:    "improperly formatted json",
+		}
+		e.SendJsonErr(w)
 		return
 	}
 
 	// input validation
 	if err := cmd.ValidateCmd(); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusBadRequest,
+			Message:    fmt.Sprintf("invalid user registration request: %v", err),
+		}
+		e.SendJsonErr(w)
 		return
 	}
 
@@ -45,19 +59,31 @@ func (h *RegistrationHandler) HandleRegistration(w http.ResponseWriter, r *http.
 	s2sToken, err := h.S2sProvider.GetServiceToken()
 	if err != nil {
 		log.Printf("unable to retreive s2s token: %v", err)
-		http.Error(w, "registration unsuccessful", http.StatusInternalServerError)
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusInternalServerError,
+			Message:    "user registration failed due to internal server error",
+		}
+		e.SendJsonErr(w)
 		return
 	}
 
 	var registered session.UserRegisterCmd
 	if err := h.Caller.PostToService("/register", s2sToken, "", cmd, &registered); err != nil {
-		log.Printf("registration call to user auth service failed for username %s: %v", cmd.Username, err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		log.Printf("registration failed for username %s: %v", cmd.Username, err)
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusInternalServerError,
+			Message:    "user registration failed due to internal server error",
+		}
+		e.SendJsonErr(w)
 		return
 	}
 
 	// respond 201 + registered user
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(registered)
+	if err := json.NewEncoder(w).Encode(registered); err != nil {
+		log.Printf("unable to marshal/send user registration response body: %v", err)
+		// returning successfully registered user data is a convenience only, omit on error
+		return
+	}
 }

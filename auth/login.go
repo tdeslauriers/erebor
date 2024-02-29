@@ -2,10 +2,11 @@ package auth
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 
+	"github.com/tdeslauriers/carapace/connect"
 	"github.com/tdeslauriers/carapace/session"
-	"github.com/tdeslauriers/carapace/validate"
 )
 
 type LoginHandler struct {
@@ -21,24 +22,34 @@ func NewLoginHandler(s2s *session.S2sTokenProvider) *LoginHandler {
 func (h *LoginHandler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 
 	if r.Method != "POST" {
-		http.Error(w, "Only POST method is allowed", http.StatusMethodNotAllowed)
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusMethodNotAllowed,
+			Message:    "only POST requests are allowed",
+		}
+		e.SendJsonErr(w)
 		return
 	}
 
 	var cmd session.UserLoginCmd
 	err := json.NewDecoder(r.Body).Decode(&cmd)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		log.Printf("unable to decode json in user login request body: %v", err)
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusBadRequest,
+			Message:    "improperly formatted json",
+		}
+		e.SendJsonErr(w)
 		return
 	}
 
 	// validate field input restrictions
-	if err := validate.IsValidEmail(cmd.Username); err != nil {
-		http.Error(w, "invalid user credentials", http.StatusUnauthorized)
-	}
-
-	if err := validate.IsValidPassword(cmd.Password); err != nil {
-		http.Error(w, "invalid user credentials", http.StatusUnauthorized)
+	if err := cmd.ValidateCmd(); err != nil {
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusBadRequest,
+			Message:    err.Error(),
+		}
+		e.SendJsonErr(w)
+		return
 	}
 
 	// get service token
