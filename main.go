@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/base64"
 	"erebor/auth"
 	"log"
 	"net/http"
@@ -34,6 +35,7 @@ const (
 	EnvDbName     string = "EREBOR_DATABASE_NAME"
 	EnvDbUsername string = "EREBOR_DATABASE_USERNAME"
 	EnvDbPassword string = "EREBOR_DATABASE_PASSWORD"
+	EnvFieldsKey  string = "EREBOR_FIELD_LEVEL_AES_GCM_KEY"
 )
 
 func main() {
@@ -87,8 +89,15 @@ func main() {
 		SqlDb: dbConnector,
 	}
 
+	// set up field level encryption
+	aes, err := base64.StdEncoding.DecodeString(os.Getenv(EnvFieldsKey))
+	if err != nil {
+		log.Panicf("unable to decode field level encryption key Env var: %v", err)
+	}
+	cryptor := data.NewServiceAesGcmKey(aes)
+
 	// s2s creds
-	cmd := session.S2sLoginCmd{
+	cmd := session.S2sCredentials{
 		ClientId:     os.Getenv(EnvClientIdstring),
 		ClientSecret: os.Getenv(EnvClientSecret),
 	}
@@ -98,10 +107,10 @@ func main() {
 	shawCaller := connect.NewS2sCaller(os.Getenv(EnvS2sUserAuthUrl), "shaw", client)
 
 	// s2s token provider
-	s2sProvider := session.NewS2sTokenProvider(ranCaller, cmd, &repository)
+	s2sProvider := session.NewS2sTokenProvider(ranCaller, cmd, &repository, cryptor)
 
 	register := auth.NewRegistrationHandler(s2sProvider, shawCaller)
-	login := auth.NewLoginHandler(s2sProvider)
+	login := auth.NewLoginHandler(s2sProvider, shawCaller)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", diagnostics.HealthCheckHandler)

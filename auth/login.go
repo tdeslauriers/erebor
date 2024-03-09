@@ -10,12 +10,14 @@ import (
 )
 
 type LoginHandler struct {
-	S2s *session.S2sTokenProvider
+	S2sProvider session.S2STokenProvider
+	Caller      connect.S2SCaller
 }
 
-func NewLoginHandler(s2s *session.S2sTokenProvider) *LoginHandler {
+func NewLoginHandler(provider session.S2STokenProvider, caller connect.S2SCaller) *LoginHandler {
 	return &LoginHandler{
-		S2s: s2s,
+		S2sProvider: provider,
+		Caller:      caller,
 	}
 }
 
@@ -53,12 +55,18 @@ func (h *LoginHandler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// get service token
-	// s2sToken, err := h.S2s.GetServiceToken()
-	// if err != nil {
+	s2sToken, err := h.S2sProvider.GetServiceToken()
+	if err != nil {
+		log.Printf("unable to retreive s2s token: %v", err)
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusInternalServerError,
+			Message:    "login unsuccessful: internal server error",
+		}
+		e.SendJsonErr(w)
+		return
+	}
 
-	// 	log.Printf("unable to retreive s2s token: %v", err)
-	// 	http.Error(w, "unable to retrieve service token", http.StatusBadRequest)
-	// 	return
-	// }
+	// post creds to user auth login
+	
 
 }

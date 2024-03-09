@@ -2,7 +2,6 @@ package auth
 
 import (
 	"encoding/json"
-	"fmt"
 	"log"
 	"net/http"
 
@@ -49,16 +48,16 @@ func (h *RegistrationHandler) HandleRegistration(w http.ResponseWriter, r *http.
 	if err := cmd.ValidateCmd(); err != nil {
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusBadRequest,
-			Message:    fmt.Sprintf("invalid user registration request: %v", err),
+			Message:    err.Error(),
 		}
 		e.SendJsonErr(w)
 		return
 	}
 
-	// get service token
-	s2sToken, err := h.S2sProvider.GetServiceToken()
+	// get shaw service token
+	s2sToken, err := h.S2sProvider.GetServiceToken("shaw")
 	if err != nil {
-		log.Printf("unable to retreive s2s token: %v", err)
+		log.Printf("unable to retreive shaw s2s token: %v", err)
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusInternalServerError,
 			Message:    "user registration failed due to internal server error",
