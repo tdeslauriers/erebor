@@ -94,6 +94,7 @@ func main() {
 	if err != nil {
 		log.Panicf("unable to decode field level encryption key Env var: %v", err)
 	}
+	log.Print(len(aes))
 	cryptor := data.NewServiceAesGcmKey(aes)
 
 	// s2s creds

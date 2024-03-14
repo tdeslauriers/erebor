@@ -55,18 +55,17 @@ func (h *LoginHandler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// get service token
-	s2sToken, err := h.S2sProvider.GetServiceToken()
-	if err != nil {
-		log.Printf("unable to retreive s2s token: %v", err)
-		e := connect.ErrorHttp{
-			StatusCode: http.StatusInternalServerError,
-			Message:    "login unsuccessful: internal server error",
-		}
-		e.SendJsonErr(w)
-		return
-	}
+	// s2sToken, err := h.S2sProvider.GetServiceToken()
+	// if err != nil {
+	// 	log.Printf("unable to retreive s2s token: %v", err)
+	// 	e := connect.ErrorHttp{
+	// 		StatusCode: http.StatusInternalServerError,
+	// 		Message:    "login unsuccessful: internal server error",
+	// 	}
+	// 	e.SendJsonErr(w)
+	// 	return
+	// }
 
 	// post creds to user auth login
-	
 
 }
