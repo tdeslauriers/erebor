@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/tdeslauriers/carapace/connect"
 	"github.com/tdeslauriers/carapace/data"
@@ -103,9 +104,16 @@ func main() {
 		ClientSecret: os.Getenv(EnvClientSecret),
 	}
 
+	// retry config for s2s callers
+	retry := connect.RetryConfiguration{
+		MaxRetries:  5,
+		BaseBackoff: 100 * time.Microsecond,
+		MaxBackoff:  10 * time.Second,
+	}
+
 	// s2s callers
-	ranCaller := connect.NewS2sCaller(os.Getenv(EnvS2sTokenUrl), "ran", client)
-	shawCaller := connect.NewS2sCaller(os.Getenv(EnvS2sUserAuthUrl), "shaw", client)
+	ranCaller := connect.NewS2sCaller(os.Getenv(EnvS2sTokenUrl), "ran", client, retry)
+	shawCaller := connect.NewS2sCaller(os.Getenv(EnvS2sUserAuthUrl), "shaw", client, retry)
 
 	// s2s token provider
 	s2sProvider := session.NewS2sTokenProvider(ranCaller, cmd, &repository, cryptor)

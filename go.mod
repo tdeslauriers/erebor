@@ -1,8 +1,8 @@
 module erebor
 
-go 1.19
+go 1.22
 
-require github.com/tdeslauriers/carapace v0.0.48
+require github.com/tdeslauriers/carapace v0.0.52
 
 require (
 	filippo.io/edwards25519 v1.1.0 // indirect

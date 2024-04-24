@@ -4,7 +4,9 @@ github.com/go-sql-driver/mysql v1.8.0 h1:UtktXaU2Nb64z/pLiGIxY4431SJ4/dR5cjMmlVH
 github.com/go-sql-driver/mysql v1.8.0/go.mod h1:wEBSXgmK//2ZFJyE+qWnIsVGmvmEKlqwuVSjsCm7DZg=
 github.com/google/uuid v1.6.0 h1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=
 github.com/google/uuid v1.6.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
-github.com/tdeslauriers/carapace v0.0.48 h1:cDX+nsGxasgaUZ/qF0D0yt34diYmcQpJ9H+3IwfvIUo=
-github.com/tdeslauriers/carapace v0.0.48/go.mod h1:VVDLf+4HRejMQ8lbJXAQ+tF85frpP7u3JM4gvt/Bmyw=
+github.com/tdeslauriers/carapace v0.0.51 h1:wMLRloGsnoVIrIY/5dSliNYCGxf6fq5nXG296KBo1+Y=
+github.com/tdeslauriers/carapace v0.0.51/go.mod h1:0g+PAf2Xz1aowK/HK9hQkCVmHzt7kMeRAnA52F1tHOw=
+github.com/tdeslauriers/carapace v0.0.52 h1:iOt7JzbJ0hBKYLJ6V0PiT46gGwHgVU7NFhD8VixU6dQ=
+github.com/tdeslauriers/carapace v0.0.52/go.mod h1:0g+PAf2Xz1aowK/HK9hQkCVmHzt7kMeRAnA52F1tHOw=
 golang.org/x/crypto v0.21.0 h1:X31++rzVUdKhX5sWmSOFZxx8UW/ldWx55cbf08iNAMA=
 golang.org/x/crypto v0.21.0/go.mod h1:0BP7YvVV9gBbVKyeTG0Gyn+gZm94bibOW5BjDEYAOMs=

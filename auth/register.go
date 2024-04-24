@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"strings"
 
 	"github.com/tdeslauriers/carapace/connect"
 	"github.com/tdeslauriers/carapace/session"
@@ -68,14 +69,25 @@ func (h *RegistrationHandler) HandleRegistration(w http.ResponseWriter, r *http.
 
 	var registered session.UserRegisterCmd
 	if err := h.Caller.PostToService("/register", s2sToken, "", cmd, &registered); err != nil {
-		log.Printf("registration failed for username %s: %v", cmd.Username, err)
-		e := connect.ErrorHttp{
-			StatusCode: http.StatusInternalServerError,
-			Message:    "user registration failed due to internal server error",
+		if strings.Contains(err.Error(), "username unavailable") {
+			log.Printf("registration failed: %v", err)
+			e := connect.ErrorHttp{
+				StatusCode: http.StatusConflict,
+				Message:    "username unavailable",
+			}
+			e.SendJsonErr(w)
+			return
+		} else {
+			log.Printf("registration failed: %v", err)
+			e := connect.ErrorHttp{
+				StatusCode: http.StatusInternalServerError,
+				Message:    "user registration failed due to internal server error",
+			}
+			e.SendJsonErr(w)
+			return
 		}
-		e.SendJsonErr(w)
-		return
 	}
+	
 
 	// respond 201 + registered user
 	w.Header().Set("Content-Type", "application/json")
