@@ -48,7 +48,7 @@ func (h *RegistrationHandler) HandleRegistration(w http.ResponseWriter, r *http.
 	// input validation
 	if err := cmd.ValidateCmd(); err != nil {
 		e := connect.ErrorHttp{
-			StatusCode: http.StatusBadRequest,
+			StatusCode: http.StatusUnprocessableEntity,
 			Message:    err.Error(),
 		}
 		e.SendJsonErr(w)
