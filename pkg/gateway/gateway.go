@@ -47,8 +47,11 @@ func New(config config.Config) (Gateway, error) {
 
 	// db client
 	dbClientPki := &connect.Pki{
-
+		CertFile: *config.Certs.DbClientCert,
+		KeyFile:  *config.Certs.DbClientKey,
+		CaFiles:  []string{*config.Certs.DbCaCert},
 	}
+
 	dbClientConfig, err := connect.NewTlsClientConfig(dbClientPki).Build()
 	if err != nil {
 		log.Fatalf("Failed to configure database client tls: %v", err)

@@ -23,9 +23,9 @@ type Certs struct {
 	ClientKey *string
 	ClientCa *string
 	
-	dbClientCert *string
-	dbClientKey *string
-	dbCaCert *string
+	DbClientCert *string
+	DbClientKey *string
+	DbCaCert *string
 }
 
 type Database struct {
@@ -84,47 +84,56 @@ func (config *Config) readCerts() error {
 	}
 	
 	// read in certificates from environment variables
+	// server cert
 	envServerCert, ok := os.LookupEnv(fmt.Sprintf("%sSERVER_CERT", serviceName))
 	if !ok {
 		return fmt.Errorf(fmt.Sprintf("%sSERVER_CERT not set", serviceName))
 	}
-	serverCert := &envServerCert	
 	
 	envServerKey, ok := os.LookupEnv(fmt.Sprintf("%sSERVER_KEY", serviceName))
 	if !ok {
 		return fmt.Errorf(fmt.Sprintf("%sSERVER_KEY not set", serviceName))
 	}
-	serverKey := &envServerKey
 	
+	// client cert
 	envClientCert, ok := os.LookupEnv(fmt.Sprintf("%sCLIENT_CERT", serviceName))
 	if !ok {
 		return fmt.Errorf(fmt.Sprintf("%sCLIENT_CERT not set", serviceName))
 	}
-	clientCert := &envClientCert
-	
 	
 	envClientKey, ok := os.LookupEnv(fmt.Sprintf("%sCLIENT_KEY", serviceName))
 	if !ok {
 		return fmt.Errorf(fmt.Sprintf("%sCLIENT_KEY not set", serviceName))
 	}
-	clientKey := &envClientKey
+
+	// db client cert
+	envDbClientCert, ok := os.LookupEnv(fmt.Sprintf("%sDB_CLIENT_CERT", serviceName))
+	if !ok {
+		return fmt.Errorf(fmt.Sprintf("%sDB_CLIENT_CERT not set", serviceName))
+	}
 	
+	envDbClientKey, ok := os.LookupEnv(fmt.Sprintf("%sDB_CLIENT_KEY", serviceName))
+	if !ok {
+		return fmt.Errorf(fmt.Sprintf("%sDB_CLIENT_KEY not set", serviceName))
+	}
+	
+	// ca cert
 	envCaCert, ok := os.LookupEnv(fmt.Sprintf("%sCA_CERT", serviceName))
 	if !ok {
 		return fmt.Errorf(fmt.Sprintf("%sCA_CERT not set", serviceName))
 	}
-	caCert := &envCaCert
 
-	config.Certs.ServerCert = serverCert
-	config.Certs.ServerKey = serverKey
-	config.Certs.ServerCa = caCert
-	config.Certs.ClientCert = clientCert
-	config.Certs.ClientKey = clientKey
-	config.Certs.ClientCa = caCert
+	config.Certs.ServerCert = &envServerCert
+	config.Certs.ServerKey = &envServerKey
+	config.Certs.ServerCa = &envCaCert
 
-	config.Certs.dbClientCert = clientCert
-	config.Certs.dbClientKey = clientKey
-	config.Certs.dbCaCert = caCert
+	config.Certs.ClientCert = &envClientCert
+	config.Certs.ClientKey = &envClientKey
+	config.Certs.ClientCa = &envCaCert
+
+	config.Certs.DbClientCert = &envDbClientCert
+	config.Certs.DbClientKey = &envDbClientKey
+	config.Certs.DbCaCert = &envCaCert
 	
 	return nil
 }

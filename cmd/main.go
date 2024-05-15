@@ -18,4 +18,6 @@ func main() {
 	if err := gateway.Run(); err != nil {
 		log.Fatalf("Failed to run Erebor Gateway: %v", err)
 	}
+
+	select{}
 }
