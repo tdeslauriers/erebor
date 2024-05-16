@@ -3,12 +3,15 @@ package gateway
 import (
 	"crypto/tls"
 	"encoding/base64"
+	"erebor/internal/util"
 	"erebor/pkg/auth"
-	"erebor/pkg/config"
-	"log"
+	"fmt"
+	"log/slog"
 	"net/http"
+	"os"
 	"time"
 
+	"github.com/tdeslauriers/carapace/pkg/config"
 	"github.com/tdeslauriers/carapace/pkg/connect"
 	"github.com/tdeslauriers/carapace/pkg/data"
 	"github.com/tdeslauriers/carapace/pkg/diagnostics"
@@ -16,20 +19,20 @@ import (
 )
 
 type Gateway interface {
-	Run () error
+	Run() error
 }
 
 func New(config config.Config) (Gateway, error) {
-	
+
 	// front end server
 	serverPki := &connect.Pki{
 		CertFile: *config.Certs.ServerCert,
-		KeyFile: *config.Certs.ServerKey,
+		KeyFile:  *config.Certs.ServerKey,
 	}
 
 	serverTlsConfig, err := connect.NewTlsServerConfig("standard", serverPki).Build()
 	if err != nil {
-		log.Fatalf("Failed to configure tls: %v", err)
+		return nil, fmt.Errorf("failed to configure server tls: %v", err)
 	}
 
 	// s2s client
@@ -42,7 +45,7 @@ func New(config config.Config) (Gateway, error) {
 	clientConfig := connect.NewTlsClientConfig(clientPki)
 	client, err := connect.NewTlsClient(clientConfig)
 	if err != nil {
-		log.Fatalf("Unable to create Erebor s2s client config: %v", err)
+		return nil, fmt.Errorf("unable to create s2s client config: %v", err)
 	}
 
 	// db client
@@ -54,7 +57,7 @@ func New(config config.Config) (Gateway, error) {
 
 	dbClientConfig, err := connect.NewTlsClientConfig(dbClientPki).Build()
 	if err != nil {
-		log.Fatalf("Failed to configure database client tls: %v", err)
+		return nil, fmt.Errorf("failed to configure database client tls: %v", err)
 	}
 
 	// db config
@@ -71,7 +74,7 @@ func New(config config.Config) (Gateway, error) {
 	// set up field level encryption
 	aes, err := base64.StdEncoding.DecodeString(config.Database.FieldKey)
 	if err != nil {
-		log.Fatalf("unable to decode field level encryption key Env var: %v", err)
+		return nil, fmt.Errorf("unable to decode field level encryption key Env var: %v", err)
 	}
 
 	cryptor := data.NewServiceAesGcmKey(aes)
@@ -96,20 +99,22 @@ func New(config config.Config) (Gateway, error) {
 	// s2s token provider
 	s2sProvider := session.NewS2sTokenProvider(ranCaller, creds, repository, cryptor)
 
-
 	return &gateway{
-		config: config,
-		serverTls: serverTlsConfig,
+		config:           config,
+		serverTls:        serverTlsConfig,
 		s2sTokenProvider: s2sProvider,
-		shawCaller: shawCaller,
+		shawCaller:       shawCaller,
+		logger:           slog.Default().With(slog.String(util.ComponentKey, util.ComponentGateway)),
 	}, nil
 }
 
 type gateway struct {
-	config config.Config
-	serverTls *tls.Config
+	config           config.Config
+	serverTls        *tls.Config
 	s2sTokenProvider session.S2sTokenProvider
-	shawCaller connect.S2sCaller
+	shawCaller       connect.S2sCaller
+
+	logger *slog.Logger
 }
 
 var _ Gateway = (*gateway)(nil)
@@ -132,10 +137,12 @@ func (g *gateway) Run() error {
 
 	go func() {
 
-		log.Printf("Starting Erebor gateway service on %s...", erebor.Addr[1:])
+		g.logger.Info(fmt.Sprintf("starting Erebor gateway service on %s...", erebor.Addr[1:]))
 		if err := erebor.Initialize(); err != http.ErrServerClosed {
-			log.Fatalf("Failed to start Erebor Gateway server: %v", err)
+			g.logger.Error("failed to start Erebor gateway service: %v", err)
+			os.Exit(1)
 		}
+
 	}()
 	return nil
 }

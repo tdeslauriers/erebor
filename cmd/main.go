@@ -1,22 +1,34 @@
 package main
 
 import (
-	"erebor/pkg/config"
+	"erebor/internal/util"
+
 	"erebor/pkg/gateway"
-	"log"
+	"log/slog"
+	"os"
+
+	"github.com/tdeslauriers/carapace/pkg/config"
 )
 
 func main() {
 
-	config := config.Load("erebor")
+	logger := slog.Default().With(slog.String(util.ComponentKey, util.ComponentMain))
+
+	config, err := config.Load("erebor")
+	if err != nil {
+		logger.Error("Failed to load Erebor config: %v", err)
+		os.Exit(1)
+	}
 
 	gateway, err := gateway.New(*config)
 	if err != nil {
-		log.Fatalf("Failed to create Erebor Gateway: %v", err)
+		logger.Error("Failed to create Erebor Gateway: %v", err)
+		os.Exit(1)
 	}
 
 	if err := gateway.Run(); err != nil {
-		log.Fatalf("Failed to run Erebor Gateway: %v", err)
+		logger.Error("Failed to run Erebor Gateway: %v", err)
+		os.Exit(1)
 	}
 
 	select{}

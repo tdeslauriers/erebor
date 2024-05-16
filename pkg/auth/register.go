@@ -2,29 +2,41 @@ package auth
 
 import (
 	"encoding/json"
-	"log"
+	"log/slog"
 	"net/http"
 	"strings"
+
+	"erebor/internal/util"
 
 	"github.com/tdeslauriers/carapace/pkg/connect"
 	"github.com/tdeslauriers/carapace/pkg/session"
 )
 
-type RegistrationHandler struct {
-	S2sProvider session.S2sTokenProvider
-	Caller      connect.S2sCaller
+type RegistrationHandler interface {
+	HandleRegistration(w http.ResponseWriter, r *http.Request)
 }
 
-func NewRegistrationHandler(provider session.S2sTokenProvider, caller connect.S2sCaller) *RegistrationHandler {
-	return &RegistrationHandler{
-		S2sProvider: provider,
-		Caller:      caller,
+func NewRegistrationHandler(provider session.S2sTokenProvider, caller connect.S2sCaller) RegistrationHandler {
+	return &registrationHandler{
+		s2sProvider: provider,
+		caller:      caller,
+
+		logger: slog.Default().With(slog.String(util.ComponentKey, util.ComponentAuth)),
 	}
 }
 
-func (h *RegistrationHandler) HandleRegistration(w http.ResponseWriter, r *http.Request) {
+var _ RegistrationHandler = (*registrationHandler)(nil)
+
+type registrationHandler struct {
+	s2sProvider session.S2sTokenProvider
+	caller      connect.S2sCaller
+	logger      *slog.Logger
+}
+
+func (h *registrationHandler) HandleRegistration(w http.ResponseWriter, r *http.Request) {
 
 	if r.Method != "POST" {
+		h.logger.Error("only POST requests are allowed to /register endpoint")
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusMethodNotAllowed,
 			Message:    "only POST requests are allowed",
@@ -36,7 +48,7 @@ func (h *RegistrationHandler) HandleRegistration(w http.ResponseWriter, r *http.
 	var cmd session.UserRegisterCmd
 	err := json.NewDecoder(r.Body).Decode(&cmd)
 	if err != nil {
-		log.Printf("unable to decode json in user registration request body: %v", err)
+		h.logger.Error("unable to decode json in user registration request body", err)
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusBadRequest,
 			Message:    "improperly formatted json",
@@ -47,6 +59,7 @@ func (h *RegistrationHandler) HandleRegistration(w http.ResponseWriter, r *http.
 
 	// input validation
 	if err := cmd.ValidateCmd(); err != nil {
+		h.logger.Error("unable to validate fields in registration request body", err)
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusUnprocessableEntity,
 			Message:    err.Error(),
@@ -56,9 +69,9 @@ func (h *RegistrationHandler) HandleRegistration(w http.ResponseWriter, r *http.
 	}
 
 	// get shaw service token
-	s2sToken, err := h.S2sProvider.GetServiceToken("shaw")
+	s2sToken, err := h.s2sProvider.GetServiceToken("shaw")
 	if err != nil {
-		log.Printf("unable to retreive shaw s2s token: %v", err)
+		h.logger.Error("unable to retreive shaw s2s token", err)
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusInternalServerError,
 			Message:    "user registration failed due to internal server error",
@@ -68,9 +81,9 @@ func (h *RegistrationHandler) HandleRegistration(w http.ResponseWriter, r *http.
 	}
 
 	var registered session.UserRegisterCmd
-	if err := h.Caller.PostToService("/register", s2sToken, "", cmd, &registered); err != nil {
+	if err := h.caller.PostToService("/register", s2sToken, "", cmd, &registered); err != nil {
 		if strings.Contains(err.Error(), "username unavailable") {
-			log.Printf("registration failed: %v", err)
+			h.logger.Error("registration failed", err)
 			e := connect.ErrorHttp{
 				StatusCode: http.StatusConflict,
 				Message:    "username unavailable",
@@ -78,7 +91,7 @@ func (h *RegistrationHandler) HandleRegistration(w http.ResponseWriter, r *http.
 			e.SendJsonErr(w)
 			return
 		} else {
-			log.Printf("registration failed: %v", err)
+			h.logger.Error("registration failed", err)
 			e := connect.ErrorHttp{
 				StatusCode: http.StatusInternalServerError,
 				Message:    "user registration failed due to internal server error",
@@ -87,14 +100,13 @@ func (h *RegistrationHandler) HandleRegistration(w http.ResponseWriter, r *http.
 			return
 		}
 	}
-	
 
 	// respond 201 + registered user
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	if err := json.NewEncoder(w).Encode(registered); err != nil {
-		log.Printf("unable to marshal/send user registration response body: %v", err)
 		// returning successfully registered user data is a convenience only, omit on error
+		h.logger.Error("unable to marshal/send user registration response body", err)
 		return
 	}
 }
