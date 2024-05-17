@@ -20,6 +20,7 @@ import (
 
 type Gateway interface {
 	Run() error
+	CloseDb() error
 }
 
 func New(config config.Config) (Gateway, error) {
@@ -45,7 +46,7 @@ func New(config config.Config) (Gateway, error) {
 	clientConfig := connect.NewTlsClientConfig(clientPki)
 	client, err := connect.NewTlsClient(clientConfig)
 	if err != nil {
-		return nil, fmt.Errorf("unable to create s2s client config: %v", err)
+		return nil, fmt.Errorf("failed to create s2s client config: %v", err)
 	}
 
 	// db client
@@ -68,13 +69,17 @@ func New(config config.Config) (Gateway, error) {
 		Password: config.Database.Password,
 	}
 
-	dbConnector := data.NewSqlDbConnector(dbUrl, dbClientConfig)
-	repository := data.NewSqlRepository(dbConnector)
+	db, err := data.NewSqlDbConnector(dbUrl, dbClientConfig).Connect()
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to database: %v", err)
+	}
+
+	repository := data.NewSqlRepository(db)
 
 	// set up field level encryption
 	aes, err := base64.StdEncoding.DecodeString(config.Database.FieldKey)
 	if err != nil {
-		return nil, fmt.Errorf("unable to decode field level encryption key Env var: %v", err)
+		return nil, fmt.Errorf("failed to decode field level encryption key Env var: %v", err)
 	}
 
 	cryptor := data.NewServiceAesGcmKey(aes)
@@ -119,6 +124,14 @@ type gateway struct {
 
 var _ Gateway = (*gateway)(nil)
 
+func (g *gateway) CloseDb() error {
+	if err := g.s2sTokenProvider.CloseDb(); err != nil {
+		g.logger.Error(err.Error())
+		return err
+	}
+	return nil
+}
+
 func (g *gateway) Run() error {
 
 	register := auth.NewRegistrationHandler(g.s2sTokenProvider, g.shawCaller)
@@ -139,7 +152,7 @@ func (g *gateway) Run() error {
 
 		g.logger.Info(fmt.Sprintf("starting Erebor gateway service on %s...", erebor.Addr[1:]))
 		if err := erebor.Initialize(); err != http.ErrServerClosed {
-			g.logger.Error("failed to start Erebor gateway service: %v", err)
+			g.logger.Error("failed to start Erebor gateway service: %v", "err", err.Error())
 			os.Exit(1)
 		}
 

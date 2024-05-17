@@ -26,10 +26,12 @@ func main() {
 		os.Exit(1)
 	}
 
+	defer gateway.CloseDb()
+
 	if err := gateway.Run(); err != nil {
 		logger.Error("Failed to run Erebor Gateway: %v", err)
 		os.Exit(1)
 	}
 
-	select{}
+	select {}
 }
