@@ -15,13 +15,6 @@ type LoginHandler interface {
 	HandleLogin(w http.ResponseWriter, r *http.Request)
 }
 
-type loginHandler struct {
-	s2sProvider session.S2sTokenProvider
-	caller      connect.S2sCaller
-
-	logger *slog.Logger
-}
-
 func NewLoginHandler(provider session.S2sTokenProvider, caller connect.S2sCaller) LoginHandler {
 	return &loginHandler{
 		s2sProvider: provider,
@@ -29,6 +22,15 @@ func NewLoginHandler(provider session.S2sTokenProvider, caller connect.S2sCaller
 
 		logger: slog.Default().With(slog.String(util.ComponentKey, util.ComponentAuth)),
 	}
+}
+
+var _ LoginHandler = (*loginHandler)(nil)
+
+type loginHandler struct {
+	s2sProvider session.S2sTokenProvider
+	caller      connect.S2sCaller
+
+	logger *slog.Logger
 }
 
 func (h *loginHandler) HandleLogin(w http.ResponseWriter, r *http.Request) {

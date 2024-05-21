@@ -25,7 +25,7 @@ type Gateway interface {
 
 func New(config config.Config) (Gateway, error) {
 
-	// front end server
+	// server
 	serverPki := &connect.Pki{
 		CertFile: *config.Certs.ServerCert,
 		KeyFile:  *config.Certs.ServerKey,
@@ -46,7 +46,7 @@ func New(config config.Config) (Gateway, error) {
 	clientConfig := connect.NewTlsClientConfig(clientPki)
 	client, err := connect.NewTlsClient(clientConfig)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create s2s client config: %v", err)
+		return nil, fmt.Errorf("failed to configure s2s client config: %v", err)
 	}
 
 	// db client
@@ -107,25 +107,27 @@ func New(config config.Config) (Gateway, error) {
 	return &gateway{
 		config:           config,
 		serverTls:        serverTlsConfig,
+		repository:       repository,
 		s2sTokenProvider: s2sProvider,
 		shawCaller:       shawCaller,
 		logger:           slog.Default().With(slog.String(util.ComponentKey, util.ComponentGateway)),
 	}, nil
 }
 
+var _ Gateway = (*gateway)(nil)
+
 type gateway struct {
 	config           config.Config
 	serverTls        *tls.Config
+	repository       data.SqlRepository
 	s2sTokenProvider session.S2sTokenProvider
 	shawCaller       connect.S2sCaller
 
 	logger *slog.Logger
 }
 
-var _ Gateway = (*gateway)(nil)
-
 func (g *gateway) CloseDb() error {
-	if err := g.s2sTokenProvider.CloseDb(); err != nil {
+	if err := g.repository.Close(); err != nil {
 		g.logger.Error(err.Error())
 		return err
 	}
