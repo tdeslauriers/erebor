@@ -4,7 +4,7 @@ import (
 	"crypto/tls"
 	"encoding/base64"
 	"erebor/internal/util"
-	"erebor/pkg/auth"
+	"erebor/pkg/authentication"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -31,7 +31,7 @@ func New(config config.Config) (Gateway, error) {
 		KeyFile:  *config.Certs.ServerKey,
 	}
 
-	serverTlsConfig, err := connect.NewTlsServerConfig("standard", serverPki).Build()
+	serverTlsConfig, err := connect.NewTlsServerConfig(config.Tls, serverPki).Build()
 	if err != nil {
 		return nil, fmt.Errorf("failed to configure server tls: %v", err)
 	}
@@ -104,12 +104,16 @@ func New(config config.Config) (Gateway, error) {
 	// s2s token provider
 	s2sProvider := session.NewS2sTokenProvider(ranCaller, creds, repository, cryptor)
 
+	// login service
+	loginService := authentication.NewOuathService(repository, cryptor)
+
 	return &gateway{
 		config:           config,
 		serverTls:        serverTlsConfig,
 		repository:       repository,
 		s2sTokenProvider: s2sProvider,
 		shawCaller:       shawCaller,
+		loginService:     loginService,
 		logger:           slog.Default().With(slog.String(util.ComponentKey, util.ComponentGateway)),
 	}, nil
 }
@@ -122,6 +126,7 @@ type gateway struct {
 	repository       data.SqlRepository
 	s2sTokenProvider session.S2sTokenProvider
 	shawCaller       connect.S2sCaller
+	loginService     authentication.OauthService
 
 	logger *slog.Logger
 }
@@ -136,8 +141,8 @@ func (g *gateway) CloseDb() error {
 
 func (g *gateway) Run() error {
 
-	register := auth.NewRegistrationHandler(g.s2sTokenProvider, g.shawCaller)
-	login := auth.NewLoginHandler(g.s2sTokenProvider, g.shawCaller)
+	register := authentication.NewRegistrationHandler(g.s2sTokenProvider, g.shawCaller)
+	login := authentication.NewLoginHandler(g.config.SiteUrl, g.s2sTokenProvider, g.shawCaller, g.loginService)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", diagnostics.HealthCheckHandler)

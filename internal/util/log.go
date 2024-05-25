@@ -3,7 +3,12 @@ package util
 const (
 	ComponentKey = "component"
 
-	ComponentMain   = "main"
+	ComponentMain    = "main"
 	ComponentGateway = "gateway"
-	ComponentAuth   = "auth"
+	ComponentAuth    = "authentication"
+
+	ServiceKey = "service"
+
+	ServiceLogin    = "login"
+	ServiceRegister = "register"
 )
