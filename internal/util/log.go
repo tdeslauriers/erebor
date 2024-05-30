@@ -11,4 +11,5 @@ const (
 
 	ServiceLogin    = "login"
 	ServiceRegister = "register"
+	ServiceOauth    = "oauth flow exchange"
 )

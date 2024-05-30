@@ -2,7 +2,6 @@ package authentication
 
 import (
 	"encoding/json"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -17,24 +16,24 @@ type LoginHandler interface {
 	HandleLogin(w http.ResponseWriter, r *http.Request)
 }
 
-func NewLoginHandler(siteUrl string, provider session.S2sTokenProvider, caller connect.S2sCaller, loginSvc OauthService) LoginHandler {
+func NewLoginHandler(siteUrl string, provider session.S2sTokenProvider, caller connect.S2sCaller) LoginHandler {
 	return &loginHandler{
-		siteUrl:      siteUrl,
-		s2sProvider:  provider,
-		caller:       caller,
-		loginService: loginSvc,
+		siteUrl:     siteUrl,
+		s2sProvider: provider,
+		caller:      caller,
+		// loginService: loginService,
 
-		logger: slog.Default().With(slog.String(util.ComponentKey, util.ComponentAuth)),
+		logger: slog.Default().With(slog.String(util.ComponentKey, util.ComponentAuth)).With(slog.String(util.ServiceKey, util.ServiceLogin)),
 	}
 }
 
 var _ LoginHandler = (*loginHandler)(nil)
 
 type loginHandler struct {
-	siteUrl      string
-	s2sProvider  session.S2sTokenProvider
-	caller       connect.S2sCaller
-	loginService OauthService
+	siteUrl     string
+	s2sProvider session.S2sTokenProvider
+	caller      connect.S2sCaller
+	// loginService loginService
 
 	logger *slog.Logger
 }
@@ -86,23 +85,17 @@ func (h *loginHandler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// get service token
-	s2sToken, err := h.s2sProvider.GetServiceToken("shaw")
-	if err != nil {
-		h.logger.Error("failed to retreive s2s token")
-		e := connect.ErrorHttp{
-			StatusCode: http.StatusInternalServerError,
-			Message:    "login unsuccessful: internal server error",
-		}
-		e.SendJsonErr(w)
-		return
-	}
-
-	// set up and persist oauth2 url params
-	// if no redirect url is provided, use the site url
-	oauth, err := h.loginService.Create(h.siteUrl)
-
-
+	// // get service token
+	// s2sToken, err := h.s2sProvider.GetServiceToken("shaw")
+	// if err != nil {
+	// 	h.logger.Error("failed to retreive s2s token")
+	// 	e := connect.ErrorHttp{
+	// 		StatusCode: http.StatusInternalServerError,
+	// 		Message:    "login unsuccessful: internal server error",
+	// 	}
+	// 	e.SendJsonErr(w)
+	// 	return
+	// }
 
 	// post creds to user auth login
 

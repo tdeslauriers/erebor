@@ -104,8 +104,10 @@ func New(config config.Config) (Gateway, error) {
 	// s2s token provider
 	s2sProvider := session.NewS2sTokenProvider(ranCaller, creds, repository, cryptor)
 
+	// oauth service: state, nonce, redirect
+	oauthService := authentication.NewOauthService(repository, cryptor)
+
 	// login service
-	loginService := authentication.NewOuathService(repository, cryptor)
 
 	return &gateway{
 		config:           config,
@@ -113,8 +115,9 @@ func New(config config.Config) (Gateway, error) {
 		repository:       repository,
 		s2sTokenProvider: s2sProvider,
 		shawCaller:       shawCaller,
-		loginService:     loginService,
-		logger:           slog.Default().With(slog.String(util.ComponentKey, util.ComponentGateway)),
+		oauthService:     oauthService,
+
+		logger: slog.Default().With(slog.String(util.ComponentKey, util.ComponentGateway)),
 	}, nil
 }
 
@@ -126,7 +129,7 @@ type gateway struct {
 	repository       data.SqlRepository
 	s2sTokenProvider session.S2sTokenProvider
 	shawCaller       connect.S2sCaller
-	loginService     authentication.OauthService
+	oauthService     authentication.OauthService
 
 	logger *slog.Logger
 }
@@ -142,11 +145,13 @@ func (g *gateway) CloseDb() error {
 func (g *gateway) Run() error {
 
 	register := authentication.NewRegistrationHandler(g.s2sTokenProvider, g.shawCaller)
-	login := authentication.NewLoginHandler(g.config.SiteUrl, g.s2sTokenProvider, g.shawCaller, g.loginService)
+	oauth := authentication.NewOauthHandler(g.config.SiteUrl, g.oauthService)
+	login := authentication.NewLoginHandler(g.config.SiteUrl, g.s2sTokenProvider, g.shawCaller)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", diagnostics.HealthCheckHandler)
 	mux.HandleFunc("/register", register.HandleRegistration)
+	mux.HandleFunc("/oauth/state", oauth.HandleGetState)
 	mux.HandleFunc("/login", login.HandleLogin)
 
 	erebor := &connect.TlsServer{

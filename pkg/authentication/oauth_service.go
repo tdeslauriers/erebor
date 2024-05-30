@@ -9,11 +9,11 @@ import (
 )
 
 type OauthExchange struct {
-	Id          string          `db:"id"`
-	Nonce       string          `db:"nonce"`
-	State       string          `db:"state"`
-	RedirectUrl string          `db:"redirect_url"`
-	CreatedAt   data.CustomTime `db:"created_at"`
+	Id          string          `json:"id,omitempty" db:"id"`
+	Nonce       string          `json:"nonce" db:"nonce"`
+	State       string          `json:"state" db:"state"`
+	RedirectUrl string          `json:"redirect_url" db:"redirect_url"`
+	CreatedAt   data.CustomTime `json:"created_at" db:"created_at"`
 }
 
 type OauthService interface {
@@ -21,8 +21,8 @@ type OauthService interface {
 	Valiadate(oauth OauthExchange) error
 }
 
-// NewOuathService creates a new instance of the login service
-func NewOuathService(db data.SqlRepository, cryptor data.Cryptor) OauthService {
+// NewOauthService creates a new instance of the login service
+func NewOauthService(db data.SqlRepository, cryptor data.Cryptor) OauthService {
 	return &oauthService{
 		db:      db,
 		cryptor: cryptor,
@@ -70,20 +70,19 @@ func (s *oauthService) Create(redirect string) (*OauthExchange, error) {
 
 	currentTime := time.Now()
 
-	persist := &OauthExchange{
+	persist := OauthExchange{
 		Id:          id.String(),
 		Nonce:       encryptedNonce,
 		State:       encryptedState,
 		RedirectUrl: encryptedRedirect,
 		CreatedAt:   data.CustomTime{Time: currentTime},
 	}
-	qry := `INSERT INTO oauth_exchange (id, nonce, state, redirect_url, created_at) VALUES (?, ?, ?, ?, ?)`
+	qry := `INSERT INTO oauthflow (uuid, nonce, state, redirect_url, created_at) VALUES (?, ?, ?, ?, ?)`
 	if err := s.db.InsertRecord(qry, persist); err != nil {
 		return nil, fmt.Errorf("failed to persist oauth exchange record: %v", err)
 	}
 
 	return &OauthExchange{
-		Id:          id.String(),
 		Nonce:       nonce.String(),
 		State:       state.String(),
 		RedirectUrl: redirect,
