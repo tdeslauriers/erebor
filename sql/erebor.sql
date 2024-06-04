@@ -11,8 +11,7 @@ CREATE TABLE uxsession (
 CREATE UNIQUE INDEX idx_session_token ON uxsession(session_token);
 CREATE TABLE accesstoken (
     uuid CHAR(36) PRIMARY KEY,
-    service_name VARCHAR(32),
-    token VARCHAR(2048),
+    access_token VARCHAR(2048),
     token_expires TIMESTAMP,
     refresh_token CHAR(128),
     refresh_expires TIMESTAMP

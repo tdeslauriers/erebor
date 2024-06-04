@@ -52,7 +52,6 @@ func (h *oauthHandler) HandleGetState(w http.ResponseWriter, r *http.Request) {
 		}
 		e.SendJsonErr(w)
 		return
-
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -67,5 +66,4 @@ func (h *oauthHandler) HandleGetState(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// http.Redirect(w, r, state.RedirectUrl, http.StatusTemporaryRedirect)
 }

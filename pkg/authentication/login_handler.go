@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
-	"strings"
 
 	"erebor/internal/util"
 
@@ -38,6 +37,8 @@ type loginHandler struct {
 	logger *slog.Logger
 }
 
+// HandleLogin handles the login request from the client by submitting it against the user auth service.
+// The user auth service will return an auth code (as well as state/redirect/etc) that will be sent to the client.
 func (h *loginHandler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 
 	if r.Method != "POST" {
@@ -53,7 +54,7 @@ func (h *loginHandler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	var cmd session.UserLoginCmd
 	err := json.NewDecoder(r.Body).Decode(&cmd)
 	if err != nil {
-		h.logger.Error("unable to decode json in user login request body: %v", err)
+		h.logger.Error("unable to decode json in user login request body", "err", err.Error())
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusBadRequest,
 			Message:    "improperly formatted json",
@@ -63,40 +64,40 @@ func (h *loginHandler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// login level field validation
-	// check for empty strings
-	if cmd.Username == "" || cmd.Password == "" {
-		h.logger.Error("login contained empty string for username or password")
+	// very lightweight validation, just to ensure the fields are not empty ot too long
+	if err := cmd.ValidateCmd(); err != nil {
+		h.logger.Error("unable to validate fields in login request body", "err", err.Error())
 		e := connect.ErrorHttp{
-			StatusCode: http.StatusBadRequest,
-			Message:    "Username and password are required fields; cannot be empty.",
+			StatusCode: http.StatusUnprocessableEntity,
+			Message:    err.Error(),
 		}
 		e.SendJsonErr(w)
 		return
 	}
 
-	// check length of username and password isnt too long
-	if len(strings.TrimSpace(cmd.Username)) > 254 || len(strings.TrimSpace(cmd.Password)) > 64 {
-		h.logger.Error("login contained username or password that was too long")
+	// get service token
+	s2sToken, err := h.s2sProvider.GetServiceToken("shaw")
+	if err != nil {
+		h.logger.Error("failed to retreive s2s token")
 		e := connect.ErrorHttp{
-			StatusCode: http.StatusBadRequest,
-			Message:    "Username or passward exceeded allowed length.",
+			StatusCode: http.StatusInternalServerError,
+			Message:    "login unsuccessful: internal server error",
 		}
 		e.SendJsonErr(w)
 		return
 	}
 
-	// // get service token
-	// s2sToken, err := h.s2sProvider.GetServiceToken("shaw")
-	// if err != nil {
-	// 	h.logger.Error("failed to retreive s2s token")
-	// 	e := connect.ErrorHttp{
-	// 		StatusCode: http.StatusInternalServerError,
-	// 		Message:    "login unsuccessful: internal server error",
-	// 	}
-	// 	e.SendJsonErr(w)
-	// 	return
-	// }
+	// post creds to user auth login service
+	var authcode session.AuthCodeResponse
+	if err := h.caller.PostToService("/login", s2sToken, "", cmd, &authcode); err != nil {
+		// TODO: more detailed error handling.  This is a placeholder
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusInternalServerError,
+			Message:    "login unsuccessful: internal server error",
+		}
+		e.SendJsonErr(w)
+		return
+	}
 
-	// post creds to user auth login
-
+	// TODO: send auth code to client
 }
