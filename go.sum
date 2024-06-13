@@ -22,3 +22,9 @@ github.com/tdeslauriers/carapace v0.0.78 h1:u8Wp+iZbVvmSgU/vcdVzRPpbLLC7VTSGsrSn
 github.com/tdeslauriers/carapace v0.0.78/go.mod h1:sBb/Im2oYwhkEeU8rJP85LHAqBe6SKX74mlbTjr/lac=
 github.com/tdeslauriers/carapace v0.0.79 h1:+RxWmVZAAkh/obkDnTIKU9S93UJSZ/s0vozQzMhjifQ=
 github.com/tdeslauriers/carapace v0.0.79/go.mod h1:sBb/Im2oYwhkEeU8rJP85LHAqBe6SKX74mlbTjr/lac=
+github.com/tdeslauriers/carapace v0.0.89 h1:ukomLq2Ex7hz48W3bC0Uc5o1IiILmdTg4AsnkSpVME8=
+github.com/tdeslauriers/carapace v0.0.89/go.mod h1:sBb/Im2oYwhkEeU8rJP85LHAqBe6SKX74mlbTjr/lac=
+github.com/tdeslauriers/carapace v0.0.90 h1:X0vSPuflCi3rvDRDYZunpqYVm5OsX7EJ5DtPcu7tBJo=
+github.com/tdeslauriers/carapace v0.0.90/go.mod h1:sBb/Im2oYwhkEeU8rJP85LHAqBe6SKX74mlbTjr/lac=
+github.com/tdeslauriers/carapace v0.0.91 h1:fF5ANibpTEBPrxd9SOF7lwttXnrjE0nERbNMa+Ptz/I=
+github.com/tdeslauriers/carapace v0.0.91/go.mod h1:sBb/Im2oYwhkEeU8rJP85LHAqBe6SKX74mlbTjr/lac=

@@ -10,12 +10,13 @@ import (
 )
 
 type OauthHandler interface {
+	// HandleGetState handles the request from the client to get the oauth state, nonce, client id, and callback url variables
+	// to be used in the login url for the oauth flow
 	HandleGetState(w http.ResponseWriter, r *http.Request)
 }
 
-func NewOauthHandler(siteUrl string, oauthService OauthService) OauthHandler {
+func NewOauthHandler(oauthService OauthService) OauthHandler {
 	return &oauthHandler{
-		siteUrl:      siteUrl,
 		oauthService: oauthService,
 
 		logger: slog.Default().With(slog.String(util.ComponentKey, util.ComponentAuth)).With(slog.String(util.ServiceKey, util.ServiceOauth)),
@@ -25,7 +26,6 @@ func NewOauthHandler(siteUrl string, oauthService OauthService) OauthHandler {
 var _ OauthHandler = (*oauthHandler)(nil)
 
 type oauthHandler struct {
-	siteUrl      string
 	oauthService OauthService
 
 	logger *slog.Logger
@@ -43,7 +43,7 @@ func (h *oauthHandler) HandleGetState(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// create/persist oauth vars
-	exchange, err := h.oauthService.Create(h.siteUrl)
+	exchange, err := h.oauthService.Build()
 	if err != nil {
 		h.logger.Error("failed to create oauth exchange", "err", err.Error())
 		e := connect.ErrorHttp{

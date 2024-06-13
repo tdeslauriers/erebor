@@ -13,6 +13,7 @@ import (
 )
 
 type RegistrationHandler interface {
+	// HandleRegistration handles the registration request from the client by submitting it against the user auth service.
 	HandleRegistration(w http.ResponseWriter, r *http.Request)
 }
 

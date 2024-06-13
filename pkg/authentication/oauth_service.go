@@ -5,25 +5,35 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/tdeslauriers/carapace/pkg/config"
 	"github.com/tdeslauriers/carapace/pkg/data"
+	"github.com/tdeslauriers/carapace/pkg/session"
 )
 
 type OauthExchange struct {
-	Id          string          `json:"id,omitempty" db:"id"`
-	Nonce       string          `json:"nonce" db:"nonce"`
-	State       string          `json:"state" db:"state"`
-	RedirectUrl string          `json:"redirect_url" db:"redirect_url"`
-	CreatedAt   data.CustomTime `json:"created_at" db:"created_at"`
+	Id           string          `json:"id,omitempty" db:"id"`
+	ResponseType string          `json:"response_type" db:"response_type"`
+	Nonce        string          `json:"nonce" db:"nonce"`
+	State        string          `json:"state" db:"state"`
+	ClientId     string          `json:"client_id" db:"client_id"`
+	RedirectUrl  string          `json:"redirect_url" db:"redirect_url"`
+	CreatedAt    data.CustomTime `json:"created_at" db:"created_at"`
 }
 
 type OauthService interface {
-	Create(redirect string) (*OauthExchange, error)
-	Valiadate(oauth OauthExchange) error
+	// Build creates a new oauth exchange record, persisting it to the database,
+	// and returns the struct for use by the login handler to send to authentication service
+	Build() (*OauthExchange, error)
+
+	// Valiadate validates the oauth exchange variables returned from the client to the callback url
+	// against the values stored in the database to ensure the exchange is valid/untampered
+	Valiadate(exchange OauthExchange) error
 }
 
 // NewOauthService creates a new instance of the login service
-func NewOauthService(db data.SqlRepository, cryptor data.Cryptor) OauthService {
+func NewOauthService(oauth config.OauthRedirect, db data.SqlRepository, cryptor data.Cryptor) OauthService {
 	return &oauthService{
+		oauth:   oauth,
 		db:      db,
 		cryptor: cryptor,
 	}
@@ -32,24 +42,29 @@ func NewOauthService(db data.SqlRepository, cryptor data.Cryptor) OauthService {
 var _ OauthService = (*oauthService)(nil)
 
 type oauthService struct {
+	oauth   config.OauthRedirect
 	db      data.SqlRepository
 	cryptor data.Cryptor
 }
 
-// CreateOauthExchange creates a new oauth exchange record, persisting it to the database,
-// and returns the struct for use by the login handler to send to authentication service
-func (s *oauthService) Create(redirect string) (*OauthExchange, error) {
+// Build implementation of the OauthService interface
+func (s *oauthService) Build() (*OauthExchange, error) {
 
 	id, err := uuid.NewRandom()
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate oauth exchange uuid: %v", err)
 	}
 
+	encryptedResponseType, err := s.cryptor.EncryptServiceData(string(session.AuthCode))
+	if err != nil {
+		return nil, fmt.Errorf("failed to encrypt oauth exchange response type for storage: %v", err)
+	}
+
 	nonce, err := uuid.NewRandom()
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate oauth exchange nonce uuid: %v", err)
 	}
-	encryptedNonce, err := s.cryptor.EncyptServiceData(nonce.String())
+	encryptedNonce, err := s.cryptor.EncryptServiceData(nonce.String())
 	if err != nil {
 		return nil, fmt.Errorf("failed to encrypt oauth exchange nonce for storage: %v", err)
 	}
@@ -58,38 +73,48 @@ func (s *oauthService) Create(redirect string) (*OauthExchange, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate oauth exchange state uuid: %v", err)
 	}
-	encryptedState, err := s.cryptor.EncyptServiceData(state.String())
+	encryptedState, err := s.cryptor.EncryptServiceData(state.String())
 	if err != nil {
 		return nil, fmt.Errorf("failed to encrypt oauth exchange state for storage: %v", err)
 	}
 
-	encryptedRedirect, err := s.cryptor.EncyptServiceData(redirect)
+	encryptedClientId, err := s.cryptor.EncryptServiceData(s.oauth.CallbackClientId)
 	if err != nil {
-		return nil, fmt.Errorf("failed to encrypt oauth exchange redirect url for storage: %v", err)
+		return nil, fmt.Errorf("failed to encrypt oauth exchange callback client id for storage: %v", err)
+	}
+
+	encryptedRedirect, err := s.cryptor.EncryptServiceData(s.oauth.CallbackUrl)
+	if err != nil {
+		return nil, fmt.Errorf("failed to encrypt oauth exchange callback/redirect url for storage: %v", err)
 	}
 
 	currentTime := time.Now()
 
 	persist := OauthExchange{
-		Id:          id.String(),
-		Nonce:       encryptedNonce,
-		State:       encryptedState,
-		RedirectUrl: encryptedRedirect,
-		CreatedAt:   data.CustomTime{Time: currentTime},
+		Id:           id.String(),
+		ResponseType: encryptedResponseType,
+		Nonce:        encryptedNonce,
+		State:        encryptedState,
+		ClientId:     encryptedClientId,
+		RedirectUrl:  encryptedRedirect,
+		CreatedAt:    data.CustomTime{Time: currentTime},
 	}
-	qry := `INSERT INTO oauthflow (uuid, nonce, state, redirect_url, created_at) VALUES (?, ?, ?, ?, ?)`
+	qry := `INSERT INTO oauthflow (uuid, response_type, nonce, state, client_id, redirect_url, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`
 	if err := s.db.InsertRecord(qry, persist); err != nil {
 		return nil, fmt.Errorf("failed to persist oauth exchange record: %v", err)
 	}
 
 	return &OauthExchange{
-		Nonce:       nonce.String(),
-		State:       state.String(),
-		RedirectUrl: redirect,
-		CreatedAt:   data.CustomTime{Time: currentTime},
+		ResponseType: string(session.AuthCode),
+		Nonce:        nonce.String(),
+		State:        state.String(),
+		ClientId:     s.oauth.CallbackClientId,
+		RedirectUrl:  s.oauth.CallbackUrl,
+		CreatedAt:    data.CustomTime{Time: currentTime},
 	}, nil
 }
 
-func (s *oauthService) Valiadate(oauth OauthExchange) error {
+// Valiadate implementation of the OauthService interface
+func (s *oauthService) Valiadate(exchange OauthExchange) error {
 	return nil
 }

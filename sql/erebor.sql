@@ -37,8 +37,10 @@ CREATE INDEX idx_servicetoken_servicename ON servicetoken(service_name);
 CREATE INDEX idx_servicetoken_refreshexpires ON servicetoken(refresh_expires);
 CREATE TABLE oauthflow (
     uuid CHAR(36) PRIMARY KEY,
-    nonce CHAR(128),
-    state CHAR(128),
+    response_type VARCHAR(128),
+    nonce VARCHAR(128),
+    state VARCHAR(128),
+    client_id VARCHAR(128),
     redirect_url VARCHAR(512),
     created_at TIMESTAMP
 );

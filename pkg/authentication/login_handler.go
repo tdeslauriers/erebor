@@ -2,8 +2,10 @@ package authentication
 
 import (
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 
 	"erebor/internal/util"
 
@@ -12,15 +14,15 @@ import (
 )
 
 type LoginHandler interface {
+	// HandleLogin handles the login request from the client by submitting it against the user auth service.
+	// The user auth service will return an auth code (as well as state/redirect/etc) that returned to the client if login successful.
 	HandleLogin(w http.ResponseWriter, r *http.Request)
 }
 
-func NewLoginHandler(siteUrl string, provider session.S2sTokenProvider, caller connect.S2sCaller) LoginHandler {
+func NewLoginHandler(provider session.S2sTokenProvider, caller connect.S2sCaller) LoginHandler {
 	return &loginHandler{
-		siteUrl:     siteUrl,
 		s2sProvider: provider,
 		caller:      caller,
-		// loginService: loginService,
 
 		logger: slog.Default().With(slog.String(util.ComponentKey, util.ComponentAuth)).With(slog.String(util.ServiceKey, util.ServiceLogin)),
 	}
@@ -29,16 +31,12 @@ func NewLoginHandler(siteUrl string, provider session.S2sTokenProvider, caller c
 var _ LoginHandler = (*loginHandler)(nil)
 
 type loginHandler struct {
-	siteUrl     string
 	s2sProvider session.S2sTokenProvider
 	caller      connect.S2sCaller
-	// loginService loginService
 
 	logger *slog.Logger
 }
 
-// HandleLogin handles the login request from the client by submitting it against the user auth service.
-// The user auth service will return an auth code (as well as state/redirect/etc) that will be sent to the client.
 func (h *loginHandler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 
 	if r.Method != "POST" {
@@ -90,14 +88,40 @@ func (h *loginHandler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	// post creds to user auth login service
 	var authcode session.AuthCodeResponse
 	if err := h.caller.PostToService("/login", s2sToken, "", cmd, &authcode); err != nil {
-		// TODO: more detailed error handling.  This is a placeholder
+		if strings.Contains(err.Error(), "failed to validate") {
+			e := connect.ErrorHttp{
+				StatusCode: http.StatusUnauthorized,
+				Message:    fmt.Sprintf("login unsuccessful: %s", err.Error()),
+			}
+			e.SendJsonErr(w)
+			return
+		} else if strings.Contains(err.Error(), "invalid") {
+			e := connect.ErrorHttp{
+				StatusCode: http.StatusBadRequest,
+				Message:    fmt.Sprintf("login unsuccessful: %s", err.Error()),
+			}
+			e.SendJsonErr(w)
+			return
+		} else {
+			e := connect.ErrorHttp{
+				StatusCode: http.StatusInternalServerError,
+				Message:    err.Error(),
+			}
+			e.SendJsonErr(w)
+			return
+		}
+	}
+
+	// send auth code to client
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(authcode); err != nil {
+		h.logger.Error("failed to encode auth code response to json", "err", err.Error())
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusInternalServerError,
-			Message:    "login unsuccessful: internal server error",
+			Message:    "failed to encode login response to json",
 		}
 		e.SendJsonErr(w)
 		return
 	}
-
-	// TODO: send auth code to client
 }

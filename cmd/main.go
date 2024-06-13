@@ -2,6 +2,7 @@ package main
 
 import (
 	"erebor/internal/util"
+	"fmt"
 
 	"erebor/pkg/gateway"
 	"log/slog"
@@ -16,8 +17,8 @@ func main() {
 
 	// service definition
 	def := config.SvcDefinition{
-		Name: "erebor",
-		Tls:  config.StandardTls,
+		ServiceName: "erebor",
+		Tls:         config.StandardTls,
 		Requires: config.Requires{
 			Client:           true,
 			Db:               true,
@@ -28,25 +29,26 @@ func main() {
 			S2sVerifyingKey:  false,
 			UserSigningKey:   false,
 			UserVerifyingKey: false,
+			OauthRedirect:    true,
 		},
 	}
 
 	config, err := config.Load(def)
 	if err != nil {
-		logger.Error("failed to load Erebor config", "err", err.Error())
+		logger.Error(fmt.Sprintf("failed to load %s config", def.ServiceName), "err", err.Error())
 		os.Exit(1)
 	}
 
 	gateway, err := gateway.New(*config)
 	if err != nil {
-		logger.Error("failed to create erebor gateway", "err", err.Error())
+		logger.Error(fmt.Sprintf("failed to create %s gateway", config.ServiceName), "err", err.Error())
 		os.Exit(1)
 	}
 
 	defer gateway.CloseDb()
 
 	if err := gateway.Run(); err != nil {
-		logger.Error("failed to run erebor gateway", "err", err.Error())
+		logger.Error(fmt.Sprintf("failed to run %s gateway", config.ServiceName), "err", err.Error())
 		os.Exit(1)
 	}
 

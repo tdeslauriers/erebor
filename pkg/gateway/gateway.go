@@ -105,7 +105,7 @@ func New(config config.Config) (Gateway, error) {
 	s2sProvider := session.NewS2sTokenProvider(ranCaller, creds, repository, cryptor)
 
 	// oauth service: state, nonce, redirect
-	oauthService := authentication.NewOauthService(repository, cryptor)
+	oauthService := authentication.NewOauthService(config.OauthRedirect, repository, cryptor)
 
 	// login service
 
@@ -145,8 +145,8 @@ func (g *gateway) CloseDb() error {
 func (g *gateway) Run() error {
 
 	register := authentication.NewRegistrationHandler(g.s2sTokenProvider, g.shawCaller)
-	oauth := authentication.NewOauthHandler(g.config.SiteUrl, g.oauthService)
-	login := authentication.NewLoginHandler(g.config.SiteUrl, g.s2sTokenProvider, g.shawCaller)
+	oauth := authentication.NewOauthHandler(g.oauthService)
+	login := authentication.NewLoginHandler(g.s2sTokenProvider, g.shawCaller)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", diagnostics.HealthCheckHandler)
@@ -155,16 +155,16 @@ func (g *gateway) Run() error {
 	mux.HandleFunc("/login", login.HandleLogin)
 
 	erebor := &connect.TlsServer{
-		Addr:      ":8443",
+		Addr:      g.config.ServicePort,
 		Mux:       mux,
 		TlsConfig: g.serverTls,
 	}
 
 	go func() {
 
-		g.logger.Info(fmt.Sprintf("starting Erebor gateway service on %s...", erebor.Addr[1:]))
+		g.logger.Info(fmt.Sprintf("starting %s gateway service on %s...", g.config.ServiceName, erebor.Addr[1:]))
 		if err := erebor.Initialize(); err != http.ErrServerClosed {
-			g.logger.Error("failed to start Erebor gateway service: %v", "err", err.Error())
+			g.logger.Error(fmt.Sprintf("failed to start %s gateway service", g.config.ServiceName), "err", err.Error())
 			os.Exit(1)
 		}
 
