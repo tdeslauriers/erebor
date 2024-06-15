@@ -3,13 +3,13 @@ package util
 const (
 	ComponentKey = "component"
 
-	ComponentMain    = "main"
-	ComponentGateway = "gateway"
-	ComponentAuth    = "authentication"
+	ComponentMain    string = "main"
+	ComponentGateway string = "gateway"
+	ComponentAuth    string = "authentication"
 
-	ServiceKey = "service"
+	ServiceKey string = "service"
 
-	ServiceLogin    = "login"
-	ServiceRegister = "register"
-	ServiceOauth    = "oauth flow exchange"
+	ServiceLogin    string = "login"
+	ServiceRegister string = "register"
+	ServiceOauth    string = "oauth flow exchange"
 )

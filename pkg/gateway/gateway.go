@@ -144,7 +144,7 @@ func (g *gateway) CloseDb() error {
 
 func (g *gateway) Run() error {
 
-	register := authentication.NewRegistrationHandler(g.s2sTokenProvider, g.shawCaller)
+	register := authentication.NewRegistrationHandler(g.config.OauthRedirect, g.s2sTokenProvider, g.shawCaller)
 	oauth := authentication.NewOauthHandler(g.oauthService)
 	login := authentication.NewLoginHandler(g.s2sTokenProvider, g.shawCaller)
 

@@ -2,10 +2,8 @@ package authentication
 
 import (
 	"encoding/json"
-	"fmt"
 	"log/slog"
 	"net/http"
-	"strings"
 
 	"erebor/internal/util"
 
@@ -88,28 +86,9 @@ func (h *loginHandler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	// post creds to user auth login service
 	var authcode session.AuthCodeResponse
 	if err := h.caller.PostToService("/login", s2sToken, "", cmd, &authcode); err != nil {
-		if strings.Contains(err.Error(), "failed to validate") {
-			e := connect.ErrorHttp{
-				StatusCode: http.StatusUnauthorized,
-				Message:    fmt.Sprintf("login unsuccessful: %s", err.Error()),
-			}
-			e.SendJsonErr(w)
-			return
-		} else if strings.Contains(err.Error(), "invalid") {
-			e := connect.ErrorHttp{
-				StatusCode: http.StatusBadRequest,
-				Message:    fmt.Sprintf("login unsuccessful: %s", err.Error()),
-			}
-			e.SendJsonErr(w)
-			return
-		} else {
-			e := connect.ErrorHttp{
-				StatusCode: http.StatusInternalServerError,
-				Message:    err.Error(),
-			}
-			e.SendJsonErr(w)
-			return
-		}
+		h.logger.Error("call to identity service login failed", "err", err.Error())
+		h.caller.HandleUpstreamError(err, w)
+		return
 	}
 
 	// send auth code to client

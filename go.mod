@@ -2,7 +2,7 @@ module erebor
 
 go 1.22
 
-require github.com/tdeslauriers/carapace v0.0.91
+require github.com/tdeslauriers/carapace v0.0.96
 
 require (
 	filippo.io/edwards25519 v1.1.0 // indirect
