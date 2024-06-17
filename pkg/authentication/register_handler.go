@@ -93,7 +93,7 @@ func (h *registrationHandler) HandleRegistration(w http.ResponseWriter, r *http.
 	var registered session.UserRegisterCmd
 	if err := h.caller.PostToService("/register", s2sToken, "", cmd, &registered); err != nil {
 		h.logger.Error(fmt.Sprintf("failed to register user (%s)", cmd.Username), "err", err.Error())
-		h.caller.HandleUpstreamError(err, w)
+		h.caller.RespondUpstreamError(err, w)
 		return
 	}
 

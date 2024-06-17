@@ -87,7 +87,7 @@ func (h *loginHandler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	var authcode session.AuthCodeResponse
 	if err := h.caller.PostToService("/login", s2sToken, "", cmd, &authcode); err != nil {
 		h.logger.Error("call to identity service login failed", "err", err.Error())
-		h.caller.HandleUpstreamError(err, w)
+		h.caller.RespondUpstreamError(err, w)
 		return
 	}
 

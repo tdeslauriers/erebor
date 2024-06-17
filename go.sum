@@ -4,9 +4,5 @@ github.com/go-sql-driver/mysql v1.8.1 h1:LedoTUt/eveggdHS9qUFC1EFSa8bU2+1pZjSRpv
 github.com/go-sql-driver/mysql v1.8.1/go.mod h1:wEBSXgmK//2ZFJyE+qWnIsVGmvmEKlqwuVSjsCm7DZg=
 github.com/google/uuid v1.6.0 h1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=
 github.com/google/uuid v1.6.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
-github.com/tdeslauriers/carapace v0.0.92 h1:NX3M8IeueFfjFs+CN5Sn0qi1SgtUSaNz5yYhUQNnKa0=
-github.com/tdeslauriers/carapace v0.0.92/go.mod h1:sBb/Im2oYwhkEeU8rJP85LHAqBe6SKX74mlbTjr/lac=
-github.com/tdeslauriers/carapace v0.0.95 h1:+t/I72R5Xtt4ctTdp5bZ3U1aTYWkDkdl2TymcotMq/k=
-github.com/tdeslauriers/carapace v0.0.95/go.mod h1:sBb/Im2oYwhkEeU8rJP85LHAqBe6SKX74mlbTjr/lac=
-github.com/tdeslauriers/carapace v0.0.96 h1:QdVubrJb3cNHpN2lkMXiac7d4WYzrZjpNWNCNbA9h3Q=
-github.com/tdeslauriers/carapace v0.0.96/go.mod h1:sBb/Im2oYwhkEeU8rJP85LHAqBe6SKX74mlbTjr/lac=
+github.com/tdeslauriers/carapace v0.0.98 h1:sOIdEHEHmUrLLk+Nu4mn9CQaCWp+ncHfF2ulOufFeuY=
+github.com/tdeslauriers/carapace v0.0.98/go.mod h1:sBb/Im2oYwhkEeU8rJP85LHAqBe6SKX74mlbTjr/lac=
