@@ -98,11 +98,11 @@ func New(config config.Config) (Gateway, error) {
 	}
 
 	// s2s callers
-	ranCaller := connect.NewS2sCaller(config.ServiceAuth.Url, "ran", client, retry)
-	shawCaller := connect.NewS2sCaller(config.UserAuth.Url, "shaw", client, retry)
+	s2sIdentity := connect.NewS2sCaller(config.ServiceAuth.Url, util.ServiceS2sIdentity, client, retry)
+	userIdentity := connect.NewS2sCaller(config.UserAuth.Url, util.ServiceUserIdentity, client, retry)
 
 	// s2s token provider
-	s2sProvider := session.NewS2sTokenProvider(ranCaller, creds, repository, cryptor)
+	s2sProvider := session.NewS2sTokenProvider(s2sIdentity, creds, repository, cryptor)
 
 	// oauth service: state, nonce, redirect
 	oauthService := authentication.NewOauthService(config.OauthRedirect, repository, cryptor)
@@ -114,7 +114,7 @@ func New(config config.Config) (Gateway, error) {
 		serverTls:        serverTlsConfig,
 		repository:       repository,
 		s2sTokenProvider: s2sProvider,
-		shawCaller:       shawCaller,
+		userIdentity:     userIdentity,
 		oauthService:     oauthService,
 
 		logger: slog.Default().With(slog.String(util.ComponentKey, util.ComponentGateway)),
@@ -128,7 +128,7 @@ type gateway struct {
 	serverTls        *tls.Config
 	repository       data.SqlRepository
 	s2sTokenProvider session.S2sTokenProvider
-	shawCaller       connect.S2sCaller
+	userIdentity     connect.S2sCaller
 	oauthService     authentication.OauthService
 
 	logger *slog.Logger
@@ -144,9 +144,9 @@ func (g *gateway) CloseDb() error {
 
 func (g *gateway) Run() error {
 
-	register := authentication.NewRegistrationHandler(g.config.OauthRedirect, g.s2sTokenProvider, g.shawCaller)
+	register := authentication.NewRegistrationHandler(g.config.OauthRedirect, g.s2sTokenProvider, g.userIdentity)
 	oauth := authentication.NewOauthHandler(g.oauthService)
-	login := authentication.NewLoginHandler(g.s2sTokenProvider, g.shawCaller)
+	login := authentication.NewLoginHandler(g.s2sTokenProvider, g.userIdentity)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", diagnostics.HealthCheckHandler)
