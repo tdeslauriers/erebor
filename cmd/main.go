@@ -13,7 +13,7 @@ import (
 
 func main() {
 
-	logger := slog.Default().With(slog.String(util.ComponentKey, util.ComponentMain))
+	logger := slog.Default().With(slog.String(util.PackageKey, util.PackageMain))
 
 	// service definition
 	def := config.SvcDefinition{
@@ -22,7 +22,7 @@ func main() {
 		Requires: config.Requires{
 			Client:           true,
 			Db:               true,
-			IndexKey:         false,
+			IndexKey:         true,
 			AesKey:           true,
 			UserAuthUrl:      true,
 			S2sSigningKey:    false,

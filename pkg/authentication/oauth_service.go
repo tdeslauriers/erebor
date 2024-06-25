@@ -11,7 +11,8 @@ import (
 )
 
 type OauthExchange struct {
-	Id           string          `json:"id,omitempty" db:"id"`
+	Id           string          `json:"id,omitempty" db:"uuid"`
+	StateIndex   string          `json:"state_index,omitempty" db:"state_index"`
 	ResponseType string          `json:"response_type" db:"response_type"`
 	Nonce        string          `json:"nonce" db:"nonce"`
 	State        string          `json:"state" db:"state"`
@@ -31,11 +32,12 @@ type OauthService interface {
 }
 
 // NewOauthService creates a new instance of the login service
-func NewOauthService(oauth config.OauthRedirect, db data.SqlRepository, cryptor data.Cryptor) OauthService {
+func NewOauthService(oauth config.OauthRedirect, db data.SqlRepository, cryptor data.Cryptor, indexer data.Indexer) OauthService {
 	return &oauthService{
 		oauth:   oauth,
 		db:      db,
 		cryptor: cryptor,
+		indexer: indexer,
 	}
 }
 
@@ -45,6 +47,7 @@ type oauthService struct {
 	oauth   config.OauthRedirect
 	db      data.SqlRepository
 	cryptor data.Cryptor
+	indexer data.Indexer
 }
 
 // Build implementation of the OauthService interface
@@ -55,7 +58,7 @@ func (s *oauthService) Build() (*OauthExchange, error) {
 		return nil, fmt.Errorf("failed to generate oauth exchange uuid: %v", err)
 	}
 
-	encryptedResponseType, err := s.cryptor.EncryptServiceData(string(session.AuthCode))
+	encryptedResponseType, err := s.cryptor.EncryptServiceData(string(session.AuthCode)) // responseType "enum" value TODO: rename to AuthCodeType
 	if err != nil {
 		return nil, fmt.Errorf("failed to encrypt oauth exchange response type for storage: %v", err)
 	}
@@ -78,6 +81,12 @@ func (s *oauthService) Build() (*OauthExchange, error) {
 		return nil, fmt.Errorf("failed to encrypt oauth exchange state for storage: %v", err)
 	}
 
+	// index the state for later retrieval
+	index, err := s.indexer.ObtainBlindIndex(state.String())
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate oauth exchange state index for persistence: %v", err)
+	}
+
 	encryptedClientId, err := s.cryptor.EncryptServiceData(s.oauth.CallbackClientId)
 	if err != nil {
 		return nil, fmt.Errorf("failed to encrypt oauth exchange callback client id for storage: %v", err)
@@ -92,6 +101,7 @@ func (s *oauthService) Build() (*OauthExchange, error) {
 
 	persist := OauthExchange{
 		Id:           id.String(),
+		StateIndex:   index,
 		ResponseType: encryptedResponseType,
 		Nonce:        encryptedNonce,
 		State:        encryptedState,
@@ -99,7 +109,7 @@ func (s *oauthService) Build() (*OauthExchange, error) {
 		RedirectUrl:  encryptedRedirect,
 		CreatedAt:    data.CustomTime{Time: currentTime},
 	}
-	qry := `INSERT INTO oauthflow (uuid, response_type, nonce, state, client_id, redirect_url, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`
+	qry := `INSERT INTO oauthflow (uuid, state_index, response_type, nonce, state, client_id, redirect_url, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
 	if err := s.db.InsertRecord(qry, persist); err != nil {
 		return nil, fmt.Errorf("failed to persist oauth exchange record: %v", err)
 	}

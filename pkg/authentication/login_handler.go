@@ -22,7 +22,7 @@ func NewLoginHandler(provider session.S2sTokenProvider, caller connect.S2sCaller
 		s2sProvider: provider,
 		caller:      caller,
 
-		logger: slog.Default().With(slog.String(util.ComponentKey, util.ComponentAuth)).With(slog.String(util.ServiceKey, util.ServiceLogin)),
+		logger: slog.Default().With(slog.String(util.PackageKey, util.PackageAuth)).With(slog.String(util.ComponentKey, util.ComponentLogin)),
 	}
 }
 

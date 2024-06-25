@@ -19,7 +19,7 @@ func NewOauthHandler(oauthService OauthService) OauthHandler {
 	return &oauthHandler{
 		oauthService: oauthService,
 
-		logger: slog.Default().With(slog.String(util.ComponentKey, util.ComponentAuth)).With(slog.String(util.ServiceKey, util.ServiceOauth)),
+		logger: slog.Default().With(slog.String(util.PackageKey, util.PackageAuth)).With(slog.String(util.ComponentKey, util.ComponentOauth)),
 	}
 }
 

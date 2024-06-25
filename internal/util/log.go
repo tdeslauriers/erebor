@@ -1,15 +1,19 @@
 package util
 
 const (
-	ComponentKey = "component"
+	PackageKey = "package"
 
-	ComponentMain    string = "main"
-	ComponentGateway string = "gateway"
-	ComponentAuth    string = "authentication"
+	PackageMain    string = "main"
+	PackageGateway string = "gateway"
+	PackageAuth    string = "authentication"
+	PackageSession string = "uxsession"
 
-	ServiceKey string = "service"
+	ComponentKey string = "component"
 
-	ServiceLogin    string = "login"
-	ServiceRegister string = "register"
-	ServiceOauth    string = "oauth flow exchange"
+	ComponentMain      string = "main"
+	ComponentUxSession string = "ux session"
+	ComponentLogin     string = "login"
+	ComponentRegister  string = "register"
+	ComponentOauth     string = "oauth flow exchange"
+	ComponentCallback  string = "oauth flow callback"
 )

@@ -24,7 +24,7 @@ func NewRegistrationHandler(oauth config.OauthRedirect, provider session.S2sToke
 		s2sProvider: provider,
 		caller:      caller,
 
-		logger: slog.Default().With(slog.String(util.ComponentKey, util.ComponentAuth)),
+		logger: slog.Default().With(slog.String(util.PackageKey, util.PackageAuth)).With(slog.String(util.ComponentKey, util.ComponentRegister)),
 	}
 }
 
@@ -100,6 +100,7 @@ func (h *registrationHandler) HandleRegistration(w http.ResponseWriter, r *http.
 	// respond 201 + registered user
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
+	
 	if err := json.NewEncoder(w).Encode(registered); err != nil {
 		// returning successfully registered user data is a convenience only, omit on error
 		h.logger.Error("unable to marshal/send user registration response body", "err", err.Error())

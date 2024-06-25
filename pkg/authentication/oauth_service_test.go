@@ -38,6 +38,13 @@ func (c *mockRegisterCryptor) EncryptServiceData(plaintext string) (string, erro
 	return fmt.Sprintf("encrypted-%s", plaintext), nil
 }
 func (c *mockRegisterCryptor) DecryptServiceData(string) (string, error) { return "", nil }
+
+type mockIndexer struct{}
+
+func (i *mockIndexer) ObtainBlindIndex(record string) (string, error) {
+	return fmt.Sprintf("index-%s", record), nil
+}
+
 func TestBuild(t *testing.T) {
 
 	testCases := []struct {
@@ -50,7 +57,7 @@ func TestBuild(t *testing.T) {
 		},
 	}
 
-	oauthService := NewOauthService(mockOauthRedirect, &mockAuthSqlRepository{}, &mockRegisterCryptor{})
+	oauthService := NewOauthService(mockOauthRedirect, &mockAuthSqlRepository{}, &mockRegisterCryptor{}, &mockIndexer{})
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {

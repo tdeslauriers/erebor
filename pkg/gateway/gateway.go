@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"erebor/internal/util"
 	"erebor/pkg/authentication"
+	"erebor/pkg/uxsession"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -76,6 +77,9 @@ func New(config config.Config) (Gateway, error) {
 
 	repository := data.NewSqlRepository(db)
 
+	// set up indexer to create blind indexes for encrypted data tables
+	indexer := data.NewIndexer([]byte(config.Database.IndexSecret))
+
 	// set up field level encryption
 	aes, err := base64.StdEncoding.DecodeString(config.Database.FieldKey)
 	if err != nil {
@@ -104,8 +108,11 @@ func New(config config.Config) (Gateway, error) {
 	// s2s token provider
 	s2sProvider := session.NewS2sTokenProvider(s2sIdentity, creds, repository, cryptor)
 
+	// ux session service
+	uxSessionService := uxsession.NewUxSessionService(repository, indexer, cryptor)
+
 	// oauth service: state, nonce, redirect
-	oauthService := authentication.NewOauthService(config.OauthRedirect, repository, cryptor)
+	oauthService := authentication.NewOauthService(config.OauthRedirect, repository, cryptor, indexer)
 
 	// login service
 
@@ -115,9 +122,10 @@ func New(config config.Config) (Gateway, error) {
 		repository:       repository,
 		s2sTokenProvider: s2sProvider,
 		userIdentity:     userIdentity,
+		uxSessionService: uxSessionService,
 		oauthService:     oauthService,
 
-		logger: slog.Default().With(slog.String(util.ComponentKey, util.ComponentGateway)),
+		logger: slog.Default().With(slog.String(util.PackageKey, util.PackageGateway)),
 	}, nil
 }
 
@@ -129,6 +137,7 @@ type gateway struct {
 	repository       data.SqlRepository
 	s2sTokenProvider session.S2sTokenProvider
 	userIdentity     connect.S2sCaller
+	uxSessionService uxsession.UxSessionService
 	oauthService     authentication.OauthService
 
 	logger *slog.Logger
@@ -145,12 +154,14 @@ func (g *gateway) CloseDb() error {
 func (g *gateway) Run() error {
 
 	register := authentication.NewRegistrationHandler(g.config.OauthRedirect, g.s2sTokenProvider, g.userIdentity)
+	uxsession := uxsession.NewUxSessionHandler(g.uxSessionService)
 	oauth := authentication.NewOauthHandler(g.oauthService)
 	login := authentication.NewLoginHandler(g.s2sTokenProvider, g.userIdentity)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", diagnostics.HealthCheckHandler)
 	mux.HandleFunc("/register", register.HandleRegistration)
+	mux.HandleFunc("/session", uxsession.HandleGetSession)
 	mux.HandleFunc("/oauth/state", oauth.HandleGetState)
 	mux.HandleFunc("/login", login.HandleLogin)
 
