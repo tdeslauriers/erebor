@@ -6,6 +6,7 @@ import (
 	"erebor/internal/util"
 	"erebor/pkg/authentication"
 	"erebor/pkg/uxsession"
+	"erebor/pkg/uxsession/csrf"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -111,6 +112,9 @@ func New(config config.Config) (Gateway, error) {
 	// ux session service
 	uxSessionService := uxsession.NewUxSessionService(repository, indexer, cryptor)
 
+	// csrf service
+	csrfService := csrf.NewService(repository, indexer, cryptor)
+
 	// oauth service: state, nonce, redirect
 	oauthService := authentication.NewOauthService(config.OauthRedirect, repository, cryptor, indexer)
 
@@ -123,6 +127,7 @@ func New(config config.Config) (Gateway, error) {
 		s2sTokenProvider: s2sProvider,
 		userIdentity:     userIdentity,
 		uxSessionService: uxSessionService,
+		csrfService:      csrfService,
 		oauthService:     oauthService,
 
 		logger: slog.Default().With(slog.String(util.PackageKey, util.PackageGateway)),
@@ -138,6 +143,7 @@ type gateway struct {
 	s2sTokenProvider session.S2sTokenProvider
 	userIdentity     connect.S2sCaller
 	uxSessionService uxsession.UxSessionService
+	csrfService      csrf.Service
 	oauthService     authentication.OauthService
 
 	logger *slog.Logger
@@ -153,15 +159,21 @@ func (g *gateway) CloseDb() error {
 
 func (g *gateway) Run() error {
 
-	register := authentication.NewRegistrationHandler(g.config.OauthRedirect, g.s2sTokenProvider, g.userIdentity)
 	uxsession := uxsession.NewUxSessionHandler(g.uxSessionService)
+	csrf := csrf.NewHandler(g.csrfService)
+
+	register := authentication.NewRegistrationHandler(g.config.OauthRedirect, g.s2sTokenProvider, g.userIdentity)
+
 	oauth := authentication.NewOauthHandler(g.oauthService)
 	login := authentication.NewLoginHandler(g.s2sTokenProvider, g.userIdentity)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", diagnostics.HealthCheckHandler)
+
+	mux.HandleFunc("/session/anonymous", uxsession.HandleGetSession)
+	mux.HandleFunc("/session/csrf/", csrf.HandleGetCsrf) // trailing slash required for /session/csrf/{session_id}
+
 	mux.HandleFunc("/register", register.HandleRegistration)
-	mux.HandleFunc("/session", uxsession.HandleGetSession)
 	mux.HandleFunc("/oauth/state", oauth.HandleGetState)
 	mux.HandleFunc("/login", login.HandleLogin)
 

@@ -11,7 +11,7 @@ import (
 
 type SessionHandler interface {
 
-	// GetSession handles the request to create a new ANONYMOUS session
+	// HandleGetSession handles the request to create a new ANONYMOUS session
 	// TODO: this should be rate limited
 	HandleGetSession(w http.ResponseWriter, r *http.Request)
 }
@@ -20,7 +20,9 @@ func NewUxSessionHandler(s UxSessionService) SessionHandler {
 	return &sessionHandler{
 		sessionService: s,
 
-		logger: slog.Default().With(slog.String(util.PackageKey, util.PackageSession)).With(slog.String(util.ComponentKey, util.ComponentUxSession)),
+		logger: slog.Default().
+			With(slog.String(util.PackageKey, util.PackageSession)).
+			With(slog.String(util.ComponentKey, util.ComponentUxSession)),
 	}
 }
 
@@ -45,7 +47,7 @@ func (h *sessionHandler) HandleGetSession(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// create/persist session
+	// create/persist session (anonymous session)
 	session, err := h.sessionService.Build(Anonymous)
 	if err != nil {
 		h.logger.Error("failed to create session", "err", err.Error())
@@ -57,7 +59,7 @@ func (h *sessionHandler) HandleGetSession(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// respond with session
+	// respond with anonymous session
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	if err := json.NewEncoder(w).Encode(session); err != nil {

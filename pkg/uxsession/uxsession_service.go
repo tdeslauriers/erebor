@@ -42,7 +42,9 @@ func NewUxSessionService(db data.SqlRepository, i data.Indexer, c data.Cryptor) 
 		indexer: i,
 		cryptor: c,
 
-		logger: slog.Default().With(slog.String(util.PackageKey, util.PackageSession)).With(slog.String(util.ComponentKey, util.ComponentUxSession)),
+		logger: slog.Default().
+			With(slog.String(util.PackageKey, util.PackageSession)).
+			With(slog.String(util.ComponentKey, util.ComponentUxSession)),
 	}
 }
 
@@ -93,7 +95,7 @@ func (s *uxSessionService) Build(st UxSessionType) (*UxSession, error) {
 
 	curretnTime := time.Now()
 
-	persist := &UxSession{
+	persist := UxSession{
 		Id:            id.String(),
 		Index:         index,
 		SessionToken:  encryptedToken,
@@ -103,13 +105,10 @@ func (s *uxSessionService) Build(st UxSessionType) (*UxSession, error) {
 		Revoked:       false,
 	}
 
-	// tradeoff: opted to no block the response waiting for the db to persist the session record.  If the db fails, the session will be lost.
-	go func() {
-		qry := `INSERT INTO session (uuid, session_index, session_token, csrf_token, created_at, authenticated, revoked) VALUES (?, ?, ?, ?, ?, ?, ?)`
-		if err := s.db.InsertRecord(qry, persist); err != nil {
-			s.logger.Error("failed to persist session record", "err", err.Error())
-		}
-	}()
+	qry := `INSERT INTO uxsession (uuid, session_index, session_token, csrf_token, created_at, authenticated, revoked) VALUES (?, ?, ?, ?, ?, ?, ?)`
+	if err := s.db.InsertRecord(qry, persist); err != nil {
+		return nil, err
+	}
 
 	// only returning values needed by FE
 	return &UxSession{

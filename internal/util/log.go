@@ -12,6 +12,7 @@ const (
 
 	ComponentMain      string = "main"
 	ComponentUxSession string = "ux session"
+	ComponentCsrf      string = "csrf"
 	ComponentLogin     string = "login"
 	ComponentRegister  string = "register"
 	ComponentOauth     string = "oauth flow exchange"
