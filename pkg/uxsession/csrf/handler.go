@@ -3,6 +3,7 @@ package csrf
 import (
 	"encoding/json"
 	"erebor/internal/util"
+	"erebor/pkg/uxsession"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -15,7 +16,7 @@ type Handler interface {
 	HandleGetCsrf(w http.ResponseWriter, r *http.Request)
 }
 
-func NewHandler(s Service) Handler {
+func NewHandler(s uxsession.Service) Handler {
 	return &csrfHandler{
 		service: s,
 
@@ -27,7 +28,7 @@ func NewHandler(s Service) Handler {
 var _ Handler = (*csrfHandler)(nil)
 
 type csrfHandler struct {
-	service Service
+	service uxsession.Service
 
 	logger *slog.Logger
 }
@@ -66,7 +67,7 @@ func (h *csrfHandler) HandleGetCsrf(w http.ResponseWriter, r *http.Request) {
 	uxSession, err := h.service.GetCsrf(sessionId)
 	if err != nil {
 		switch {
-		case err.Error() == ErrInvalidSessionId:
+		case err.Error() == uxsession.ErrInvalidSessionId:
 			h.logger.Error(err.Error())
 			e := connect.ErrorHttp{
 				StatusCode: http.StatusBadRequest,
@@ -74,9 +75,9 @@ func (h *csrfHandler) HandleGetCsrf(w http.ResponseWriter, r *http.Request) {
 			}
 			e.SendJsonErr(w)
 			return
-		case err.Error() == ErrSessionRevoked:
-		case err.Error() == ErrSessionExpired:
-		case err.Error() == ErrTokenMismatch:
+		case err.Error() == uxsession.ErrSessionRevoked:
+		case err.Error() == uxsession.ErrSessionExpired:
+		case err.Error() == uxsession.ErrTokenMismatch:
 			h.logger.Error(err.Error())
 			e := connect.ErrorHttp{
 				StatusCode: http.StatusUnauthorized,

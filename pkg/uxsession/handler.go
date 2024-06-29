@@ -9,16 +9,16 @@ import (
 	"github.com/tdeslauriers/carapace/pkg/connect"
 )
 
-type SessionHandler interface {
+type Handler interface {
 
 	// HandleGetSession handles the request to create a new ANONYMOUS session
 	// TODO: this should be rate limited
 	HandleGetSession(w http.ResponseWriter, r *http.Request)
 }
 
-func NewUxSessionHandler(s UxSessionService) SessionHandler {
-	return &sessionHandler{
-		sessionService: s,
+func NewHandler(s Service) Handler {
+	return &handler{
+		service: s,
 
 		logger: slog.Default().
 			With(slog.String(util.PackageKey, util.PackageSession)).
@@ -26,16 +26,16 @@ func NewUxSessionHandler(s UxSessionService) SessionHandler {
 	}
 }
 
-var _ SessionHandler = (*sessionHandler)(nil)
+var _ Handler = (*handler)(nil)
 
-type sessionHandler struct {
-	sessionService UxSessionService
+type handler struct {
+	service Service
 
 	logger *slog.Logger
 }
 
 // implement GetSession of SessionHandler interface
-func (h *sessionHandler) HandleGetSession(w http.ResponseWriter, r *http.Request) {
+func (h *handler) HandleGetSession(w http.ResponseWriter, r *http.Request) {
 
 	if r.Method != "GET" {
 		h.logger.Error("only GET requests are allowed to /session endpoint")
@@ -48,7 +48,7 @@ func (h *sessionHandler) HandleGetSession(w http.ResponseWriter, r *http.Request
 	}
 
 	// create/persist session (anonymous session)
-	session, err := h.sessionService.Build(Anonymous)
+	session, err := h.service.Build(Anonymous)
 	if err != nil {
 		h.logger.Error("failed to create session", "err", err.Error())
 		e := connect.ErrorHttp{

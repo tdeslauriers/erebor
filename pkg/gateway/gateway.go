@@ -110,10 +110,7 @@ func New(config config.Config) (Gateway, error) {
 	s2sProvider := session.NewS2sTokenProvider(s2sIdentity, creds, repository, cryptor)
 
 	// ux session service
-	uxSessionService := uxsession.NewUxSessionService(repository, indexer, cryptor)
-
-	// csrf service
-	csrfService := csrf.NewService(repository, indexer, cryptor)
+	uxSessionService := uxsession.NewService(repository, indexer, cryptor)
 
 	// oauth service: state, nonce, redirect
 	oauthService := authentication.NewOauthService(config.OauthRedirect, repository, cryptor, indexer)
@@ -127,7 +124,6 @@ func New(config config.Config) (Gateway, error) {
 		s2sTokenProvider: s2sProvider,
 		userIdentity:     userIdentity,
 		uxSessionService: uxSessionService,
-		csrfService:      csrfService,
 		oauthService:     oauthService,
 
 		logger: slog.Default().With(slog.String(util.PackageKey, util.PackageGateway)),
@@ -142,8 +138,7 @@ type gateway struct {
 	repository       data.SqlRepository
 	s2sTokenProvider session.S2sTokenProvider
 	userIdentity     connect.S2sCaller
-	uxSessionService uxsession.UxSessionService
-	csrfService      csrf.Service
+	uxSessionService uxsession.Service
 	oauthService     authentication.OauthService
 
 	logger *slog.Logger
@@ -159,21 +154,24 @@ func (g *gateway) CloseDb() error {
 
 func (g *gateway) Run() error {
 
-	uxsession := uxsession.NewUxSessionHandler(g.uxSessionService)
-	csrf := csrf.NewHandler(g.csrfService)
+	// setup handlers
+	uxSessionHandler := uxsession.NewHandler(g.uxSessionService)
+	csrfHandler := csrf.NewHandler(g.uxSessionService)
 
 	register := authentication.NewRegistrationHandler(g.config.OauthRedirect, g.s2sTokenProvider, g.userIdentity)
 
 	oauth := authentication.NewOauthHandler(g.oauthService)
 	login := authentication.NewLoginHandler(g.s2sTokenProvider, g.userIdentity)
 
+	// setup mux
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", diagnostics.HealthCheckHandler)
 
-	mux.HandleFunc("/session/anonymous", uxsession.HandleGetSession)
-	mux.HandleFunc("/session/csrf/", csrf.HandleGetCsrf) // trailing slash required for /session/csrf/{session_id}
+	mux.HandleFunc("/session/anonymous", uxSessionHandler.HandleGetSession)
+	mux.HandleFunc("/session/csrf/", csrfHandler.HandleGetCsrf) // trailing slash required for /session/csrf/{session_id}
 
 	mux.HandleFunc("/register", register.HandleRegistration)
+
 	mux.HandleFunc("/oauth/state", oauth.HandleGetState)
 	mux.HandleFunc("/login", login.HandleLogin)
 
