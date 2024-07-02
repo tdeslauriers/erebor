@@ -2,22 +2,22 @@
 -- represents the session cookie
 CREATE TABLE uxsession (
     uuid CHAR(36) PRIMARY KEY,
-    session_index VARCHAR(128),
-    session_token VARCHAR(128),
-    csrf_token VARCHAR(128),
-    created_at TIMESTAMP,
-    authenticated BOOLEAN,
-    revoked BOOLEAN
+    session_index VARCHAR(128) NOT NULL,
+    session_token VARCHAR(128) NOT NULL,
+    csrf_token VARCHAR(128) NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    authenticated BOOLEAN NOT NULL,
+    revoked BOOLEAN NOT NULL
 );
 CREATE UNIQUE INDEX idx_session_index ON uxsession(session_index);
 
 -- access token
 CREATE TABLE accesstoken (
     uuid CHAR(36) PRIMARY KEY,
-    access_token VARCHAR(2048),
-    token_expires TIMESTAMP,
-    refresh_token CHAR(128),
-    refresh_expires TIMESTAMP
+    access_token VARCHAR(2048) NOT NULL,
+    token_expires TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    refresh_token CHAR(128) NOT NULL,
+    refresh_expires TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX idx_accesstoken_servicename ON accesstoken(service_name);
 -- ux session to access token xref
@@ -39,7 +39,7 @@ CREATE TABLE oauthflow (
     state VARCHAR(128) NOT NULL,
     client_id VARCHAR(128) NOT NULL,
     redirect_url VARCHAR(2048) NOT NULL,
-    created_at TIMESTAMP
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE UNIQUE INDEX idx_state_index ON oauthflow(state_index);
 -- ux session to oauth flow xref
