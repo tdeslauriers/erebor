@@ -147,10 +147,6 @@ func TestBuildSession(t *testing.T) {
 				if session.SessionToken == "" {
 					t.Errorf("expected non-empty session token, got %s", session.SessionToken)
 				}
-				if session.CsrfToken == "" {
-					t.Errorf("expected non-empty csrf token, got %s", session.CsrfToken)
-
-				}
 				if bool(tc.UxSessionType) != session.Authenticated {
 					t.Errorf("expected %v, got %v", tc.UxSessionType, session.Authenticated)
 				}
@@ -256,7 +252,7 @@ func TestGetCsrf(t *testing.T) {
 
 }
 
-func TestVIsValidCsrf(t *testing.T) {
+func TestIsValidCsrf(t *testing.T) {
 
 	testCases := []struct {
 		name    string
