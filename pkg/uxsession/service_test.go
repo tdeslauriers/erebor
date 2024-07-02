@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -75,6 +76,7 @@ func (dao *mockSqlRepository) SelectRecord(query string, record interface{}, arg
 				uxsession.Field(i).SetString(testResults[i])
 			}
 		}
+
 	default:
 	}
 
@@ -101,6 +103,7 @@ func (c *mockCryptor) DecryptServiceData(encrypted string) (string, error) {
 type mockIndexer struct{}
 
 func (i *mockIndexer) ObtainBlindIndex(record string) (string, error) {
+	fmt.Print("record: ", record)
 	return fmt.Sprintf("index-%s", record), nil
 }
 
@@ -178,19 +181,19 @@ func TestGetCsrf(t *testing.T) {
 			name:      "empty session token - returns validation error",
 			session:   "",
 			uxsession: nil,
-			err:       errors.New(ErrInvalidSessionId),
+			err:       errors.New(ErrInvalidSession),
 		},
 		{
 			name:      "too short session token - returns validation error",
 			session:   "short",
 			uxsession: nil,
-			err:       errors.New(ErrInvalidSessionId),
+			err:       errors.New(ErrInvalidSession),
 		},
 		{
 			name:      "too long session token - returns validation error",
 			session:   "this-session-token-is-too-long-to-be-valid-and-should-return-an-error",
 			uxsession: nil,
-			err:       errors.New(ErrInvalidSessionId),
+			err:       errors.New(ErrInvalidSession),
 		},
 		{
 			name:      "invalid session token - returns error",
@@ -229,8 +232,8 @@ func TestGetCsrf(t *testing.T) {
 			uxSession, err := sessionSvc.GetCsrf(tc.session)
 			if err != nil {
 
-				if err.Error() != tc.err.Error() {
-					t.Errorf("expected %v, got %v", tc.err, err)
+				if !strings.Contains(err.Error(), tc.err.Error()) {
+					t.Errorf("test failed: expected error '%v' to contain '%v'", err, tc.err.Error())
 				}
 			} else {
 
@@ -251,4 +254,92 @@ func TestGetCsrf(t *testing.T) {
 		})
 	}
 
+}
+
+func TestVIsValidCsrf(t *testing.T) {
+
+	testCases := []struct {
+		name    string
+		session string
+		csrf    string
+		valid   bool
+		err     error
+	}{
+		{
+			name:    "valid session and csrf",
+			session: TestValidSession,
+			csrf:    TestValidCsrf,
+			valid:   true,
+			err:     nil,
+		},
+		{
+			name:    "invalid session - empty session token",
+			session: "",
+			csrf:    TestValidCsrf,
+			valid:   false,
+			err:     errors.New(ErrInvalidSession),
+		},
+		{
+			name:    "invalid session - too long session token",
+			session: "this-session-token-is-too-long-to-be-valid-and-should-return-an-error",
+			csrf:    TestValidCsrf,
+			valid:   false,
+			err:     errors.New(ErrInvalidSession),
+		},
+		{
+			name:    "invalid session - empty csrf token",
+			session: TestValidSession,
+			csrf:    "",
+			valid:   false,
+			err:     errors.New(ErrInvalidCsrf),
+		},
+		{
+			name:    "invalid session - too long csrf token",
+			session: TestValidSession,
+			csrf:    "this-csrf-token-is-too-long-to-be-valid-and-should-return-an-error",
+			valid:   false,
+			err:     errors.New(ErrInvalidCsrf),
+		},
+		{
+			name:    "invalid session - sessoin not in db",
+			session: TestInvalidSession,
+			csrf:    TestValidCsrf,
+			valid:   false,
+			err:     sql.ErrNoRows,
+		},
+		{
+			name:    "invalid session - session revoked",
+			session: TestRevokedSession,
+			csrf:    TestValidCsrf,
+			valid:   false,
+			err:     errors.New(ErrSessionRevoked),
+		},
+		{
+			name:    "invalid session - session expired",
+			session: TestExpiredSession,
+			csrf:    TestValidCsrf,
+			valid:   false,
+			err:     errors.New(ErrSessionExpired),
+		},
+		{
+			name:    "invalid csrf - csrf provided does not match session's csrf",
+			session: TestValidSession,
+			csrf:    "invalid-csrf-token",
+			valid:   false,
+			err:     errors.New(ErrCsrfMismatch),
+		},
+	}
+
+	sessionSvc := NewService(&mockSqlRepository{}, &mockIndexer{}, &mockCryptor{})
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			valid, err := sessionSvc.IsValidCsrf(tc.session, tc.csrf)
+			if !valid && err != nil {
+				if !strings.Contains(err.Error(), tc.err.Error()) {
+					t.Errorf("test failed: expected error '%v' to contain '%v'", err, tc.err.Error())
+				}
+
+			}
+		})
+	}
 }

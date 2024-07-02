@@ -66,34 +66,7 @@ func (h *csrfHandler) HandleGetCsrf(w http.ResponseWriter, r *http.Request) {
 	// get csrf token
 	uxSession, err := h.service.GetCsrf(sessionId)
 	if err != nil {
-		switch {
-		case err.Error() == uxsession.ErrInvalidSessionId:
-			h.logger.Error(err.Error())
-			e := connect.ErrorHttp{
-				StatusCode: http.StatusBadRequest,
-				Message:    err.Error(),
-			}
-			e.SendJsonErr(w)
-			return
-		case err.Error() == uxsession.ErrSessionRevoked:
-		case err.Error() == uxsession.ErrSessionExpired:
-		case err.Error() == uxsession.ErrTokenMismatch:
-			h.logger.Error(err.Error())
-			e := connect.ErrorHttp{
-				StatusCode: http.StatusUnauthorized,
-				Message:    err.Error(),
-			}
-			e.SendJsonErr(w)
-			return
-		default:
-			h.logger.Error("failed to get csrf token", "err", err.Error())
-			e := connect.ErrorHttp{
-				StatusCode: http.StatusInternalServerError,
-				Message:    "failed to get csrf token",
-			}
-			e.SendJsonErr(w)
-			return
-		}
+		h.handleServiceErrors(err, w)
 	}
 
 	// respond with csrf token
@@ -109,4 +82,41 @@ func (h *csrfHandler) HandleGetCsrf(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+}
+
+func (h *csrfHandler) handleServiceErrors(err error, w http.ResponseWriter) {
+	switch {
+	case strings.Contains(err.Error(), uxsession.ErrInvalidSession):
+		h.logger.Error(err.Error())
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusBadRequest,
+			Message:    err.Error(),
+		}
+		e.SendJsonErr(w)
+		return
+	case strings.Contains(err.Error(), uxsession.ErrSessionRevoked):
+		h.logger.Error(err.Error())
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusUnauthorized,
+			Message:    uxsession.ErrSessionRevoked,
+		}
+		e.SendJsonErr(w)
+		return
+	case strings.Contains(err.Error(), uxsession.ErrSessionExpired):
+		h.logger.Error(err.Error())
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusUnauthorized,
+			Message:    uxsession.ErrSessionExpired,
+		}
+		e.SendJsonErr(w)
+		return
+	default:
+		h.logger.Error("failed to get csrf token", "err", err.Error())
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusInternalServerError,
+			Message:    "failed to get csrf token",
+		}
+		e.SendJsonErr(w)
+		return
+	}
 }

@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 
 	"erebor/internal/util"
+	"erebor/pkg/uxsession"
 
 	"github.com/tdeslauriers/carapace/pkg/config"
 	"github.com/tdeslauriers/carapace/pkg/connect"
@@ -18,11 +20,12 @@ type RegistrationHandler interface {
 	HandleRegistration(w http.ResponseWriter, r *http.Request)
 }
 
-func NewRegistrationHandler(oauth config.OauthRedirect, provider session.S2sTokenProvider, caller connect.S2sCaller) RegistrationHandler {
+func NewRegistrationHandler(o config.OauthRedirect, s uxsession.Service, p session.S2sTokenProvider, c connect.S2sCaller) RegistrationHandler {
 	return &registrationHandler{
-		oauth:       oauth,
-		s2sProvider: provider,
-		caller:      caller,
+		oauth:          o,
+		sessionService: s,
+		s2sProvider:    p,
+		caller:         c,
 
 		logger: slog.Default().With(slog.String(util.PackageKey, util.PackageAuth)).With(slog.String(util.ComponentKey, util.ComponentRegister)),
 	}
@@ -31,9 +34,10 @@ func NewRegistrationHandler(oauth config.OauthRedirect, provider session.S2sToke
 var _ RegistrationHandler = (*registrationHandler)(nil)
 
 type registrationHandler struct {
-	oauth       config.OauthRedirect
-	s2sProvider session.S2sTokenProvider
-	caller      connect.S2sCaller
+	oauth          config.OauthRedirect
+	sessionService uxsession.Service
+	s2sProvider    session.S2sTokenProvider
+	caller         connect.S2sCaller
 
 	logger *slog.Logger
 }
@@ -62,6 +66,12 @@ func (h *registrationHandler) HandleRegistration(w http.ResponseWriter, r *http.
 		return
 	}
 
+	// TODO: add logic to choose which client to add to user's registration request
+	// for now this is the primary website's client id
+	// Adding the client id here as a "hack" to pass input validation
+	// which is unnecessary in this case (because client id comes from config)
+	cmd.ClientId = h.oauth.CallbackClientId // association required by identity service for user login after registation
+
 	// input validation
 	if err := cmd.ValidateCmd(); err != nil {
 		h.logger.Error("unable to validate fields in registration request body", "err", err.Error())
@@ -72,6 +82,17 @@ func (h *registrationHandler) HandleRegistration(w http.ResponseWriter, r *http.
 		e.SendJsonErr(w)
 		return
 	}
+
+	// check is valid session with valid csrf token
+	if valid, err := h.sessionService.IsValidCsrf(cmd.Session, cmd.Csrf); !valid {
+		h.logger.Error("invalid session or csrf token", "err", err.Error())
+		h.handleSessionErr(err, w)
+	}
+
+	// remove session and csrf tokens from registration request
+	// before sending to identity service to avoid unnecessary exposure
+	cmd.Session = ""
+	cmd.Csrf = ""
 
 	// get shaw service token
 	s2sToken, err := h.s2sProvider.GetServiceToken(util.ServiceUserIdentity)
@@ -85,10 +106,6 @@ func (h *registrationHandler) HandleRegistration(w http.ResponseWriter, r *http.
 		return
 	}
 
-	// TODO: add logic to choose which client to add to user's registration request
-	// for now this is the primary website's client id
-	cmd.ClientId = h.oauth.CallbackClientId // association required for user login after registation
-
 	// call identity service with registration request
 	var registered session.UserRegisterCmd
 	if err := h.caller.PostToService("/register", s2sToken, "", cmd, &registered); err != nil {
@@ -100,10 +117,58 @@ func (h *registrationHandler) HandleRegistration(w http.ResponseWriter, r *http.
 	// respond 201 + registered user
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	
+
 	if err := json.NewEncoder(w).Encode(registered); err != nil {
 		// returning successfully registered user data is a convenience only, omit on error
 		h.logger.Error("unable to marshal/send user registration response body", "err", err.Error())
 		return
 	}
+}
+
+func (h *registrationHandler) handleSessionErr(err error, w http.ResponseWriter) {
+
+	switch {
+	case strings.Contains(err.Error(), uxsession.ErrInvalidSession):
+	case strings.Contains(err.Error(), uxsession.ErrInvalidCsrf):
+		h.logger.Error(err.Error())
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusBadRequest,
+			Message:    err.Error(),
+		}
+		e.SendJsonErr(w)
+		return
+	case strings.Contains(err.Error(), uxsession.ErrSessionRevoked):
+		h.logger.Error(err.Error())
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusUnauthorized,
+			Message:    uxsession.ErrSessionRevoked,
+		}
+		e.SendJsonErr(w)
+		return
+	case strings.Contains(err.Error(), uxsession.ErrSessionExpired):
+		h.logger.Error(err.Error())
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusUnauthorized,
+			Message:    uxsession.ErrSessionExpired,
+		}
+		e.SendJsonErr(w)
+		return
+	case strings.Contains(err.Error(), uxsession.ErrCsrfMismatch):
+		h.logger.Error(err.Error())
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusUnauthorized,
+			Message:    uxsession.ErrCsrfMismatch,
+		}
+		e.SendJsonErr(w)
+		return
+	default:
+		h.logger.Error("failed to get csrf token", "err", err.Error())
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusInternalServerError,
+			Message:    "failed to get csrf token",
+		}
+		e.SendJsonErr(w)
+		return
+	}
+
 }

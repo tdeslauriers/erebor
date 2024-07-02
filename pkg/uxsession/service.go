@@ -38,6 +38,9 @@ type Service interface {
 
 	// GetCsrf returns a csrf token for the given session id.
 	GetCsrf(session string) (*UxSession, error)
+
+	// ValidateCsrt validates the csrf token provided is attached to the session token.
+	IsValidCsrf(session, csrf string) (bool, error)
 }
 
 func NewService(db data.SqlRepository, i data.Indexer, c data.Cryptor) Service {
@@ -64,12 +67,15 @@ type service struct {
 
 const (
 	// 422
-	ErrInvalidSessionId = "invalid or not well formed session id"
+	ErrInvalidSession = "invalid or not well formed session token"
+	ErrInvalidCsrf    = "invalid or not well formed csrf token"
 
 	// 401
-	ErrSessionRevoked = "session is revoked"
-	ErrSessionExpired = "session is expired"
-	ErrTokenMismatch  = "decrypted session token does not match session provided"
+	ErrSessionRevoked  = "session is revoked"
+	ErrSessionExpired  = "session is expired"
+	ErrSessionNotFound = "session not found"
+
+	ErrCsrfMismatch = "decryped csrf token does not match csrf provided"
 
 	// 500
 	ErrGenSessionUuid  = "failed to generate session uuid"
@@ -149,13 +155,13 @@ func (s *service) GetCsrf(session string) (*UxSession, error) {
 
 	// light weight input validation (not checking if session id is valid or well-formed)
 	if len(session) < 16 || len(session) > 64 {
-		return nil, errors.New(ErrInvalidSessionId)
+		return nil, errors.New(ErrInvalidSession)
 	}
 
 	// re generate session index
 	index, err := s.indexer.ObtainBlindIndex(session)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%s from provided session token xxxxxx-%s: %v", ErrGenIndex, session[len(session)-6:], err)
 	}
 
 	// look up uxSession from db by index
@@ -167,29 +173,24 @@ func (s *service) GetCsrf(session string) (*UxSession, error) {
 
 	// check if session is revoked before decyption:
 	if uxSession.Revoked {
-		return nil, errors.New(ErrSessionRevoked)
+		return nil, fmt.Errorf("session id %s: %s", uxSession.Id, ErrSessionRevoked)
 	}
 
 	// check if session is expired before decryption:
 	if uxSession.CreatedAt.Add(time.Hour).Before(time.Now()) {
-		return nil, errors.New(ErrSessionExpired)
+		return nil, fmt.Errorf("session id %s: %s", uxSession.Id, ErrSessionExpired)
 	}
 
 	// decrypt session token
 	sessionToken, err := s.cryptor.DecryptServiceData(uxSession.SessionToken)
 	if err != nil {
-		return nil, fmt.Errorf("%s: %v", ErrDecryptSession, err)
-	}
-	// check if decrypted session token matches session provided
-	if sessionToken != session {
-		// this should never happen
-		return nil, errors.New(ErrTokenMismatch)
+		return nil, fmt.Errorf("sesion id %s - %s: %v", uxSession.Id, ErrDecryptSession, err)
 	}
 
 	// decrypt csrf token
 	csrfToken, err := s.cryptor.DecryptServiceData(uxSession.CsrfToken)
 	if err != nil {
-		return nil, fmt.Errorf("%s: %v", ErrDecryptCsrf, err)
+		return nil, fmt.Errorf("session id %s - %s: %v", uxSession.Id, ErrDecryptCsrf, err)
 	}
 
 	return &UxSession{
@@ -198,4 +199,94 @@ func (s *service) GetCsrf(session string) (*UxSession, error) {
 		CreatedAt:     uxSession.CreatedAt,
 		Authenticated: uxSession.Authenticated,
 	}, nil
+}
+
+// implements ValidateCsrf of Service interface
+// csrf tokens are single use, so this function will delete the token from the db after validation
+// and assign a new one (asyncronously, so the user doesn't have to wait for the db write to complete)
+func (s *service) IsValidCsrf(session, csrf string) (bool, error) {
+
+	// light weight input validation)
+	if len(session) < 16 || len(session) > 64 {
+		return false, errors.New(ErrInvalidSession)
+	}
+
+	if len(csrf) < 16 || len(csrf) > 64 {
+		return false, errors.New(ErrInvalidCsrf)
+	}
+
+	// regenerate index
+	index, err := s.indexer.ObtainBlindIndex(session)
+	if err != nil {
+		return false, fmt.Errorf("%s from provided session token xxxxxx-%s: %v", ErrGenIndex, session[len(session)-6:], err)
+	}
+
+	var uxSession UxSession
+	qry := "SELECT uuid, session_index, session_token, csrf_token, created_at, authenticated, revoked FROM uxsession WHERE session_index = ?"
+	if err := s.db.SelectRecord(qry, &uxSession, index); err != nil {
+		return false, err
+	}
+
+	// check if session is revoked before decryption:
+	if uxSession.Revoked {
+		return false, fmt.Errorf("session id %s: %s", uxSession.Id, ErrSessionRevoked)
+	}
+
+	// check if session is expired before decryption:
+	if uxSession.CreatedAt.Add(time.Hour).Before(time.Now()) {
+
+		// opportunistically delete expired session concurrently
+		go func() {
+			qry := "DELETE FROM uxsession WHERE session_index = ?"
+			if err := s.db.DeleteRecord(qry, index); err != nil {
+				s.logger.Error(fmt.Sprintf("session id %s - failed to delete expired session from db", uxSession.Id), "err", err.Error())
+			}
+			s.logger.Info(fmt.Sprintf("session id %s - successfully deleted expired session from db", uxSession.Id))
+		}()
+
+		return false, fmt.Errorf("session id %s: %s", uxSession.Id, ErrSessionExpired)
+	}
+
+	// decrypt csrf token
+	decrypted, err := s.cryptor.DecryptServiceData(uxSession.CsrfToken)
+	if err != nil {
+		return false, fmt.Errorf("%s - %s: %v", uxSession.Id, ErrDecryptCsrf, err)
+	}
+
+	// check if csrf token matches
+	// return error if not
+	if decrypted != csrf {
+		return false, fmt.Errorf("session id %s - xxxxxx-%s vs xxxxxx-%s: %s", uxSession.Id, decrypted[len(decrypted)-6:], csrf[len(csrf)-6:], ErrCsrfMismatch)
+	}
+
+	// generate a new csrf token and persist it to the db
+	// perist concurrently so returns immediately on validation
+	// if this fails, the old csrf token will still be valid
+	// for the length of the session which is only an hour.
+	go func() {
+
+		csrf, err := uuid.NewRandom()
+		if err != nil {
+			s.logger.Error(fmt.Sprintf("session id %s - replace used csrf token: %s", uxSession.Id, ErrGenCsrfToken))
+			return
+		}
+
+		encryptedCsrf, err := s.cryptor.EncryptServiceData(csrf.String())
+		if err != nil {
+			s.logger.Error(fmt.Sprintf("session id %s - replace used csrf token: %s", uxSession.Id, ErrEncryptCsrf))
+			return
+		}
+
+		// update db
+		qry := "UPDATE uxsession SET csrf_token = ? WHERE session_index = ?"
+		if err := s.db.UpdateRecord(qry, encryptedCsrf, index); err != nil {
+			s.logger.Error(fmt.Sprintf("session id %s - failed to update (replace used) csrf token in db", uxSession.Id), "err", err.Error())
+			return
+		}
+
+		// log success
+		s.logger.Info(fmt.Sprintf("session id %s - successfully updated csrf token in db", session))
+	}()
+
+	return true, nil
 }

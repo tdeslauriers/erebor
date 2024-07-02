@@ -158,7 +158,7 @@ func (g *gateway) Run() error {
 	uxSessionHandler := uxsession.NewHandler(g.uxSessionService)
 	csrfHandler := csrf.NewHandler(g.uxSessionService)
 
-	register := authentication.NewRegistrationHandler(g.config.OauthRedirect, g.s2sTokenProvider, g.userIdentity)
+	register := authentication.NewRegistrationHandler(g.config.OauthRedirect, g.uxSessionService, g.s2sTokenProvider, g.userIdentity)
 
 	oauth := authentication.NewOauthHandler(g.oauthService)
 	login := authentication.NewLoginHandler(g.s2sTokenProvider, g.userIdentity)
