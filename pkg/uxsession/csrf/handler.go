@@ -67,6 +67,7 @@ func (h *csrfHandler) HandleGetCsrf(w http.ResponseWriter, r *http.Request) {
 	uxSession, err := h.service.GetCsrf(sessionId)
 	if err != nil {
 		h.handleServiceErrors(err, w)
+		return
 	}
 
 	// respond with csrf token
@@ -110,6 +111,13 @@ func (h *csrfHandler) handleServiceErrors(err error, w http.ResponseWriter) {
 		}
 		e.SendJsonErr(w)
 		return
+	case strings.Contains(err.Error(), uxsession.ErrSessionNotFound):
+		h.logger.Error(err.Error())
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusUnauthorized,
+			Message:    uxsession.ErrSessionNotFound,
+		}
+		e.SendJsonErr(w)
 	default:
 		h.logger.Error("failed to get csrf token", "err", err.Error())
 		e := connect.ErrorHttp{

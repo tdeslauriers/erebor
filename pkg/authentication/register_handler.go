@@ -87,12 +87,13 @@ func (h *registrationHandler) HandleRegistration(w http.ResponseWriter, r *http.
 	if valid, err := h.sessionService.IsValidCsrf(cmd.Session, cmd.Csrf); !valid {
 		h.logger.Error("invalid session or csrf token", "err", err.Error())
 		h.handleSessionErr(err, w)
+		return
 	}
 
 	// remove session and csrf tokens from registration request
 	// before sending to identity service to avoid unnecessary exposure
-	cmd.Session = ""
-	cmd.Csrf = ""
+	// cmd.Session = ""
+	// cmd.Csrf = ""
 
 	// get shaw service token
 	s2sToken, err := h.s2sProvider.GetServiceToken(util.ServiceUserIdentity)
@@ -153,6 +154,13 @@ func (h *registrationHandler) handleSessionErr(err error, w http.ResponseWriter)
 		}
 		e.SendJsonErr(w)
 		return
+	case strings.Contains(err.Error(), uxsession.ErrSessionNotFound):
+		h.logger.Error(err.Error())
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusUnauthorized,
+			Message:    uxsession.ErrSessionNotFound,
+		}
+		e.SendJsonErr(w)
 	case strings.Contains(err.Error(), uxsession.ErrCsrfMismatch):
 		h.logger.Error(err.Error())
 		e := connect.ErrorHttp{

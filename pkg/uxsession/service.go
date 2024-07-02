@@ -1,6 +1,7 @@
 package uxsession
 
 import (
+	"database/sql"
 	"erebor/internal/util"
 	"errors"
 	"fmt"
@@ -168,6 +169,9 @@ func (s *service) GetCsrf(session string) (*UxSession, error) {
 	var uxSession UxSession
 	qry := "SELECT uuid, session_index, session_token, csrf_token, created_at, authenticated, revoked FROM uxsession WHERE session_index = ?"
 	if err := s.db.SelectRecord(qry, &uxSession, index); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("session xxxxxx-%s - %s: %v", session[len(session)-6:], ErrSessionNotFound, err)
+		}
 		return nil, err
 	}
 
@@ -177,7 +181,7 @@ func (s *service) GetCsrf(session string) (*UxSession, error) {
 	}
 
 	// check if session is expired before decryption:
-	if uxSession.CreatedAt.Add(time.Hour).Before(time.Now()) {
+	if uxSession.CreatedAt.Add(1 * time.Hour).Before(time.Now().UTC()) {
 		return nil, fmt.Errorf("session id %s: %s", uxSession.Id, ErrSessionExpired)
 	}
 
@@ -224,6 +228,9 @@ func (s *service) IsValidCsrf(session, csrf string) (bool, error) {
 	var uxSession UxSession
 	qry := "SELECT uuid, session_index, session_token, csrf_token, created_at, authenticated, revoked FROM uxsession WHERE session_index = ?"
 	if err := s.db.SelectRecord(qry, &uxSession, index); err != nil {
+		if err == sql.ErrNoRows {
+			return false, fmt.Errorf("session xxxxxx-%s - %s: %v", session[len(session)-6:], ErrSessionNotFound, err)
+		}
 		return false, err
 	}
 
@@ -233,17 +240,7 @@ func (s *service) IsValidCsrf(session, csrf string) (bool, error) {
 	}
 
 	// check if session is expired before decryption:
-	if uxSession.CreatedAt.Add(time.Hour).Before(time.Now()) {
-
-		// opportunistically delete expired session concurrently
-		go func() {
-			qry := "DELETE FROM uxsession WHERE session_index = ?"
-			if err := s.db.DeleteRecord(qry, index); err != nil {
-				s.logger.Error(fmt.Sprintf("session id %s - failed to delete expired session from db", uxSession.Id), "err", err.Error())
-			}
-			s.logger.Info(fmt.Sprintf("session id %s - successfully deleted expired session from db", uxSession.Id))
-		}()
-
+	if uxSession.CreatedAt.Add(time.Hour).Before(time.Now().UTC()) {
 		return false, fmt.Errorf("session id %s: %s", uxSession.Id, ErrSessionExpired)
 	}
 

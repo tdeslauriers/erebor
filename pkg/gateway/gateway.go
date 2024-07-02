@@ -168,7 +168,7 @@ func (g *gateway) Run() error {
 	mux.HandleFunc("/health", diagnostics.HealthCheckHandler)
 
 	mux.HandleFunc("/session/anonymous", uxSessionHandler.HandleGetSession)
-	mux.HandleFunc("/session/csrf/", csrfHandler.HandleGetCsrf) // trailing slash required for /session/csrf/{session_id}
+	mux.HandleFunc("/session/csrf/", csrfHandler.HandleGetCsrf) // trailing slash required for /session/csrf/{session}
 
 	mux.HandleFunc("/register", register.HandleRegistration)
 
