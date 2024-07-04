@@ -146,11 +146,13 @@ func (s *oauthService) Obtain(sessionToken string) (*OauthExchange, error) {
 			if len(errs) > 0 {
 				// if there are errors, return/exit the function
 				var builder strings.Builder
+				count := 0
 				for e := range errs {
 					builder.WriteString(e.Error())
-					if len(errs) > 1 {
+					if len(errs) > 1 && count < len(errs)-1 {
 						builder.WriteString("; ")
 					}
+					count++
 				}
 				return nil, errors.New(builder.String())
 			} else {
