@@ -3,6 +3,8 @@ package authentication
 import (
 	"encoding/json"
 	"erebor/internal/util"
+	"erebor/pkg/uxsession"
+	"fmt"
 	"log/slog"
 	"net/http"
 
@@ -15,9 +17,9 @@ type OauthHandler interface {
 	HandleGetState(w http.ResponseWriter, r *http.Request)
 }
 
-func NewOauthHandler(oauthService OauthService) OauthHandler {
+func NewOauthHandler(ux uxsession.Service, o OauthService) OauthHandler {
 	return &oauthHandler{
-		oauthService: oauthService,
+		oauthService: o,
 
 		logger: slog.Default().With(slog.String(util.PackageKey, util.PackageAuth)).With(slog.String(util.ComponentKey, util.ComponentOauth)),
 	}
@@ -26,24 +28,51 @@ func NewOauthHandler(oauthService OauthService) OauthHandler {
 var _ OauthHandler = (*oauthHandler)(nil)
 
 type oauthHandler struct {
-	oauthService OauthService
+	sessionService uxsession.Service
+	oauthService   OauthService
 
 	logger *slog.Logger
 }
 
+type SessionCmd struct {
+	SessionToken string `json:"session_token"`
+}
+
 func (h *oauthHandler) HandleGetState(w http.ResponseWriter, r *http.Request) {
-	if r.Method != "GET" {
-		h.logger.Error("only GET requests are allowed to /oauth/state endpoint")
+	if r.Method != "POST" {
+		h.logger.Error("only POST requests are allowed to /oauth/state endpoint")
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusMethodNotAllowed,
-			Message:    "only GET requests are allowed",
+			Message:    "only POST requests are allowed",
 		}
 		e.SendJsonErr(w)
 		return
 	}
 
-	// create/persist oauth vars
-	exchange, err := h.oauthService.Build()
+	var cmd SessionCmd
+	err := json.NewDecoder(r.Body).Decode(&cmd)
+	if err != nil {
+		h.logger.Error("unable to decode session_token json in the request body", "err", err.Error())
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusBadRequest,
+			Message:    "improperly formatted json for session token",
+		}
+		e.SendJsonErr(w)
+		return
+	}
+
+	if len(cmd.SessionToken) < 16 || len(cmd.SessionToken) > 64 {
+		h.logger.Error(fmt.Sprintf("session token length is invalid: %d", len(cmd.SessionToken)))
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusBadRequest,
+			Message:    "not well-formed session token",
+		}
+		e.SendJsonErr(w)
+		return
+	}
+
+	// look up/create oauth state, nonce, client id, and callback url for the session
+	exchange, err := h.oauthService.Obtain(cmd.SessionToken)
 	if err != nil {
 		h.logger.Error("failed to create oauth exchange", "err", err.Error())
 		e := connect.ErrorHttp{

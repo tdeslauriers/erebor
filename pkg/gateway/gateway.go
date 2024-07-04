@@ -160,7 +160,7 @@ func (g *gateway) Run() error {
 
 	register := authentication.NewRegistrationHandler(g.config.OauthRedirect, g.uxSessionService, g.s2sTokenProvider, g.userIdentity)
 
-	oauth := authentication.NewOauthHandler(g.oauthService)
+	oauth := authentication.NewOauthHandler(g.uxSessionService, g.oauthService)
 	login := authentication.NewLoginHandler(g.s2sTokenProvider, g.userIdentity)
 
 	// setup mux

@@ -8,6 +8,8 @@ import (
 	"github.com/tdeslauriers/carapace/pkg/validate"
 )
 
+var testValidSession string = "valid-session-token"
+
 // mock default callback/redirect url and client
 var mockOauthRedirect = config.OauthRedirect{
 	CallbackUrl:      "http://localhost:8080/oauth/callback",
@@ -61,7 +63,7 @@ func TestBuild(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			exchange, err := oauthService.Build()
+			exchange, err := oauthService.Obtain(testValidSession)
 			if err != tc.err {
 				t.Errorf("expected %v, got %v", tc.err, err)
 			}

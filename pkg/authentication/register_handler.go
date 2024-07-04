@@ -90,8 +90,9 @@ func (h *registrationHandler) HandleRegistration(w http.ResponseWriter, r *http.
 		return
 	}
 
-	// remove session and csrf tokens from registration request
+	// TODO: remove session and csrf tokens from registration request
 	// before sending to identity service to avoid unnecessary exposure
+	// however, currently this fails validation check (TODO: fix)
 	// cmd.Session = ""
 	// cmd.Csrf = ""
 

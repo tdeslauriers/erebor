@@ -1,7 +1,12 @@
 package authentication
 
 import (
+	"database/sql"
+	"erebor/pkg/uxsession"
+	"errors"
 	"fmt"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -22,9 +27,10 @@ type OauthExchange struct {
 }
 
 type OauthService interface {
-	// Build creates a new oauth exchange record, persisting it to the database,
-	// and returns the struct for use by the login handler to send to authentication service
-	Build() (*OauthExchange, error)
+
+	// Obtain returns the oauth exchange record associated with the uxsession from the database if it exists.
+	// If one does not exist, it will build one, persist it, and return the newly created record.
+	Obtain(uxsession string) (*OauthExchange, error)
 
 	// Valiadate validates the oauth exchange variables returned from the client to the callback url
 	// against the values stored in the database to ensure the exchange is valid/untampered
@@ -50,8 +56,133 @@ type oauthService struct {
 	indexer data.Indexer
 }
 
-// Build implementation of the OauthService interface
-func (s *oauthService) Build() (*OauthExchange, error) {
+type UxsesionOauthFlow struct {
+	Id              int    `json:"id,omitempty" db:"id"`
+	UxsessionId     string `json:"uxsession_id,omitempty" db:"uxsession_uuid"`
+	OauthExchangeId string `json:"oauth_exchange_id,omitempty" db:"oauthflow_uuid"`
+}
+
+// Obtain implementation of the OauthService interface
+func (s *oauthService) Obtain(sessionToken string) (*OauthExchange, error) {
+
+	if len(sessionToken) < 16 || len(sessionToken) > 64 {
+		return nil, fmt.Errorf("invalid session token length: %d", len(sessionToken))
+	}
+
+	// recreate session token index
+	index, err := s.indexer.ObtainBlindIndex(sessionToken)
+	if err != nil {
+		return nil, fmt.Errorf("%s for session lookup: %v", uxsession.ErrGenIndex, err)
+	}
+
+	// check if the oauth exchange record already exists
+	var exchange OauthExchange
+	qry := `
+	SELECT 
+	 	o.uuid, 
+		o.state_index, 
+		o.response_type, 
+		o.nonce, o.state, 
+		o.client_id, 
+		o.redirect_url, 
+		o.created_at
+	FROM oauthflow o 
+		LEFT OUTER JOIN uxsession_oauthflow uo ON o.uuid = uo.oauthflow_uuid
+		LEFT OUTER JOIN uxsession u ON uo.uxsession_uuid = u.uuid
+	WHERE u.session_index = ?
+		AND u.revoked = false`
+	// it is possible this will yeield multiple records, but we only need one, SelectRecord will return the first row found
+	if err := s.db.SelectRecord(qry, &exchange, index); err != nil {
+		if err == sql.ErrNoRows {
+
+			var wgRecords sync.WaitGroup
+			lookupId := make(chan string, 1)
+			persist := make(chan OauthExchange, 1)
+			errs := make(chan error, 2)
+
+			// look up the session
+			wgRecords.Add(1)
+			go func() {
+				defer wgRecords.Done()
+
+				var session uxsession.UxSession
+				qry := `SELECT uuid, session_index, session_token, csrf_token, created_at, authenticated, revoked FROM uxsession WHERE session_index = ?`
+				if err := s.db.SelectRecord(qry, &session, index); err != nil {
+					if err == sql.ErrNoRows {
+						e := fmt.Errorf("session token xxxxxx-%s: %v", sessionToken[len(sessionToken)-6:], uxsession.ErrSessionNotFound)
+						errs <- e
+					} else {
+						errs <- err
+					}
+				}
+				// check if session is revoked
+				if session.Revoked {
+					e := fmt.Errorf("session id %s: %s", session.Id, uxsession.ErrSessionRevoked)
+					errs <- e
+				}
+
+				lookupId <- session.Id
+			}()
+
+			// build the oauth exchange record
+			wgRecords.Add(1)
+			go func() {
+				defer wgRecords.Done()
+				ouath, err := s.build()
+				if err != nil {
+					e := fmt.Errorf("failed to build oauth and persist exchange record for session token xxxxxx-%s: %v", sessionToken[len(sessionToken)-6:], err)
+					errs <- e
+				}
+				persist <- *ouath
+			}()
+
+			go func() {
+				wgRecords.Wait()
+				close(lookupId)
+				close(persist)
+				close(errs)
+			}()
+
+			if len(errs) > 0 {
+				// if there are errors, return/exit the function
+				var builder strings.Builder
+				for e := range errs {
+					builder.WriteString(e.Error())
+					if len(errs) > 1 {
+						builder.WriteString("; ")
+					}
+				}
+				return nil, errors.New(builder.String())
+			} else {
+
+				sessionId := <-lookupId
+				exchange := <-persist
+
+				xref := UxsesionOauthFlow{
+					Id:              0,
+					UxsessionId:     sessionId,
+					OauthExchangeId: exchange.Id,
+				}
+				// create the relationship between the session and the oauth exchange record and return the exchange
+				qry := `INSERT INTO uxsession_oauthflow (uxsession_uuid, oauthflow_uuid) VALUES (?, ?, ?)`
+				if err := s.db.InsertRecord(qry, xref); err != nil {
+					return nil, fmt.Errorf("failed to create uxsession_oauthflow xref record between uxsession %s and oathflow %s: %v", sessionId, exchange.Id, err)
+				}
+
+				return &exchange, nil
+			}
+
+		} else {
+			return nil, fmt.Errorf("exchange record lookup failed for session token xxxxxx-%s: %v", sessionToken[len(sessionToken)-6:], err)
+		}
+	}
+
+	return &exchange, nil
+}
+
+// build creates a new oauth exchange record, persisting it to the database,
+// and returns the struct
+func (s *oauthService) build() (*OauthExchange, error) {
 
 	id, err := uuid.NewRandom()
 	if err != nil {

@@ -79,10 +79,10 @@ const (
 	ErrCsrfMismatch = "decryped csrf token does not match csrf provided"
 
 	// 500
-	ErrGenSessionUuid  = "failed to generate session uuid"
-	ErrGenSessionToken = "failed to generate session token"
-	ErrGenIndex        = "failed to generate session index"
-	ErrGenCsrfToken    = "failed to generate csrf token"
+	ErrGenSessionUuid         = "failed to generate session uuid"
+	ErrGenSessionToken        = "failed to generate session token"
+	ErrGenIndex        string = "failed to generate session index"
+	ErrGenCsrfToken           = "failed to generate csrf token"
 
 	ErrEncryptSession = "failed to encrypt session token"
 	ErrEncryptCsrf    = "failed to encrypt csrf token"
