@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 
 	"github.com/tdeslauriers/carapace/pkg/connect"
 )
@@ -17,7 +18,7 @@ type OauthHandler interface {
 	HandleGetState(w http.ResponseWriter, r *http.Request)
 }
 
-func NewOauthHandler(ux uxsession.Service, o OauthService) OauthHandler {
+func NewOauthHandler(o OauthService) OauthHandler {
 	return &oauthHandler{
 		oauthService: o,
 
@@ -28,8 +29,7 @@ func NewOauthHandler(ux uxsession.Service, o OauthService) OauthHandler {
 var _ OauthHandler = (*oauthHandler)(nil)
 
 type oauthHandler struct {
-	sessionService uxsession.Service
-	oauthService   OauthService
+	oauthService OauthService
 
 	logger *slog.Logger
 }
@@ -74,12 +74,7 @@ func (h *oauthHandler) HandleGetState(w http.ResponseWriter, r *http.Request) {
 	// look up/create oauth state, nonce, client id, and callback url for the session
 	exchange, err := h.oauthService.Obtain(cmd.SessionToken)
 	if err != nil {
-		h.logger.Error("failed to create oauth exchange", "err", err.Error())
-		e := connect.ErrorHttp{
-			StatusCode: http.StatusInternalServerError,
-			Message:    "failed to create oauth state and nonce variables",
-		}
-		e.SendJsonErr(w)
+		h.handleServiceErr(err, w)
 		return
 	}
 
@@ -95,4 +90,35 @@ func (h *oauthHandler) HandleGetState(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+}
+
+func (h *oauthHandler) handleServiceErr(err error, w http.ResponseWriter) {
+
+	switch {
+	case strings.Contains(err.Error(), uxsession.ErrInvalidSession):
+		h.logger.Error(err.Error())
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusBadRequest,
+			Message:    uxsession.ErrInvalidSession,
+		}
+		e.SendJsonErr(w)
+		return
+	case strings.Contains(err.Error(), uxsession.ErrSessionNotFound):
+	case strings.Contains(err.Error(), uxsession.ErrSessionRevoked):
+		h.logger.Error(err.Error())
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusUnauthorized,
+			Message:    uxsession.ErrSessionRevoked,
+		}
+		e.SendJsonErr(w)
+		return
+	default: // majority errors for this service are internal server errors
+		h.logger.Error(err.Error())
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusInternalServerError,
+			Message:    "internal server error: unable to retrieve oauth exchange data",
+		}
+		e.SendJsonErr(w)
+		return
+	}
 }

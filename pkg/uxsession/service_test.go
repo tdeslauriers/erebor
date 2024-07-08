@@ -48,6 +48,7 @@ func (dao *mockSqlRepository) SelectRecord(query string, record interface{}, arg
 				uxsession.Field(i).SetString(testResults[i])
 			}
 		}
+		return nil
 	case "index-" + TestInvalidSession:
 		return sql.ErrNoRows
 	case "index-" + TestRevokedSession:
@@ -63,6 +64,7 @@ func (dao *mockSqlRepository) SelectRecord(query string, record interface{}, arg
 				uxsession.Field(i).SetString(testResults[i])
 			}
 		}
+		return nil
 	case "index-" + TestExpiredSession:
 		testResults := []string{TestRevokedSession, TestValidIndex, "encrypted-" + TestExpiredSession, "encrypted-" + TestValidCsrf}
 		for i := 0; i < uxsession.NumField(); i++ {
@@ -76,7 +78,7 @@ func (dao *mockSqlRepository) SelectRecord(query string, record interface{}, arg
 				uxsession.Field(i).SetString(testResults[i])
 			}
 		}
-
+		return nil
 	default:
 	}
 
@@ -103,7 +105,6 @@ func (c *mockCryptor) DecryptServiceData(encrypted string) (string, error) {
 type mockIndexer struct{}
 
 func (i *mockIndexer) ObtainBlindIndex(record string) (string, error) {
-	fmt.Print("record: ", record)
 	return fmt.Sprintf("index-%s", record), nil
 }
 
