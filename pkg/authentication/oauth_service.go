@@ -76,6 +76,12 @@ const (
 	ErrEncryptCallbackClientId    = "failed to encrypt oauth exchange callback client id for storage"
 	ErrEncryptCallbackRedirectUrl = "failed to encrypt oauth exchange callback redirect url for storage"
 
+	ErrDecryptResponseType = "failed to decrypt oauth exchange response type"
+	ErrDecryptNonce        = "failed to decrypt oauth exchange nonce"
+	ErrDecryptState        = "failed to decrypt oauth exchange state"
+	ErrDecryptClientId     = "failed to decrypt oauth exchange client id"
+	ErrDecryptRedirectUrl  = "failed to decrypt oauth exchange redirect/callback url"
+
 	ErrLookupOauthExchange = "failed to look up oauth exchange record" // sql error/problem => NOT zero results
 
 	ErrPersistOauthExchange = "failed to build/persist oauth exchange record"
@@ -154,7 +160,7 @@ func (s *oauthService) Obtain(sessionToken string) (*OauthExchange, error) {
 			wgRecords.Add(1)
 			go func() {
 				defer wgRecords.Done()
-				
+
 				ouath, err := s.build()
 				if err != nil {
 					// all error options for this are 500 errors
@@ -195,7 +201,7 @@ func (s *oauthService) Obtain(sessionToken string) (*OauthExchange, error) {
 				}
 
 				// create the relationship between the session and the oauth exchange record and return the exchange
-				qry := `INSERT INTO uxsession_oauthflow (uxsession_uuid, oauthflow_uuid) VALUES (?, ?, ?)`
+				qry := `INSERT INTO uxsession_oauthflow (id, uxsession_uuid, oauthflow_uuid) VALUES (?, ?, ?)`
 				if err := s.db.InsertRecord(qry, xref); err != nil {
 					return nil, fmt.Errorf("%s between uxsession %s and oathflow %s: %v", ErrPersistXref, sessionId, exchange.Id, err)
 				}
@@ -216,12 +222,40 @@ func (s *oauthService) Obtain(sessionToken string) (*OauthExchange, error) {
 		}
 	}
 
+	// oauth exchange already exists
+	// decrypt all field-level-encrypted values for return object
+	rt, err := s.cryptor.DecryptServiceData(exchange.ResponseType)
+	if err != nil {
+		return nil, fmt.Errorf("%s for session token xxxxxx-%s: %v", ErrDecryptResponseType, sessionToken[len(sessionToken)-6:], err)
+	}
+
+	n, err := s.cryptor.DecryptServiceData(exchange.Nonce)
+	if err != nil {
+		return nil, fmt.Errorf("%s for session token xxxxxx-%s: %v", ErrDecryptNonce, sessionToken[len(sessionToken)-6:], err)
+	}
+
+	st, err := s.cryptor.DecryptServiceData(exchange.State)
+	if err != nil {
+		return nil, fmt.Errorf("%s for session token xxxxxx-%s: %v", ErrDecryptState, sessionToken[len(sessionToken)-6:], err)
+	}
+
+	cid, err := s.cryptor.DecryptServiceData(exchange.ClientId)
+	if err != nil {
+		return nil, fmt.Errorf("%s for session token xxxxxx-%s: %v", ErrDecryptClientId, sessionToken[len(sessionToken)-6:], err)
+	}
+
+	cb, err := s.cryptor.DecryptServiceData(exchange.RedirectUrl)
+	if err != nil {
+		return nil, fmt.Errorf("%s for session token xxxxxx-%s: %v", ErrDecryptRedirectUrl, sessionToken[len(sessionToken)-6:], err)
+	}
+
+	// return the ouath exchange record
 	return &OauthExchange{
-		ResponseType: exchange.ResponseType,
-		Nonce:        exchange.Nonce,
-		State:        exchange.State,
-		ClientId:     exchange.ClientId,
-		RedirectUrl:  exchange.RedirectUrl,
+		ResponseType: rt,
+		Nonce:        n,
+		State:        st,
+		ClientId:     cid,
+		RedirectUrl:  cb,
 		CreatedAt:    exchange.CreatedAt,
 	}, nil
 }
