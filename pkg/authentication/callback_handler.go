@@ -86,7 +86,7 @@ func (h *callbackHandler) HandleCallback(w http.ResponseWriter, r *http.Request)
 
 	var access session.AccessTokenResponse
 	if err := h.caller.PostToService("/callback", s2sToken, "", cmd, &access); err != nil {
-		h.logger.Error("call to identity service login failed", "err", err.Error())
+		h.logger.Error("call to identity service callback endpoint failed", "err", err.Error())
 		h.caller.RespondUpstreamError(err, w)
 		return
 	}
