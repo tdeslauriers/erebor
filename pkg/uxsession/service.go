@@ -6,9 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/tdeslauriers/carapace/pkg/connect"
 	"github.com/tdeslauriers/carapace/pkg/data"
 )
 
@@ -31,7 +34,7 @@ const (
 	Authenticated UxSessionType = true
 )
 
-type Service interface {
+type SessionService interface {
 	// Build creates a new seesion record, persisting it to the database, and returns the struct.  It builds both authenticated and unauthenticated sessions.
 	// However, the authentication designation in the struct is just a convenience, the presesnce of Access and Refresh tokens is the real indicator of authentication status.
 	// If no access tokens exist, user will be redirected to login page.
@@ -42,6 +45,15 @@ type Service interface {
 
 	// ValidateCsrt validates the csrf token provided is attached to the session token.
 	IsValidCsrf(session, csrf string) (bool, error)
+}
+
+type ErrService interface {
+	HandleSessionErr(err error, w http.ResponseWriter)
+}
+
+type Service interface {
+	SessionService
+	ErrService
 }
 
 func NewService(db data.SqlRepository, i data.Indexer, c data.Cryptor) Service {
@@ -264,13 +276,13 @@ func (s *service) IsValidCsrf(session, csrf string) (bool, error) {
 
 		csrf, err := uuid.NewRandom()
 		if err != nil {
-			s.logger.Error(fmt.Sprintf("session id %s - replace used csrf token: %s", uxSession.Id, ErrGenCsrfToken))
+			s.logger.Error(fmt.Sprintf("session id %s - failed to generated replacement csrf token: %s", uxSession.Id, ErrGenCsrfToken))
 			return
 		}
 
 		encryptedCsrf, err := s.cryptor.EncryptServiceData(csrf.String())
 		if err != nil {
-			s.logger.Error(fmt.Sprintf("session id %s - replace used csrf token: %s", uxSession.Id, ErrEncryptCsrf))
+			s.logger.Error(fmt.Sprintf("session id %s - failed to encrypt replacement csrf token: %s", uxSession.Id, ErrEncryptCsrf))
 			return
 		}
 
@@ -282,8 +294,58 @@ func (s *service) IsValidCsrf(session, csrf string) (bool, error) {
 		}
 
 		// log success
-		s.logger.Info(fmt.Sprintf("session id %s - successfully updated csrf token in db", session))
+		s.logger.Info(fmt.Sprintf("session id %s - successfully updated/replaced csrf token in db", uxSession.Id))
 	}()
 
 	return true, nil
+}
+
+// helper function to handle session errors in a consistent way
+// HandleSessionErr implements the ErrService interface
+func (s *service) HandleSessionErr(err error, w http.ResponseWriter) {
+
+	switch {
+	case strings.Contains(err.Error(), ErrInvalidSession):
+	case strings.Contains(err.Error(), ErrInvalidCsrf):
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusBadRequest,
+			Message:    err.Error(),
+		}
+		e.SendJsonErr(w)
+		return
+	case strings.Contains(err.Error(), ErrSessionRevoked):
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusUnauthorized,
+			Message:    ErrSessionRevoked,
+		}
+		e.SendJsonErr(w)
+		return
+	case strings.Contains(err.Error(), ErrSessionExpired):
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusUnauthorized,
+			Message:    ErrSessionExpired,
+		}
+		e.SendJsonErr(w)
+		return
+	case strings.Contains(err.Error(), ErrSessionNotFound):
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusUnauthorized,
+			Message:    ErrSessionNotFound,
+		}
+		e.SendJsonErr(w)
+	case strings.Contains(err.Error(), ErrCsrfMismatch):
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusUnauthorized,
+			Message:    ErrCsrfMismatch,
+		}
+		e.SendJsonErr(w)
+		return
+	default:
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusInternalServerError,
+			Message:    "failed to get csrf token",
+		}
+		e.SendJsonErr(w)
+		return
+	}
 }

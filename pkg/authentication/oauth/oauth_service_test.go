@@ -1,4 +1,4 @@
-package authentication
+package oauth
 
 import (
 	"database/sql"
@@ -181,7 +181,7 @@ func (i *mockIndexer) ObtainBlindIndex(record string) (string, error) {
 	return fmt.Sprintf("index-%s", record), nil
 }
 
-func TestBuild(t *testing.T) {
+func TestObtain(t *testing.T) {
 
 	testCases := []struct {
 		name         string
@@ -250,7 +250,7 @@ func TestBuild(t *testing.T) {
 		},
 	}
 
-	oauthService := NewOauthService(mockOauthRedirect, &mockAuthSqlRepository{}, &mockRegisterCryptor{}, &mockIndexer{})
+	oauthService := NewService(mockOauthRedirect, &mockAuthSqlRepository{}, &mockRegisterCryptor{}, &mockIndexer{})
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {

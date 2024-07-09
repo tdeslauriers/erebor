@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"erebor/internal/util"
+	"erebor/pkg/uxsession"
 
 	"github.com/tdeslauriers/carapace/pkg/connect"
 	"github.com/tdeslauriers/carapace/pkg/session"
@@ -17,10 +18,11 @@ type LoginHandler interface {
 	HandleLogin(w http.ResponseWriter, r *http.Request)
 }
 
-func NewLoginHandler(provider session.S2sTokenProvider, caller connect.S2sCaller) LoginHandler {
+func NewLoginHandler(ux uxsession.Service, p session.S2sTokenProvider, c connect.S2sCaller) LoginHandler {
 	return &loginHandler{
-		s2sProvider: provider,
-		caller:      caller,
+		sessionService: ux,
+		s2sProvider:    p,
+		caller:         c,
 
 		logger: slog.Default().With(slog.String(util.PackageKey, util.PackageAuth)).With(slog.String(util.ComponentKey, util.ComponentLogin)),
 	}
@@ -29,8 +31,9 @@ func NewLoginHandler(provider session.S2sTokenProvider, caller connect.S2sCaller
 var _ LoginHandler = (*loginHandler)(nil)
 
 type loginHandler struct {
-	s2sProvider session.S2sTokenProvider
-	caller      connect.S2sCaller
+	sessionService uxsession.Service
+	s2sProvider    session.S2sTokenProvider
+	caller         connect.S2sCaller
 
 	logger *slog.Logger
 }
@@ -71,8 +74,15 @@ func (h *loginHandler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// check for valid session with valid csrf token
+	if valid, err := h.sessionService.IsValidCsrf(cmd.Session, cmd.Csrf); !valid {
+		h.logger.Error("invalid session or csrf token", "err", err.Error())
+		h.sessionService.HandleSessionErr(err, w)
+		return
+	}
+
 	// get service token
-	s2sToken, err := h.s2sProvider.GetServiceToken("shaw")
+	s2sToken, err := h.s2sProvider.GetServiceToken(util.ServiceUserIdentity)
 	if err != nil {
 		h.logger.Error("failed to retreive s2s token")
 		e := connect.ErrorHttp{
@@ -84,7 +94,7 @@ func (h *loginHandler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// post creds to user auth login service
-	var authcode session.AuthCodeResponse
+	var authcode session.AuthCodeExchange
 	if err := h.caller.PostToService("/login", s2sToken, "", cmd, &authcode); err != nil {
 		h.logger.Error("call to identity service login failed", "err", err.Error())
 		h.caller.RespondUpstreamError(err, w)

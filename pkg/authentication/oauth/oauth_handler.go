@@ -1,4 +1,4 @@
-package authentication
+package oauth
 
 import (
 	"encoding/json"
@@ -12,24 +12,24 @@ import (
 	"github.com/tdeslauriers/carapace/pkg/connect"
 )
 
-type OauthHandler interface {
+type Handler interface {
 	// HandleGetState handles the request from the client to get the oauth state, nonce, client id, and callback url variables
 	// to be used in the login url for the oauth flow
 	HandleGetState(w http.ResponseWriter, r *http.Request)
 }
 
-func NewOauthHandler(o OauthService) OauthHandler {
-	return &oauthHandler{
+func NewHandler(o Service) Handler {
+	return &handler{
 		oauthService: o,
 
 		logger: slog.Default().With(slog.String(util.PackageKey, util.PackageAuth)).With(slog.String(util.ComponentKey, util.ComponentOauth)),
 	}
 }
 
-var _ OauthHandler = (*oauthHandler)(nil)
+var _ Handler = (*handler)(nil)
 
-type oauthHandler struct {
-	oauthService OauthService
+type handler struct {
+	oauthService Service
 
 	logger *slog.Logger
 }
@@ -38,7 +38,7 @@ type SessionCmd struct {
 	SessionToken string `json:"session_token"`
 }
 
-func (h *oauthHandler) HandleGetState(w http.ResponseWriter, r *http.Request) {
+func (h *handler) HandleGetState(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
 		h.logger.Error("only POST requests are allowed to /oauth/state endpoint")
 		e := connect.ErrorHttp{
@@ -92,7 +92,7 @@ func (h *oauthHandler) HandleGetState(w http.ResponseWriter, r *http.Request) {
 
 }
 
-func (h *oauthHandler) handleServiceErr(err error, w http.ResponseWriter) {
+func (h *handler) handleServiceErr(err error, w http.ResponseWriter) {
 
 	switch {
 	case strings.Contains(err.Error(), uxsession.ErrInvalidSession):

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"strings"
 
 	"erebor/internal/util"
 	"erebor/pkg/uxsession"
@@ -83,18 +82,17 @@ func (h *registrationHandler) HandleRegistration(w http.ResponseWriter, r *http.
 		return
 	}
 
-	// check is valid session with valid csrf token
+	// check for valid session with valid csrf token
 	if valid, err := h.sessionService.IsValidCsrf(cmd.Session, cmd.Csrf); !valid {
 		h.logger.Error("invalid session or csrf token", "err", err.Error())
-		h.handleSessionErr(err, w)
+		h.sessionService.HandleSessionErr(err, w)
 		return
 	}
 
-	// TODO: remove session and csrf tokens from registration request
+	// remove session and csrf tokens from registration request
 	// before sending to identity service to avoid unnecessary exposure
-	// however, currently this fails validation check (TODO: fix)
-	// cmd.Session = ""
-	// cmd.Csrf = ""
+	cmd.Session = ""
+	cmd.Csrf = ""
 
 	// get shaw service token
 	s2sToken, err := h.s2sProvider.GetServiceToken(util.ServiceUserIdentity)
@@ -125,59 +123,4 @@ func (h *registrationHandler) HandleRegistration(w http.ResponseWriter, r *http.
 		h.logger.Error("unable to marshal/send user registration response body", "err", err.Error())
 		return
 	}
-}
-
-func (h *registrationHandler) handleSessionErr(err error, w http.ResponseWriter) {
-
-	switch {
-	case strings.Contains(err.Error(), uxsession.ErrInvalidSession):
-	case strings.Contains(err.Error(), uxsession.ErrInvalidCsrf):
-		h.logger.Error(err.Error())
-		e := connect.ErrorHttp{
-			StatusCode: http.StatusBadRequest,
-			Message:    err.Error(),
-		}
-		e.SendJsonErr(w)
-		return
-	case strings.Contains(err.Error(), uxsession.ErrSessionRevoked):
-		h.logger.Error(err.Error())
-		e := connect.ErrorHttp{
-			StatusCode: http.StatusUnauthorized,
-			Message:    uxsession.ErrSessionRevoked,
-		}
-		e.SendJsonErr(w)
-		return
-	case strings.Contains(err.Error(), uxsession.ErrSessionExpired):
-		h.logger.Error(err.Error())
-		e := connect.ErrorHttp{
-			StatusCode: http.StatusUnauthorized,
-			Message:    uxsession.ErrSessionExpired,
-		}
-		e.SendJsonErr(w)
-		return
-	case strings.Contains(err.Error(), uxsession.ErrSessionNotFound):
-		h.logger.Error(err.Error())
-		e := connect.ErrorHttp{
-			StatusCode: http.StatusUnauthorized,
-			Message:    uxsession.ErrSessionNotFound,
-		}
-		e.SendJsonErr(w)
-	case strings.Contains(err.Error(), uxsession.ErrCsrfMismatch):
-		h.logger.Error(err.Error())
-		e := connect.ErrorHttp{
-			StatusCode: http.StatusUnauthorized,
-			Message:    uxsession.ErrCsrfMismatch,
-		}
-		e.SendJsonErr(w)
-		return
-	default:
-		h.logger.Error("failed to get csrf token", "err", err.Error())
-		e := connect.ErrorHttp{
-			StatusCode: http.StatusInternalServerError,
-			Message:    "failed to get csrf token",
-		}
-		e.SendJsonErr(w)
-		return
-	}
-
 }

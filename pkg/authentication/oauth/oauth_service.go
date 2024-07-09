@@ -1,4 +1,4 @@
-package authentication
+package oauth
 
 import (
 	"database/sql"
@@ -26,7 +26,7 @@ type OauthExchange struct {
 	CreatedAt    data.CustomTime `json:"created_at" db:"created_at"`
 }
 
-type OauthService interface {
+type Service interface {
 
 	// Obtain returns the oauth exchange record associated with the uxsession from the database if it exists.
 	// If one does not exist, it will build one, persist it, and return the newly created record.
@@ -37,19 +37,19 @@ type OauthService interface {
 	Valiadate(exchange OauthExchange) error
 }
 
-// NewOauthService creates a new instance of the login service
-func NewOauthService(oauth config.OauthRedirect, db data.SqlRepository, cryptor data.Cryptor, indexer data.Indexer) OauthService {
-	return &oauthService{
-		oauth:   oauth,
+// NewService creates a new instance of the login service
+func NewService(o config.OauthRedirect, db data.SqlRepository, c data.Cryptor, i data.Indexer) Service {
+	return &service{
+		oauth:   o,
 		db:      db,
-		cryptor: cryptor,
-		indexer: indexer,
+		cryptor: c,
+		indexer: i,
 	}
 }
 
-var _ OauthService = (*oauthService)(nil)
+var _ Service = (*service)(nil)
 
-type oauthService struct {
+type service struct {
 	oauth   config.OauthRedirect
 	db      data.SqlRepository
 	cryptor data.Cryptor
@@ -89,7 +89,7 @@ const (
 )
 
 // Obtain implementation of the OauthService interface
-func (s *oauthService) Obtain(sessionToken string) (*OauthExchange, error) {
+func (s *service) Obtain(sessionToken string) (*OauthExchange, error) {
 
 	if len(sessionToken) < 16 || len(sessionToken) > 64 {
 		return nil, errors.New(uxsession.ErrInvalidSession)
@@ -262,7 +262,7 @@ func (s *oauthService) Obtain(sessionToken string) (*OauthExchange, error) {
 
 // build creates a new oauth exchange record, persisting it to the database,
 // and returns the struct
-func (s *oauthService) build() (*OauthExchange, error) {
+func (s *service) build() (*OauthExchange, error) {
 
 	// use concurrent goroutines to build the oauth exchange record
 	// because lots of random data is being generated + several crypto operations
@@ -435,6 +435,6 @@ func (s *oauthService) build() (*OauthExchange, error) {
 }
 
 // Valiadate implementation of the OauthService interface
-func (s *oauthService) Valiadate(exchange OauthExchange) error {
+func (s *service) Valiadate(exchange OauthExchange) error {
 	return nil
 }

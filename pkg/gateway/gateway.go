@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"erebor/internal/util"
 	"erebor/pkg/authentication"
+	"erebor/pkg/authentication/oauth"
 	"erebor/pkg/uxsession"
 	"erebor/pkg/uxsession/csrf"
 	"fmt"
@@ -113,7 +114,7 @@ func New(config config.Config) (Gateway, error) {
 	uxSessionService := uxsession.NewService(repository, indexer, cryptor)
 
 	// oauth service: state, nonce, redirect
-	oauthService := authentication.NewOauthService(config.OauthRedirect, repository, cryptor, indexer)
+	oauthService := oauth.NewService(config.OauthRedirect, repository, cryptor, indexer)
 
 	// login service
 
@@ -139,7 +140,7 @@ type gateway struct {
 	s2sTokenProvider session.S2sTokenProvider
 	userIdentity     connect.S2sCaller
 	uxSessionService uxsession.Service
-	oauthService     authentication.OauthService
+	oauthService     oauth.Service
 
 	logger *slog.Logger
 }
@@ -160,8 +161,8 @@ func (g *gateway) Run() error {
 
 	register := authentication.NewRegistrationHandler(g.config.OauthRedirect, g.uxSessionService, g.s2sTokenProvider, g.userIdentity)
 
-	oauth := authentication.NewOauthHandler(g.oauthService)
-	login := authentication.NewLoginHandler(g.s2sTokenProvider, g.userIdentity)
+	oauth := oauth.NewHandler(g.oauthService)
+	login := authentication.NewLoginHandler(g.uxSessionService, g.s2sTokenProvider, g.userIdentity)
 
 	// setup mux
 	mux := http.NewServeMux()
