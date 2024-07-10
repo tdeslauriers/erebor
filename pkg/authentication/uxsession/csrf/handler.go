@@ -3,7 +3,7 @@ package csrf
 import (
 	"encoding/json"
 	"erebor/internal/util"
-	"erebor/pkg/uxsession"
+	"erebor/pkg/authentication/uxsession"
 	"log/slog"
 	"net/http"
 	"strings"

@@ -2,7 +2,7 @@ package oauth
 
 import (
 	"database/sql"
-	"erebor/pkg/uxsession"
+	"erebor/pkg/authentication/uxsession"
 	"errors"
 	"fmt"
 	"strings"

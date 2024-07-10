@@ -7,7 +7,7 @@ import (
 	"net/http"
 
 	"erebor/internal/util"
-	"erebor/pkg/uxsession"
+	"erebor/pkg/authentication/uxsession"
 
 	"github.com/tdeslauriers/carapace/pkg/config"
 	"github.com/tdeslauriers/carapace/pkg/connect"

@@ -3,7 +3,7 @@ package oauth
 import (
 	"encoding/json"
 	"erebor/internal/util"
-	"erebor/pkg/uxsession"
+	"erebor/pkg/authentication/uxsession"
 	"fmt"
 	"log/slog"
 	"net/http"
