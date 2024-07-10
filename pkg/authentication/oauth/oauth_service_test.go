@@ -13,7 +13,7 @@ import (
 
 	"github.com/tdeslauriers/carapace/pkg/config"
 	"github.com/tdeslauriers/carapace/pkg/data"
-	"github.com/tdeslauriers/carapace/pkg/session"
+	"github.com/tdeslauriers/carapace/pkg/session/types"
 	"github.com/tdeslauriers/carapace/pkg/validate"
 )
 
@@ -32,12 +32,12 @@ const (
 	TestValidCsrf      = "valid-csrf-token"
 
 	TestXrefOauthExchangeId   string = "xref-oauth-exchange-id"
-	TestXrefOauthResponseType string = string(session.AuthCode)
+	TestXrefOauthResponseType string = string(types.AuthCode)
 	TestXrefOauthNonce        string = "f3b6acb9-28b2-4130-a421-ed5b4d7cf222"
 	TestXrefOauthState        string = "6b638422-3f25-4156-a6e3-56e4b0531f7a"
 
 	TestNewOauthExchangeId   string = "new-oauth-exchange-id"
-	TestNewOauthResponseType string = string(session.AuthCode)
+	TestNewOauthResponseType string = string(types.AuthCode)
 )
 
 // mock default callback/redirect url and client

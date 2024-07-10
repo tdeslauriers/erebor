@@ -18,7 +18,7 @@ import (
 	"github.com/tdeslauriers/carapace/pkg/connect"
 	"github.com/tdeslauriers/carapace/pkg/data"
 	"github.com/tdeslauriers/carapace/pkg/diagnostics"
-	"github.com/tdeslauriers/carapace/pkg/session"
+	"github.com/tdeslauriers/carapace/pkg/session/provider"
 )
 
 type Gateway interface {
@@ -91,7 +91,7 @@ func New(config config.Config) (Gateway, error) {
 	cryptor := data.NewServiceAesGcmKey(aes)
 
 	// s2s creds
-	creds := session.S2sCredentials{
+	creds := provider.S2sCredentials{
 		ClientId:     config.ServiceAuth.ClientId,
 		ClientSecret: config.ServiceAuth.ClientSecret,
 	}
@@ -108,7 +108,7 @@ func New(config config.Config) (Gateway, error) {
 	userIdentity := connect.NewS2sCaller(config.UserAuth.Url, util.ServiceUserIdentity, client, retry)
 
 	// s2s token provider
-	s2sProvider := session.NewS2sTokenProvider(s2sIdentity, creds, repository, cryptor)
+	s2sProvider := provider.NewS2sTokenProvider(s2sIdentity, creds, repository, cryptor)
 
 	// ux session service
 	uxSessionService := uxsession.NewService(repository, indexer, cryptor)
@@ -137,7 +137,7 @@ type gateway struct {
 	config           config.Config
 	serverTls        *tls.Config
 	repository       data.SqlRepository
-	s2sTokenProvider session.S2sTokenProvider
+	s2sTokenProvider provider.S2sTokenProvider
 	userIdentity     connect.S2sCaller
 	uxSessionService uxsession.Service
 	oauthService     oauth.Service

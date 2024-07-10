@@ -11,7 +11,8 @@ import (
 
 	"github.com/tdeslauriers/carapace/pkg/config"
 	"github.com/tdeslauriers/carapace/pkg/connect"
-	"github.com/tdeslauriers/carapace/pkg/session"
+	"github.com/tdeslauriers/carapace/pkg/session/provider"
+	"github.com/tdeslauriers/carapace/pkg/session/types"
 )
 
 type RegistrationHandler interface {
@@ -19,7 +20,7 @@ type RegistrationHandler interface {
 	HandleRegistration(w http.ResponseWriter, r *http.Request)
 }
 
-func NewRegistrationHandler(o config.OauthRedirect, s uxsession.Service, p session.S2sTokenProvider, c connect.S2sCaller) RegistrationHandler {
+func NewRegistrationHandler(o config.OauthRedirect, s uxsession.Service, p provider.S2sTokenProvider, c connect.S2sCaller) RegistrationHandler {
 	return &registrationHandler{
 		oauth:          o,
 		sessionService: s,
@@ -35,7 +36,7 @@ var _ RegistrationHandler = (*registrationHandler)(nil)
 type registrationHandler struct {
 	oauth          config.OauthRedirect
 	sessionService uxsession.Service
-	s2sProvider    session.S2sTokenProvider
+	s2sProvider    provider.S2sTokenProvider
 	caller         connect.S2sCaller
 
 	logger *slog.Logger
@@ -53,7 +54,7 @@ func (h *registrationHandler) HandleRegistration(w http.ResponseWriter, r *http.
 		return
 	}
 
-	var cmd session.UserRegisterCmd
+	var cmd types.UserRegisterCmd
 	err := json.NewDecoder(r.Body).Decode(&cmd)
 	if err != nil {
 		h.logger.Error("unable to decode json in user registration request body", "err", err.Error())
@@ -107,7 +108,7 @@ func (h *registrationHandler) HandleRegistration(w http.ResponseWriter, r *http.
 	}
 
 	// call identity service with registration request
-	var registered session.UserRegisterCmd
+	var registered types.UserRegisterCmd
 	if err := h.caller.PostToService("/register", s2sToken, "", cmd, &registered); err != nil {
 		h.logger.Error(fmt.Sprintf("failed to register user (%s)", cmd.Username), "err", err.Error())
 		h.caller.RespondUpstreamError(err, w)

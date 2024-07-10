@@ -9,7 +9,8 @@ import (
 	"erebor/pkg/uxsession"
 
 	"github.com/tdeslauriers/carapace/pkg/connect"
-	"github.com/tdeslauriers/carapace/pkg/session"
+	"github.com/tdeslauriers/carapace/pkg/session/provider"
+	"github.com/tdeslauriers/carapace/pkg/session/types"
 )
 
 type LoginHandler interface {
@@ -18,7 +19,7 @@ type LoginHandler interface {
 	HandleLogin(w http.ResponseWriter, r *http.Request)
 }
 
-func NewLoginHandler(ux uxsession.Service, p session.S2sTokenProvider, c connect.S2sCaller) LoginHandler {
+func NewLoginHandler(ux uxsession.Service, p provider.S2sTokenProvider, c connect.S2sCaller) LoginHandler {
 	return &loginHandler{
 		sessionService: ux,
 		s2sProvider:    p,
@@ -32,7 +33,7 @@ var _ LoginHandler = (*loginHandler)(nil)
 
 type loginHandler struct {
 	sessionService uxsession.Service
-	s2sProvider    session.S2sTokenProvider
+	s2sProvider    provider.S2sTokenProvider
 	caller         connect.S2sCaller
 
 	logger *slog.Logger
@@ -50,7 +51,7 @@ func (h *loginHandler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var cmd session.UserLoginCmd
+	var cmd types.UserLoginCmd
 	err := json.NewDecoder(r.Body).Decode(&cmd)
 	if err != nil {
 		h.logger.Error("unable to decode json in user login request body", "err", err.Error())
@@ -94,7 +95,7 @@ func (h *loginHandler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// post creds to user auth login service
-	var authcode session.AuthCodeExchange
+	var authcode types.AuthCodeExchange
 	if err := h.caller.PostToService("/login", s2sToken, "", cmd, &authcode); err != nil {
 		h.logger.Error("call to identity service login failed", "err", err.Error())
 		h.caller.RespondUpstreamError(err, w)

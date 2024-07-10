@@ -12,7 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/tdeslauriers/carapace/pkg/config"
 	"github.com/tdeslauriers/carapace/pkg/data"
-	"github.com/tdeslauriers/carapace/pkg/session"
+	"github.com/tdeslauriers/carapace/pkg/session/types"
 )
 
 type OauthExchange struct {
@@ -299,7 +299,7 @@ func (s *service) build() (*OauthExchange, error) {
 	wgExchange.Add(1)
 	go func() {
 		defer wgExchange.Done()
-		encryptedResponseType, err := s.cryptor.EncryptServiceData(string(session.AuthCode)) // responseType "enum" value TODO: rename to AuthCodeType
+		encryptedResponseType, err := s.cryptor.EncryptServiceData(string(types.AuthCode)) // responseType "enum" value TODO: rename to AuthCodeType
 		if err != nil {
 			errChan <- fmt.Errorf("%s: %v", ErrEncryptResponseType, err)
 		}
@@ -425,7 +425,7 @@ func (s *service) build() (*OauthExchange, error) {
 	return &OauthExchange{
 		Id:           id.String(),
 		StateIndex:   index,
-		ResponseType: string(session.AuthCode),
+		ResponseType: string(types.AuthCode),
 		Nonce:        nonce.String(),
 		State:        state.String(),
 		ClientId:     s.oauth.CallbackClientId,

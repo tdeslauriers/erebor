@@ -3,19 +3,21 @@ package authentication
 import (
 	"encoding/json"
 	"erebor/internal/util"
+
 	"log/slog"
 	"net/http"
 
 	"github.com/tdeslauriers/carapace/pkg/connect"
 	"github.com/tdeslauriers/carapace/pkg/data"
-	"github.com/tdeslauriers/carapace/pkg/session"
+	"github.com/tdeslauriers/carapace/pkg/session/provider"
+	callback "github.com/tdeslauriers/carapace/pkg/session/types"
 )
 
 type CallbackHandler interface {
 	HandleCallback(w http.ResponseWriter, r *http.Request)
 }
 
-func NewCallbackHandler(s2sProvider session.S2sTokenProvider, caller connect.S2sCaller, cryptor data.Cryptor, db data.SqlRepository) CallbackHandler {
+func NewCallbackHandler(s2sProvider provider.S2sTokenProvider, caller connect.S2sCaller, cryptor data.Cryptor, db data.SqlRepository) CallbackHandler {
 	return &callbackHandler{
 		s2sProvider: s2sProvider,
 		caller:      caller,
@@ -29,7 +31,7 @@ func NewCallbackHandler(s2sProvider session.S2sTokenProvider, caller connect.S2s
 var _ CallbackHandler = (*callbackHandler)(nil)
 
 type callbackHandler struct {
-	s2sProvider session.S2sTokenProvider
+	s2sProvider provider.S2sTokenProvider
 	caller      connect.S2sCaller
 	cryptor     data.Cryptor
 	db          data.SqlRepository
@@ -49,7 +51,7 @@ func (h *callbackHandler) HandleCallback(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	var cmd session.AuthCodeExchange
+	var cmd callback.AuthCodeCmd
 	err := json.NewDecoder(r.Body).Decode(&cmd)
 	if err != nil {
 		h.logger.Error("failed to decode json in user callback request body", "err", err.Error())
@@ -84,8 +86,16 @@ func (h *callbackHandler) HandleCallback(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	var access session.AccessTokenResponse
-	if err := h.caller.PostToService("/callback", s2sToken, "", cmd, &access); err != nil {
+	// build the access token request cmd
+	payload := callback.AccessTokenCmd{
+		Grant:       callback.AuthorizationCode,
+		AuthCode:    cmd.AuthCode,
+		ClientId:    cmd.ClientId,
+		RedirectUrl: cmd.Redirect,
+	}
+
+	var access callback.AccessTokenResponse
+	if err := h.caller.PostToService("/callback", s2sToken, "", payload, &access); err != nil {
 		h.logger.Error("call to identity service callback endpoint failed", "err", err.Error())
 		h.caller.RespondUpstreamError(err, w)
 		return
