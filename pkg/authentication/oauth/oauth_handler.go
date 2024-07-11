@@ -3,11 +3,9 @@ package oauth
 import (
 	"encoding/json"
 	"erebor/internal/util"
-	"erebor/pkg/authentication/uxsession"
 	"fmt"
 	"log/slog"
 	"net/http"
-	"strings"
 
 	"github.com/tdeslauriers/carapace/pkg/connect"
 )
@@ -74,7 +72,7 @@ func (h *handler) HandleGetState(w http.ResponseWriter, r *http.Request) {
 	// look up/create oauth state, nonce, client id, and callback url for the session
 	exchange, err := h.oauthService.Obtain(cmd.SessionToken)
 	if err != nil {
-		h.handleServiceErr(err, w)
+		h.oauthService.HandleServiceErr(err, w)
 		return
 	}
 
@@ -90,35 +88,4 @@ func (h *handler) HandleGetState(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-}
-
-func (h *handler) handleServiceErr(err error, w http.ResponseWriter) {
-
-	switch {
-	case strings.Contains(err.Error(), uxsession.ErrInvalidSession):
-		h.logger.Error(err.Error())
-		e := connect.ErrorHttp{
-			StatusCode: http.StatusBadRequest,
-			Message:    uxsession.ErrInvalidSession,
-		}
-		e.SendJsonErr(w)
-		return
-	case strings.Contains(err.Error(), uxsession.ErrSessionNotFound):
-	case strings.Contains(err.Error(), uxsession.ErrSessionRevoked):
-		h.logger.Error(err.Error())
-		e := connect.ErrorHttp{
-			StatusCode: http.StatusUnauthorized,
-			Message:    uxsession.ErrSessionRevoked,
-		}
-		e.SendJsonErr(w)
-		return
-	default: // majority errors for this service are internal server errors
-		h.logger.Error(err.Error())
-		e := connect.ErrorHttp{
-			StatusCode: http.StatusInternalServerError,
-			Message:    "internal server error: unable to retrieve oauth exchange data",
-		}
-		e.SendJsonErr(w)
-		return
-	}
 }

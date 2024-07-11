@@ -74,6 +74,8 @@ func (h *callbackHandler) HandleCallback(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	// TODO: validate state against the session token
+
 	// get service token
 	s2sToken, err := h.s2sProvider.GetServiceToken(util.ServiceUserIdentity)
 	if err != nil {

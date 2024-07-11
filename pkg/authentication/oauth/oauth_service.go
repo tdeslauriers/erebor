@@ -2,15 +2,19 @@ package oauth
 
 import (
 	"database/sql"
+	"erebor/internal/util"
 	"erebor/pkg/authentication/uxsession"
 	"errors"
 	"fmt"
+	"log/slog"
+	"net/http"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/tdeslauriers/carapace/pkg/config"
+	"github.com/tdeslauriers/carapace/pkg/connect"
 	"github.com/tdeslauriers/carapace/pkg/data"
 	"github.com/tdeslauriers/carapace/pkg/session/types"
 )
@@ -26,7 +30,7 @@ type OauthExchange struct {
 	CreatedAt    data.CustomTime `json:"created_at" db:"created_at"`
 }
 
-type Service interface {
+type OauthService interface {
 
 	// Obtain returns the oauth exchange record associated with the uxsession from the database if it exists.
 	// If one does not exist, it will build one, persist it, and return the newly created record.
@@ -34,7 +38,17 @@ type Service interface {
 
 	// Valiadate validates the oauth exchange variables returned from the client to the callback url
 	// against the values stored in the database to ensure the exchange is valid/untampered
-	Valiadate(exchange OauthExchange) error
+	Valiadate(oauth types.AuthCodeCmd) error
+}
+
+type OauthErrService interface {
+	// HandleOauthnErr is a helper function to handle oauth service errors in a consistent way
+	HandleServiceErr(err error, w http.ResponseWriter)
+}
+
+type Service interface {
+	OauthService
+	OauthErrService
 }
 
 // NewService creates a new instance of the login service
@@ -44,6 +58,8 @@ func NewService(o config.OauthRedirect, db data.SqlRepository, c data.Cryptor, i
 		db:      db,
 		cryptor: c,
 		indexer: i,
+
+		logger: slog.Default().With(slog.String(util.PackageKey, util.PackageAuth)).With(slog.String(util.ComponentKey, util.ComponentOauth)),
 	}
 }
 
@@ -54,6 +70,8 @@ type service struct {
 	db      data.SqlRepository
 	cryptor data.Cryptor
 	indexer data.Indexer
+
+	logger *slog.Logger
 }
 
 type UxsesionOauthFlow struct {
@@ -64,11 +82,22 @@ type UxsesionOauthFlow struct {
 
 const (
 
+	// 400 Bad Request
+	ErrInvalidAuthCodeCmd = "invalid auth code request"
+
+	// 401 Unauthorized
+	ErrResponseTypeMismatch = "response type mismatch"
+	ErrStateCodeMismatch    = "state value mismatch"
+	ErrNonceMismatch        = "nonce value mismatch"
+	ErrClientIdMismatch     = "client id mismatch"
+	ErrRedirectUrlMismatch  = "redirect url mismatch"
+
 	// 500 Internal Server Error
 	ErrGenOauthUuid = "failed to generate oauth exchange uuid"
 	ErrGenNonce     = "failed to generate oauth exchange nonce"
 	ErrGenState     = "failed to generate oauth exchange state"
-	ErrGenIndex     = "failed to encrypt oauth exchange nonce for storage"
+
+	ErrGenSessionIndex = "failed to generate session lookup index"
 
 	ErrEncryptResponseType        = "failed to encrypt oauth exchange response type for storage"
 	ErrEncryptNonce               = "failed to encrypt oauth exchange nonce for storage"
@@ -102,23 +131,9 @@ func (s *service) Obtain(sessionToken string) (*OauthExchange, error) {
 	}
 
 	// check if the oauth exchange record already exists
-	var exchange OauthExchange
-	qry := `SELECT 
-				o.uuid, 
-				o.state_index, 
-				o.response_type, 
-				o.nonce, 
-				o.state, 
-				o.client_id, 
-				o.redirect_url, 
-				o.created_at
-			FROM oauthflow o 
-				LEFT OUTER JOIN uxsession_oauthflow uo ON o.uuid = uo.oauthflow_uuid
-				LEFT OUTER JOIN uxsession u ON uo.uxsession_uuid = u.uuid
-			WHERE u.session_index = ?
-				AND u.revoked = false`
-	// it is possible this will yeield multiple records, but we only need one, SelectRecord will return the first row found
-	if err := s.db.SelectRecord(qry, &exchange, index); err != nil {
+	qry := OauthBySession
+	var check OauthSessionCheck
+	if err := s.db.SelectRecord(qry, &check, index); err != nil {
 		if err == sql.ErrNoRows {
 
 			var wgRecords sync.WaitGroup
@@ -223,45 +238,28 @@ func (s *service) Obtain(sessionToken string) (*OauthExchange, error) {
 	}
 
 	// oauth exchange already exists
+	// check if session revoked
+	if check.UxsessionRevoked {
+		return nil, fmt.Errorf("session token %s - xxxxxx-%s: %s", check.UxsessionUuid, sessionToken[len(sessionToken)-6:], uxsession.ErrSessionRevoked)
+	}
+
+	// check if session expired
+	if check.UxsessionCreatedAt.Add(time.Hour).Before(time.Now().UTC()) {
+		return nil, fmt.Errorf("session token %s - xxxxxx-%s: %s", check.UxsessionUuid, sessionToken[len(sessionToken)-6:], uxsession.ErrSessionExpired)
+	}
+
 	// decrypt all field-level-encrypted values for return object
-	rt, err := s.cryptor.DecryptServiceData(exchange.ResponseType)
+	exchange, err := s.decryptExchange(check)
 	if err != nil {
-		return nil, fmt.Errorf("%s for session token xxxxxx-%s: %v", ErrDecryptResponseType, sessionToken[len(sessionToken)-6:], err)
-	}
-
-	n, err := s.cryptor.DecryptServiceData(exchange.Nonce)
-	if err != nil {
-		return nil, fmt.Errorf("%s for session token xxxxxx-%s: %v", ErrDecryptNonce, sessionToken[len(sessionToken)-6:], err)
-	}
-
-	st, err := s.cryptor.DecryptServiceData(exchange.State)
-	if err != nil {
-		return nil, fmt.Errorf("%s for session token xxxxxx-%s: %v", ErrDecryptState, sessionToken[len(sessionToken)-6:], err)
-	}
-
-	cid, err := s.cryptor.DecryptServiceData(exchange.ClientId)
-	if err != nil {
-		return nil, fmt.Errorf("%s for session token xxxxxx-%s: %v", ErrDecryptClientId, sessionToken[len(sessionToken)-6:], err)
-	}
-
-	cb, err := s.cryptor.DecryptServiceData(exchange.RedirectUrl)
-	if err != nil {
-		return nil, fmt.Errorf("%s for session token xxxxxx-%s: %v", ErrDecryptRedirectUrl, sessionToken[len(sessionToken)-6:], err)
+		return nil, fmt.Errorf("%s for session token xxxxxx-%s: %v", ErrLookupOauthExchange, sessionToken[len(sessionToken)-6:], err)
 	}
 
 	// return the ouath exchange record
-	return &OauthExchange{
-		ResponseType: rt,
-		Nonce:        n,
-		State:        st,
-		ClientId:     cid,
-		RedirectUrl:  cb,
-		CreatedAt:    exchange.CreatedAt,
-	}, nil
+	return exchange, nil
 }
 
-// build creates a new oauth exchange record, persisting it to the database,
-// and returns the struct
+// build is a helper funciton that creates a new oauth exchange record,
+// persists it to the database, and returns the struct
 func (s *service) build() (*OauthExchange, error) {
 
 	// use concurrent goroutines to build the oauth exchange record
@@ -339,7 +337,7 @@ func (s *service) build() (*OauthExchange, error) {
 		// create index for the state
 		index, err := s.indexer.ObtainBlindIndex(state.String())
 		if err != nil {
-			errChan <- fmt.Errorf("%s: %v", ErrGenIndex, err)
+			errChan <- fmt.Errorf("%s: %v", ErrGenSessionIndex, err)
 		}
 		indexChan <- index
 
@@ -435,6 +433,266 @@ func (s *service) build() (*OauthExchange, error) {
 }
 
 // Valiadate implementation of the OauthService interface
-func (s *service) Valiadate(exchange OauthExchange) error {
+func (s *service) Valiadate(oauth types.AuthCodeCmd) error {
+
+	// input validation -> redundant because also performed by handler
+	if err := oauth.ValidateCmd(); err != nil {
+		return fmt.Errorf("%s for session xxxxxx-%s: %v", ErrInvalidAuthCodeCmd, oauth.Session[len(oauth.Session)-6:], err)
+	}
+
+	// generate index blind index from session
+	index, err := s.indexer.ObtainBlindIndex(oauth.Session)
+	if err != nil {
+		return fmt.Errorf("%s for session xxxxxx-%s: %v", ErrGenSessionIndex, oauth.Session[len(oauth.Session)-6:], err)
+	}
+
+	// look up the oauth exchange record
+	query := OauthBySession
+	var check OauthSessionCheck
+	if err := s.db.SelectRecord(query, &check, index); err != nil {
+		if err == sql.ErrNoRows {
+			return errors.New(uxsession.ErrSessionNotFound)
+		} else {
+			return fmt.Errorf("%s for session xxxxxx-%s: %v", ErrLookupOauthExchange, oauth.Session[len(oauth.Session)-6:], err)
+		}
+	}
+
+	// check if the session is revoked before decrypting the exchange record
+	if check.UxsessionRevoked {
+		return fmt.Errorf("session token %s - xxxxxx-%s: %s", check.UxsessionUuid, oauth.Session[len(oauth.Session)-6:], uxsession.ErrSessionRevoked)
+	}
+
+	// check if the session is expired before decrypting the exchange record
+	if check.UxsessionCreatedAt.Add(time.Hour).Before(time.Now().UTC()) {
+		return fmt.Errorf("session token %s - xxxxxx-%s: %s", check.UxsessionUuid, oauth.Session[len(oauth.Session)-6:], uxsession.ErrSessionExpired)
+	}
+
+	// decrypt the exchange record
+	exchange, err := s.decryptExchange(check)
+	if err != nil {
+		return fmt.Errorf("%s for session xxxxxx-%s: %v", ErrLookupOauthExchange, oauth.Session[len(oauth.Session)-6:], err)
+	}
+
+	// validate the exchange record against the client request
+	if exchange.ResponseType != string(oauth.ResponseType) {
+		return fmt.Errorf("session xxxxxx-%s - %s - client: %s vs db record: %s", oauth.Session[len(oauth.Session)-6:], ErrResponseTypeMismatch, oauth.ResponseType, exchange.ResponseType)
+	}
+
+	if exchange.State != oauth.State {
+		return fmt.Errorf("session xxxxxx-%s: %s - client: xxxxx-%s vs db record: xxxxxx-%s", oauth.Session[len(oauth.Session)-6:], ErrStateCodeMismatch, oauth.State[len(oauth.State)-6:], exchange.State[len(exchange.State)-6:])
+	}
+
+	if exchange.Nonce != oauth.Nonce {
+		return fmt.Errorf("session xxxxxx-%s: %s - client: xxxxxx-%s vs db record: xxxxxx-%s", oauth.Session[len(oauth.Session)-6:], ErrNonceMismatch, oauth.Nonce[len(oauth.Nonce)-6:], exchange.Nonce[len(exchange.Nonce)-6:])
+	}
+
+	if exchange.ClientId != oauth.ClientId {
+		return fmt.Errorf("failed to validate client id for session xxxxxx-%s: %s", oauth.Session[len(oauth.Session)-6:], ErrClientIdMismatch)
+	}
+
+	if exchange.RedirectUrl != oauth.Redirect {
+		return fmt.Errorf("failed to validate redirect url for session xxxxxx-%s: %s", oauth.Session[len(oauth.Session)-6:], ErrRedirectUrlMismatch)
+	}
+
 	return nil
+}
+
+// decryptExchange is a helper function that decrypts the encrypted fields
+// of the OauthSessionCheck struct and returns an OauthExchange struct
+func (s *service) decryptExchange(d OauthSessionCheck) (*OauthExchange, error) {
+
+	wg := sync.WaitGroup{}
+
+	rtChan := make(chan string, 1)       // response type
+	nonceChan := make(chan string, 1)    // nonce
+	stateChan := make(chan string, 1)    // state
+	clientIdChan := make(chan string, 1) // client id
+	callbackChan := make(chan string, 1) // callback url
+
+	errChan := make(chan error, 5) // errors
+
+	// decrypt the response type
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+
+		rt, err := s.cryptor.DecryptServiceData(d.ResponseType)
+		if err != nil {
+			errChan <- fmt.Errorf("%s for oauthflow id %s: %v", ErrDecryptResponseType, d.OauthflowUuid, err)
+		}
+		rtChan <- rt
+	}()
+
+	// decrypt the nonce
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+
+		n, err := s.cryptor.DecryptServiceData(d.Nonce)
+		if err != nil {
+			errChan <- fmt.Errorf("%s for oauthflow id %s: %v", ErrDecryptNonce, d.OauthflowUuid, err)
+		}
+		nonceChan <- n
+	}()
+
+	// decrypt the state
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+
+		st, err := s.cryptor.DecryptServiceData(d.State)
+		if err != nil {
+			errChan <- fmt.Errorf("%s for oauthflow id %s: %v", ErrDecryptState, d.OauthflowUuid, err)
+		}
+		stateChan <- st
+	}()
+
+	// decrypt the client id
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+
+		cid, err := s.cryptor.DecryptServiceData(d.ClientId)
+		if err != nil {
+			errChan <- fmt.Errorf("%s for oauthflow id %s: %v", ErrDecryptClientId, d.OauthflowUuid, err)
+		}
+		clientIdChan <- cid
+	}()
+
+	// decrypt the callback url
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+
+		cb, err := s.cryptor.DecryptServiceData(d.RedirectUrl)
+		if err != nil {
+			errChan <- fmt.Errorf("%s for oauthflow id %s: %v", ErrDecryptRedirectUrl, d.OauthflowUuid, err)
+		}
+		callbackChan <- cb
+	}()
+
+	// wait for all decryption goroutines to finish
+	go func() {
+		wg.Wait()
+
+		close(rtChan)
+		close(nonceChan)
+		close(stateChan)
+		close(clientIdChan)
+		close(callbackChan)
+
+		close(errChan)
+	}()
+
+	// check for any errors and return
+	if len(errChan) > 0 {
+		var builder strings.Builder
+		count := 0
+		for e := range errChan {
+			builder.WriteString(e.Error())
+			if len(errChan) > 1 && count < len(errChan)-1 {
+				builder.WriteString("; ")
+			}
+			count++
+		}
+		return nil, errors.New(builder.String())
+	}
+
+	// return the ouath exchange record
+	return &OauthExchange{
+		Id:           d.OauthflowUuid,
+		ResponseType: <-rtChan,
+		Nonce:        <-nonceChan,
+		State:        <-stateChan,
+		ClientId:     <-clientIdChan,
+		RedirectUrl:  <-callbackChan,
+		CreatedAt:    d.OauthflowCreatedAt,
+	}, nil
+}
+
+// HandleSessionErr implementation of the OauthErrService interface
+func (s *service) HandleServiceErr(err error, w http.ResponseWriter) {
+
+	switch {
+	case strings.Contains(err.Error(), uxsession.ErrInvalidSession):
+		s.logger.Error(err.Error())
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusBadRequest,
+			Message:    uxsession.ErrInvalidSession,
+		}
+		e.SendJsonErr(w)
+		return
+	case strings.Contains(err.Error(), uxsession.ErrSessionNotFound):
+		s.logger.Error(err.Error())
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusUnauthorized,
+			Message:    uxsession.ErrSessionNotFound,
+		}
+		e.SendJsonErr(w)
+		return
+	case strings.Contains(err.Error(), uxsession.ErrSessionRevoked):
+		s.logger.Error(err.Error())
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusUnauthorized,
+			Message:    uxsession.ErrSessionRevoked,
+		}
+		e.SendJsonErr(w)
+		return
+	case strings.Contains(err.Error(), uxsession.ErrSessionExpired):
+		s.logger.Error(err.Error())
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusUnauthorized,
+			Message:    uxsession.ErrSessionExpired,
+		}
+		e.SendJsonErr(w)
+		return
+	case strings.Contains(err.Error(), ErrResponseTypeMismatch):
+		s.logger.Error(err.Error())
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusUnauthorized,
+			Message:    ErrResponseTypeMismatch,
+		}
+		e.SendJsonErr(w)
+		return
+	case strings.Contains(err.Error(), ErrStateCodeMismatch):
+		s.logger.Error(err.Error())
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusUnauthorized,
+			Message:    ErrStateCodeMismatch,
+		}
+		e.SendJsonErr(w)
+		return
+	case strings.Contains(err.Error(), ErrNonceMismatch):
+		s.logger.Error(err.Error())
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusUnauthorized,
+			Message:    ErrNonceMismatch,
+		}
+		e.SendJsonErr(w)
+		return
+	case strings.Contains(err.Error(), ErrClientIdMismatch):
+		s.logger.Error(err.Error())
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusUnauthorized,
+			Message:    ErrClientIdMismatch,
+		}
+		e.SendJsonErr(w)
+		return
+	case strings.Contains(err.Error(), ErrRedirectUrlMismatch):
+		s.logger.Error(err.Error())
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusUnauthorized,
+			Message:    ErrRedirectUrlMismatch,
+		}
+		e.SendJsonErr(w)
+		return
+	default: // majority errors for this service are internal server errors
+		s.logger.Error(err.Error())
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusInternalServerError,
+			Message:    "internal server error: unable to retrieve oauth exchange data",
+		}
+		e.SendJsonErr(w)
+		return
+	}
 }

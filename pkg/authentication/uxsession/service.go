@@ -47,13 +47,14 @@ type SessionService interface {
 	IsValidCsrf(session, csrf string) (bool, error)
 }
 
-type ErrService interface {
+type SessionErrService interface {
+	// HandleSessionErr is a helper function to handle session errors in a consistent way
 	HandleSessionErr(err error, w http.ResponseWriter)
 }
 
 type Service interface {
 	SessionService
-	ErrService
+	SessionErrService
 }
 
 func NewService(db data.SqlRepository, i data.Indexer, c data.Cryptor) Service {
