@@ -54,20 +54,23 @@ func (dao *mockAuthSqlRepository) SelectRecords(query string, records interface{
 
 // first query is needed to check for it's value for when it is successful, but the second query fails
 const (
-	TestFirstQuery string = `SELECT 
-				o.uuid, 
-				o.state_index, 
-				o.response_type, 
-				o.nonce, 
-				o.state, 
-				o.client_id, 
-				o.redirect_url, 
-				o.created_at
-			FROM oauthflow o 
-				LEFT OUTER JOIN uxsession_oauthflow uo ON o.uuid = uo.oauthflow_uuid
-				LEFT OUTER JOIN uxsession u ON uo.uxsession_uuid = u.uuid
-			WHERE u.session_index = ?
-				AND u.revoked = false`
+	TestFirstQuery string = `
+		SELECT 
+			o.uuid, 
+			o.state_index, 
+			o.response_type, 
+			o.nonce, 
+			o.state, 
+			o.client_id, 
+			o.redirect_url, 
+			o.created_at,
+		FROM oauthflow o 
+			LEFT OUTER JOIN uxsession_oauthflow uo ON o.uuid = uo.oauthflow_uuid
+			LEFT OUTER JOIN uxsession u ON uo.uxsession_uuid = u.uuid
+		WHERE u.session_index = ?
+			AND u.revoked = false
+			AND u.created_at > NOW() - INTERVAL 1 HOUR
+			AND o.created_at > NOW() - INTERVAL 1 HOUR`
 )
 
 // mocks the SelectRecord method of the SqlRepository interface used by Validate Credentials func
@@ -75,31 +78,38 @@ func (dao *mockAuthSqlRepository) SelectRecord(query string, record interface{},
 
 	switch {
 	case args[0] == "index-"+TestValidSessionXref:
-		// need to refrect record interface's type to mock sql query hydrating the record
+		// need to reflect record interface's type to mock sql query hydrating the record
 		exchange := reflect.ValueOf(record).Elem()
-		testResults := []string{TestXrefOauthExchangeId, "index-" + TestXrefOauthState, TestXrefOauthResponseType, TestXrefOauthNonce, TestXrefOauthState, mockOauthRedirect.CallbackClientId, mockOauthRedirect.CallbackUrl}
-		for i := 0; i < exchange.NumField(); i++ {
-			if i == 7 {
-				now := time.Now()
-				unexpired := now.Add(-30 * time.Minute)
-				exchange.Field(i).Set(reflect.ValueOf(data.CustomTime{Time: unexpired}))
-			} else {
-				exchange.Field(i).SetString(testResults[i])
-			}
+		testResults := []string{
+			TestXrefOauthExchangeId,
+			"index-" + TestXrefOauthState,
+			"encrypted-" + TestXrefOauthResponseType,
+			"encrypted-" + TestXrefOauthNonce,
+			"encrypted-" + TestXrefOauthState,
+			"encrypted-" + mockOauthRedirect.CallbackClientId,
+			"encrypted-" + mockOauthRedirect.CallbackUrl} // created at not retuned by this service
+
+		for i := 0; i < len(testResults); i++ {
+			exchange.Field(i).SetString(testResults[i])
 		}
 		return nil
+
 	case args[0] == "index-"+TestValidSessionNewOauth:
 		if query == TestFirstQuery {
 			return sql.ErrNoRows
 		} else {
-			// need to refrect record interface's type to mock sql query hydrating the record
+			// need to reflect record interface's type to mock sql query hydrating the record
 			uxsession := reflect.ValueOf(record).Elem()
-			testResults := []string{TestValidSessionId, TestValidIndex, "encrypted-" + TestValidSession, "encrypted-" + TestValidCsrf}
+			testResults := []string{
+				TestValidSessionId,
+				TestValidIndex,
+				"encrypted-" + TestValidSession,
+				"encrypted-" + TestValidCsrf}
+
 			for i := 0; i < uxsession.NumField(); i++ {
 				if i == 4 {
 					now := time.Now()
-					unexpired := now.Add(-30 * time.Minute)
-					uxsession.Field(i).Set(reflect.ValueOf(data.CustomTime{Time: unexpired}))
+					uxsession.Field(i).Set(reflect.ValueOf(data.CustomTime{Time: now}))
 				} else if i == 5 || i == 6 {
 					uxsession.Field(i).SetBool(false)
 				} else {
@@ -143,6 +153,7 @@ func (dao *mockAuthSqlRepository) SelectRecord(query string, record interface{},
 				if i == 4 {
 					now := time.Now()
 					unexpired := now.Add(-90 * time.Minute) // sets created_at to 90 minutes ago
+
 					uxsession.Field(i).Set(reflect.ValueOf(data.CustomTime{Time: unexpired}))
 				} else if i == 5 || i == 6 {
 					uxsession.Field(i).SetBool(false)
@@ -169,7 +180,10 @@ type mockRegisterCryptor struct{}
 func (c *mockRegisterCryptor) EncryptServiceData(plaintext string) (string, error) {
 	return fmt.Sprintf("encrypted-%s", plaintext), nil
 }
-func (c *mockRegisterCryptor) DecryptServiceData(string) (string, error) { return "", nil }
+func (c *mockRegisterCryptor) DecryptServiceData(encrypted string) (string, error) {
+
+	return strings.ReplaceAll(encrypted, "encrypted-", ""), nil
+}
 
 type mockIndexer struct{}
 
@@ -209,6 +223,8 @@ func TestObtain(t *testing.T) {
 				// gernerated values/uuid's in function, only has to be non-nil
 				Id:           TestNewOauthExchangeId,
 				ResponseType: TestNewOauthResponseType,
+				ClientId:     mockOauthRedirect.CallbackClientId,
+				RedirectUrl:  mockOauthRedirect.CallbackUrl,
 			},
 			err: nil,
 		},
@@ -256,14 +272,15 @@ func TestObtain(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			exchange, err := oauthService.Obtain(tc.sessionToken)
 			if err != nil {
+				t.Logf("error: %s", err.Error())
 				if !strings.Contains(err.Error(), tc.err.Error()) {
 					t.Errorf("expected error '%s' to contain '%s'", err.Error(), tc.err.Error())
 				}
 			}
 			if exchange != nil {
 				// only the following fields are returned by Obtain func
-				if exchange.ResponseType != "code" {
-					t.Errorf("expected 'code', got %s", exchange.ResponseType)
+				if exchange.ResponseType != tc.OauthExchange.ResponseType {
+					t.Errorf("expected %s, got %s", tc.OauthExchange.ResponseType, exchange.ResponseType)
 				}
 
 				if !validate.IsValidUuid(exchange.Nonce) {
@@ -274,12 +291,12 @@ func TestObtain(t *testing.T) {
 					t.Errorf("expected valid uuid, got %s", exchange.State)
 				}
 
-				if exchange.ClientId != mockOauthRedirect.CallbackClientId {
-					t.Errorf("expected %s, got %s", mockOauthRedirect.CallbackClientId, exchange.ClientId)
+				if exchange.ClientId != tc.OauthExchange.ClientId {
+					t.Errorf("expected %s, got %s", tc.OauthExchange.ClientId, exchange.ClientId)
 				}
 
-				if exchange.RedirectUrl != mockOauthRedirect.CallbackUrl {
-					t.Errorf("expected %s, got %s", mockOauthRedirect.CallbackUrl, exchange.RedirectUrl)
+				if exchange.RedirectUrl != tc.OauthExchange.RedirectUrl {
+					t.Errorf("expected %s, got %s", tc.OauthExchange.RedirectUrl, exchange.RedirectUrl)
 				}
 			}
 		})

@@ -86,6 +86,7 @@ const (
 	ErrInvalidAuthCodeCmd = "invalid auth code request"
 
 	// 401 Unauthorized
+	ErrInvalidSessionToken  = "revoked, expired, or missing session token"
 	ErrResponseTypeMismatch = "response type mismatch"
 	ErrStateCodeMismatch    = "state value mismatch"
 	ErrNonceMismatch        = "nonce value mismatch"
@@ -105,11 +106,12 @@ const (
 	ErrEncryptCallbackClientId    = "failed to encrypt oauth exchange callback client id for storage"
 	ErrEncryptCallbackRedirectUrl = "failed to encrypt oauth exchange callback redirect url for storage"
 
-	ErrDecryptResponseType = "failed to decrypt oauth exchange response type"
-	ErrDecryptNonce        = "failed to decrypt oauth exchange nonce"
-	ErrDecryptState        = "failed to decrypt oauth exchange state"
-	ErrDecryptClientId     = "failed to decrypt oauth exchange client id"
-	ErrDecryptRedirectUrl  = "failed to decrypt oauth exchange redirect/callback url"
+	ErrDecryptOauthExchange = "failed to decrypt oauth exchange record"
+	ErrDecryptResponseType  = "failed to decrypt oauth exchange response type"
+	ErrDecryptNonce         = "failed to decrypt oauth exchange nonce"
+	ErrDecryptState         = "failed to decrypt oauth exchange state"
+	ErrDecryptClientId      = "failed to decrypt oauth exchange client id"
+	ErrDecryptRedirectUrl   = "failed to decrypt oauth exchange redirect/callback url"
 
 	ErrLookupOauthExchange = "failed to look up oauth exchange record" // sql error/problem => NOT zero results
 
@@ -131,20 +133,40 @@ func (s *service) Obtain(sessionToken string) (*OauthExchange, error) {
 	}
 
 	// check if the oauth exchange record already exists
-	qry := OauthBySession
-	var check OauthSessionCheck
-	if err := s.db.SelectRecord(qry, &check, index); err != nil {
+	qry := `
+		SELECT 
+			o.uuid, 
+			o.state_index, 
+			o.response_type, 
+			o.nonce, 
+			o.state, 
+			o.client_id, 
+			o.redirect_url, 
+			o.created_at,
+		FROM oauthflow o 
+			LEFT OUTER JOIN uxsession_oauthflow uo ON o.uuid = uo.oauthflow_uuid
+			LEFT OUTER JOIN uxsession u ON uo.uxsession_uuid = u.uuid
+		WHERE u.session_index = ?
+			AND u.revoked = false
+			AND u.created_at > NOW() - INTERVAL 1 HOUR
+			AND o.created_at > NOW() - INTERVAL 1 HOUR` // check revoked and expiries
+
+	var exchange OauthExchange
+	if err := s.db.SelectRecord(qry, &exchange, index); err != nil {
 		if err == sql.ErrNoRows {
 
 			var wgRecords sync.WaitGroup
-			lookupId := make(chan string, 1)
-			persist := make(chan OauthExchange, 1)
 			errs := make(chan error, 2)
+
+			var (
+				sessionId string
+				persisted OauthExchange
+			)
 
 			// look up the session
 			wgRecords.Add(1)
-			go func() {
-				defer wgRecords.Done()
+			go func(id *string, errs chan error, wg *sync.WaitGroup) {
+				defer wg.Done()
 
 				var session uxsession.UxSession
 				qry := `SELECT uuid, session_index, session_token, csrf_token, created_at, authenticated, revoked FROM uxsession WHERE session_index = ?`
@@ -168,13 +190,13 @@ func (s *service) Obtain(sessionToken string) (*OauthExchange, error) {
 					errs <- e
 				}
 
-				lookupId <- session.Id
-			}()
+				*id = session.Id
+			}(&sessionId, errs, &wgRecords)
 
 			// build/persist the oauth exchange record
 			wgRecords.Add(1)
-			go func() {
-				defer wgRecords.Done()
+			go func(ex *OauthExchange, errs chan error, wg *sync.WaitGroup) {
+				defer wg.Done()
 
 				ouath, err := s.build()
 				if err != nil {
@@ -182,15 +204,11 @@ func (s *service) Obtain(sessionToken string) (*OauthExchange, error) {
 					e := fmt.Errorf("%s for session token xxxxxx-%s: %v", ErrPersistOauthExchange, sessionToken[len(sessionToken)-6:], err)
 					errs <- e
 				}
-				persist <- *ouath
-			}()
+				*ex = *ouath
+			}(&persisted, errs, &wgRecords)
 
-			go func() {
-				wgRecords.Wait()
-				close(lookupId)
-				close(persist)
-				close(errs)
-			}()
+			wgRecords.Wait()
+			close(errs)
 
 			if len(errs) > 0 {
 				// if there are errors, return/exit the function
@@ -206,29 +224,25 @@ func (s *service) Obtain(sessionToken string) (*OauthExchange, error) {
 				return nil, errors.New(builder.String())
 			} else {
 
-				sessionId := <-lookupId
-				exchange := <-persist
-
 				xref := UxsesionOauthFlow{
 					Id:              0,
 					UxsessionId:     sessionId,
-					OauthExchangeId: exchange.Id,
+					OauthExchangeId: persisted.Id,
 				}
 
 				// create the relationship between the session and the oauth exchange record and return the exchange
 				qry := `INSERT INTO uxsession_oauthflow (id, uxsession_uuid, oauthflow_uuid) VALUES (?, ?, ?)`
 				if err := s.db.InsertRecord(qry, xref); err != nil {
-					return nil, fmt.Errorf("%s between uxsession %s and oathflow %s: %v", ErrPersistXref, sessionId, exchange.Id, err)
+					return nil, fmt.Errorf("%s between uxsession %s and oathflow %s: %v", ErrPersistXref, sessionId, persisted.Id, err)
 				}
 
 				// successfully persisted oauth exchange record and associated with the session
 				return &OauthExchange{
-					ResponseType: exchange.ResponseType,
-					Nonce:        exchange.Nonce,
-					State:        exchange.State,
-					ClientId:     exchange.ClientId,
-					RedirectUrl:  exchange.RedirectUrl,
-					CreatedAt:    exchange.CreatedAt,
+					ResponseType: persisted.ResponseType,
+					Nonce:        persisted.Nonce,
+					State:        persisted.State,
+					ClientId:     persisted.ClientId,
+					RedirectUrl:  persisted.RedirectUrl,
 				}, nil
 			}
 
@@ -238,24 +252,20 @@ func (s *service) Obtain(sessionToken string) (*OauthExchange, error) {
 	}
 
 	// oauth exchange already exists
-	// check if session revoked
-	if check.UxsessionRevoked {
-		return nil, fmt.Errorf("session token %s - xxxxxx-%s: %s", check.UxsessionUuid, sessionToken[len(sessionToken)-6:], uxsession.ErrSessionRevoked)
-	}
-
-	// check if session expired
-	if check.UxsessionCreatedAt.Add(time.Hour).Before(time.Now().UTC()) {
-		return nil, fmt.Errorf("session token %s - xxxxxx-%s: %s", check.UxsessionUuid, sessionToken[len(sessionToken)-6:], uxsession.ErrSessionExpired)
-	}
-
 	// decrypt all field-level-encrypted values for return object
-	exchange, err := s.decryptExchange(check)
+	oauth, err := s.decryptExchange(exchange)
 	if err != nil {
-		return nil, fmt.Errorf("%s for session token xxxxxx-%s: %v", ErrLookupOauthExchange, sessionToken[len(sessionToken)-6:], err)
+		return nil, fmt.Errorf("%s id %s associated with session token xxxxxx-%s: %v", ErrDecryptOauthExchange, exchange.Id, sessionToken[len(sessionToken)-6:], err)
 	}
+
+	// set uuid to "" for the return object because unnecessary
+	oauth.Id = ""
+
+	// set created_at time to zero value for the return object because unnecessary
+	oauth.CreatedAt = data.CustomTime{}
 
 	// return the ouath exchange record
-	return exchange, nil
+	return oauth, nil
 }
 
 // build is a helper funciton that creates a new oauth exchange record,
@@ -267,115 +277,108 @@ func (s *service) build() (*OauthExchange, error) {
 	var wgExchange sync.WaitGroup
 	errChan := make(chan error, 9)
 
-	idChan := make(chan uuid.UUID, 1)
-
-	encRespTypeChan := make(chan string, 1)
-
-	nonceChan := make(chan uuid.UUID, 1)
-	encNonceChan := make(chan string, 1)
-
-	stateChan := make(chan uuid.UUID, 1)
-	indexChan := make(chan string, 1)
-	encStateChan := make(chan string, 1)
-
-	encClientIdChan := make(chan string, 1)
-
-	encRedirectChan := make(chan string, 1)
+	var (
+		id                    uuid.UUID
+		encryptedResponseType string
+		nonce                 uuid.UUID
+		encryptedNonce        string
+		state                 uuid.UUID
+		index                 string
+		encryptedState        string
+		encryptedClientId     string
+		encryptedRedirect     string
+	)
 
 	// create the oauth exchange record uuid
 	wgExchange.Add(1)
-	go func() {
-		defer wgExchange.Done()
-		id, err := uuid.NewRandom()
+	go func(id *uuid.UUID, errChan chan error, wg *sync.WaitGroup) {
+		defer wg.Done()
+		i, err := uuid.NewRandom()
 		if err != nil {
 			errChan <- fmt.Errorf("%s %v", ErrGenOauthUuid, err)
+			return
 		}
-		idChan <- id
-	}()
+		*id = i
+	}(&id, errChan, &wgExchange)
 
 	// encrypt the response type
 	wgExchange.Add(1)
-	go func() {
+	go func(encrypted *string, errChan chan error, wg *sync.WaitGroup) {
 		defer wgExchange.Done()
-		encryptedResponseType, err := s.cryptor.EncryptServiceData(string(types.AuthCode)) // responseType "enum" value TODO: rename to AuthCodeType
+		cipher, err := s.cryptor.EncryptServiceData(string(types.AuthCode)) // responseType "enum" value TODO: rename to AuthCodeType
 		if err != nil {
-			errChan <- fmt.Errorf("%s: %v", ErrEncryptResponseType, err)
+			errChan <- fmt.Errorf("%s: %v", cipher, err)
 		}
-		encRespTypeChan <- encryptedResponseType
-	}()
+		*encrypted = cipher
+	}(&encryptedResponseType, errChan, &wgExchange)
 
 	// create and encrypt the nonce
 	wgExchange.Add(1)
-	go func() {
+	go func(nonce *uuid.UUID, encrypted *string, errChan chan error, wg *sync.WaitGroup) {
 		defer wgExchange.Done()
 
-		nonce, err := uuid.NewRandom()
+		n, err := uuid.NewRandom()
 		if err != nil {
 			errChan <- fmt.Errorf("%s: %v", ErrGenNonce, err)
 		}
-		nonceChan <- nonce
+		*nonce = n
 
-		encryptedNonce, err := s.cryptor.EncryptServiceData(nonce.String())
+		cipher, err := s.cryptor.EncryptServiceData(nonce.String())
 		if err != nil {
 			errChan <- fmt.Errorf("%s: %v", ErrEncryptNonce, err)
 		}
-		encNonceChan <- encryptedNonce
-	}()
+		*encrypted = cipher
+	}(&nonce, &encryptedNonce, errChan, &wgExchange)
 
 	// create and encrypt the state
 	// create the index for the state
 	wgExchange.Add(1)
-	go func() {
+	go func(state *uuid.UUID, index *string, encrypted *string, errChan chan error, wg *sync.WaitGroup) {
 		defer wgExchange.Done()
 
-		state, err := uuid.NewRandom()
+		st, err := uuid.NewRandom()
 		if err != nil {
 			errChan <- fmt.Errorf("%s: %v", ErrGenState, err)
 		}
-		stateChan <- state
+		*state = st
 
-		// create index for the state
-		index, err := s.indexer.ObtainBlindIndex(state.String())
+		i, err := s.indexer.ObtainBlindIndex(state.String())
 		if err != nil {
 			errChan <- fmt.Errorf("%s: %v", ErrGenSessionIndex, err)
 		}
-		indexChan <- index
+		*index = i
 
-		encryptedState, err := s.cryptor.EncryptServiceData(state.String())
+		cipher, err := s.cryptor.EncryptServiceData(state.String())
 		if err != nil {
-			errChan <- fmt.Errorf("%s %v", ErrEncryptState, err)
+			errChan <- fmt.Errorf("%s: %v", ErrEncryptState, err)
 		}
-		encStateChan <- encryptedState
-	}()
+		*encrypted = cipher
+	}(&state, &index, &encryptedState, errChan, &wgExchange)
 
 	// encrypt the client id
 	wgExchange.Add(1)
-	go func() {
+	go func(encrypted *string, errChan chan error, wg *sync.WaitGroup) {
 		defer wgExchange.Done()
-
-		encryptedClientId, err := s.cryptor.EncryptServiceData(s.oauth.CallbackClientId)
+		cipher, err := s.cryptor.EncryptServiceData(s.oauth.CallbackClientId)
 		if err != nil {
 			errChan <- fmt.Errorf("%s: %v", ErrEncryptCallbackClientId, err)
 		}
-		encClientIdChan <- encryptedClientId
-	}()
+		*encrypted = cipher
+	}(&encryptedClientId, errChan, &wgExchange)
 
 	// encrypt the redirect url
 	wgExchange.Add(1)
-	go func() {
+	go func(encrypted *string, errChan chan error, wg *sync.WaitGroup) {
 		defer wgExchange.Done()
-
-		encryptedRedirect, err := s.cryptor.EncryptServiceData(s.oauth.CallbackUrl)
+		cipher, err := s.cryptor.EncryptServiceData(s.oauth.CallbackUrl)
 		if err != nil {
 			errChan <- fmt.Errorf("%s: %v", ErrEncryptCallbackRedirectUrl, err)
 		}
-		encRedirectChan <- encryptedRedirect
-	}()
+		*encrypted = cipher
+	}(&encryptedRedirect, errChan, &wgExchange)
 
-	go func() {
-		wgExchange.Wait()
-		close(errChan)
-	}()
+	wgExchange.Wait()
+	close(errChan)
 
 	// aggregate any errors and return
 	if len(errChan) > 0 {
@@ -392,16 +395,6 @@ func (s *service) build() (*OauthExchange, error) {
 		// exit the function
 		return nil, errors.New(builder.String())
 	}
-
-	id := <-idChan
-	encryptedResponseType := <-encRespTypeChan
-	nonce := <-nonceChan
-	encryptedNonce := <-encNonceChan
-	state := <-stateChan
-	encryptedState := <-encStateChan
-	index := <-indexChan
-	encryptedClientId := <-encClientIdChan
-	encryptedRedirect := <-encRedirectChan
 
 	currentTime := time.Now()
 
@@ -447,24 +440,31 @@ func (s *service) Valiadate(oauth types.AuthCodeCmd) error {
 	}
 
 	// look up the oauth exchange record
-	query := OauthBySession
-	var check OauthSessionCheck
+	query := `
+		SELECT 
+			o.uuid, 
+			o.state_index, 
+			o.response_type, 
+			o.nonce, 
+			o.state, 
+			o.client_id, 
+			o.redirect_url, 
+			o.created_at,
+		FROM oauthflow o 
+			LEFT OUTER JOIN uxsession_oauthflow uo ON o.uuid = uo.oauthflow_uuid
+			LEFT OUTER JOIN uxsession u ON uo.uxsession_uuid = u.uuid
+		WHERE u.session_index = ?
+			AND u.revoked = false
+			AND u.created_at > NOW() - INTERVAL 1 HOUR
+			AND o.created_at > NOW() - INTERVAL 1 HOUR` // check revoked and expiries
+
+	var check OauthExchange
 	if err := s.db.SelectRecord(query, &check, index); err != nil {
 		if err == sql.ErrNoRows {
 			return errors.New(uxsession.ErrSessionNotFound)
 		} else {
-			return fmt.Errorf("%s for session xxxxxx-%s: %v", ErrLookupOauthExchange, oauth.Session[len(oauth.Session)-6:], err)
+			return fmt.Errorf("session xxxxxx-%s is %s: %v", oauth.Session[len(oauth.Session)-6:], ErrInvalidSessionToken, err)
 		}
-	}
-
-	// check if the session is revoked before decrypting the exchange record
-	if check.UxsessionRevoked {
-		return fmt.Errorf("session token %s - xxxxxx-%s: %s", check.UxsessionUuid, oauth.Session[len(oauth.Session)-6:], uxsession.ErrSessionRevoked)
-	}
-
-	// check if the session is expired before decrypting the exchange record
-	if check.UxsessionCreatedAt.Add(time.Hour).Before(time.Now().UTC()) {
-		return fmt.Errorf("session token %s - xxxxxx-%s: %s", check.UxsessionUuid, oauth.Session[len(oauth.Session)-6:], uxsession.ErrSessionExpired)
 	}
 
 	// decrypt the exchange record
@@ -498,91 +498,41 @@ func (s *service) Valiadate(oauth types.AuthCodeCmd) error {
 }
 
 // decryptExchange is a helper function that decrypts the encrypted fields
-// of the OauthSessionCheck struct and returns an OauthExchange struct
-func (s *service) decryptExchange(d OauthSessionCheck) (*OauthExchange, error) {
+// of the OauthExchange record returned from database calls.
+func (s *service) decryptExchange(encrypted OauthExchange) (*OauthExchange, error) {
 
-	wg := sync.WaitGroup{}
-
-	rtChan := make(chan string, 1)       // response type
-	nonceChan := make(chan string, 1)    // nonce
-	stateChan := make(chan string, 1)    // state
-	clientIdChan := make(chan string, 1) // client id
-	callbackChan := make(chan string, 1) // callback url
-
+	var wg sync.WaitGroup
 	errChan := make(chan error, 5) // errors
+
+	var responseType string
+	var nonce string
+	var state string
+	var clientId string
+	var callbackUrl string
 
 	// decrypt the response type
 	wg.Add(1)
-	go func() {
-		defer wg.Done()
-
-		rt, err := s.cryptor.DecryptServiceData(d.ResponseType)
-		if err != nil {
-			errChan <- fmt.Errorf("%s for oauthflow id %s: %v", ErrDecryptResponseType, d.OauthflowUuid, err)
-		}
-		rtChan <- rt
-	}()
+	go s.decrypt(encrypted.ResponseType, ErrDecryptResponseType, &responseType, errChan, &wg)
 
 	// decrypt the nonce
 	wg.Add(1)
-	go func() {
-		defer wg.Done()
-
-		n, err := s.cryptor.DecryptServiceData(d.Nonce)
-		if err != nil {
-			errChan <- fmt.Errorf("%s for oauthflow id %s: %v", ErrDecryptNonce, d.OauthflowUuid, err)
-		}
-		nonceChan <- n
-	}()
+	go s.decrypt(encrypted.Nonce, ErrDecryptNonce, &nonce, errChan, &wg)
 
 	// decrypt the state
 	wg.Add(1)
-	go func() {
-		defer wg.Done()
-
-		st, err := s.cryptor.DecryptServiceData(d.State)
-		if err != nil {
-			errChan <- fmt.Errorf("%s for oauthflow id %s: %v", ErrDecryptState, d.OauthflowUuid, err)
-		}
-		stateChan <- st
-	}()
+	go s.decrypt(encrypted.State, ErrDecryptState, &state, errChan, &wg)
 
 	// decrypt the client id
 	wg.Add(1)
-	go func() {
-		defer wg.Done()
-
-		cid, err := s.cryptor.DecryptServiceData(d.ClientId)
-		if err != nil {
-			errChan <- fmt.Errorf("%s for oauthflow id %s: %v", ErrDecryptClientId, d.OauthflowUuid, err)
-		}
-		clientIdChan <- cid
-	}()
+	go s.decrypt(encrypted.ClientId, encrypted.Id, &clientId, errChan, &wg)
 
 	// decrypt the callback url
 	wg.Add(1)
-	go func() {
-		defer wg.Done()
-
-		cb, err := s.cryptor.DecryptServiceData(d.RedirectUrl)
-		if err != nil {
-			errChan <- fmt.Errorf("%s for oauthflow id %s: %v", ErrDecryptRedirectUrl, d.OauthflowUuid, err)
-		}
-		callbackChan <- cb
-	}()
+	go s.decrypt(encrypted.RedirectUrl, ErrDecryptRedirectUrl, &callbackUrl, errChan, &wg)
 
 	// wait for all decryption goroutines to finish
-	go func() {
-		wg.Wait()
-
-		close(rtChan)
-		close(nonceChan)
-		close(stateChan)
-		close(clientIdChan)
-		close(callbackChan)
-
-		close(errChan)
-	}()
+	wg.Wait()
+	close(errChan)
 
 	// check for any errors and return
 	if len(errChan) > 0 {
@@ -600,14 +550,25 @@ func (s *service) decryptExchange(d OauthSessionCheck) (*OauthExchange, error) {
 
 	// return the ouath exchange record
 	return &OauthExchange{
-		Id:           d.OauthflowUuid,
-		ResponseType: <-rtChan,
-		Nonce:        <-nonceChan,
-		State:        <-stateChan,
-		ClientId:     <-clientIdChan,
-		RedirectUrl:  <-callbackChan,
-		CreatedAt:    d.OauthflowCreatedAt,
+		Id:           encrypted.Id, // not encrypted in the database
+		ResponseType: responseType,
+		Nonce:        nonce,
+		State:        state,
+		ClientId:     clientId,
+		RedirectUrl:  callbackUrl,
+		CreatedAt:    encrypted.CreatedAt, // not encrypted in the database
 	}, nil
+}
+
+func (s *service) decrypt(encrypted, errDecrypt string, decrypted *string, errChan chan error, wg *sync.WaitGroup) {
+	defer wg.Done()
+
+	d, err := s.cryptor.DecryptServiceData(encrypted)
+	if err != nil {
+
+		errChan <- fmt.Errorf("%s: %v", errDecrypt, err)
+	}
+	*decrypted = d
 }
 
 // HandleSessionErr implementation of the OauthErrService interface
