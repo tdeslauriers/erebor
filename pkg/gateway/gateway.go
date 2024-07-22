@@ -176,6 +176,8 @@ func (g *gateway) Run() error {
 	mux.HandleFunc("/oauth/state", oauth.HandleGetState)
 	mux.HandleFunc("/login", login.HandleLogin)
 
+	
+
 	erebor := &connect.TlsServer{
 		Addr:      g.config.ServicePort,
 		Mux:       mux,

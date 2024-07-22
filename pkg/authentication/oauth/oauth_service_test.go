@@ -38,12 +38,16 @@ const (
 
 	TestNewOauthExchangeId   string = "new-oauth-exchange-id"
 	TestNewOauthResponseType string = string(types.AuthCode)
+
+	TestValidResponseCode types.ResponseType = types.AuthCode
+	TestValidState        string             = "6b638422-3f25-4156-a6e3-56e4b0531f7a"
+	TestValidNonce        string             = "f3b6acb9-28b2-4130-a421-ed5b4d7cf222"
 )
 
 // mock default callback/redirect url and client
 var mockOauthRedirect = config.OauthRedirect{
 	CallbackUrl:      "http://localhost:8080/oauth/callback",
-	CallbackClientId: "valid-client-id",
+	CallbackClientId: "valid-callback-client-id",
 }
 
 type mockAuthSqlRepository struct{}
@@ -163,8 +167,23 @@ func (dao *mockAuthSqlRepository) SelectRecord(query string, record interface{},
 			}
 			return nil
 		}
-	}
+	case args[0] == "index-"+TestValidSession:
+		// need to reflect record interface's type to mock sql query hydrating the record
+		exchange := reflect.ValueOf(record).Elem()
+		testResults := []string{
+			TestXrefOauthExchangeId,
+			"index-" + TestXrefOauthState,
+			"encrypted-" + "code",
+			"encrypted-" + TestValidNonce,
+			"encrypted-" + TestValidState,
+			"encrypted-" + mockOauthRedirect.CallbackClientId,
+			"encrypted-" + mockOauthRedirect.CallbackUrl} // created at not retuned by this service
 
+		for i := 0; i < len(testResults); i++ {
+			exchange.Field(i).SetString(testResults[i])
+		}
+		return nil
+	}
 	return nil
 }
 func (dao *mockAuthSqlRepository) SelectExists(query string, args ...interface{}) (bool, error) {
@@ -189,7 +208,7 @@ type mockIndexer struct{}
 
 func (i *mockIndexer) ObtainBlindIndex(record string) (string, error) {
 
-	if record == TestBuildNewOauthExchangeFailure {
+	if record == TestBuildNewOauthExchangeFailure || record == "failed-to-generate-session-lookup-index" {
 		return "", errors.New(uxsession.ErrGenIndex)
 	}
 	return fmt.Sprintf("index-%s", record), nil
@@ -302,4 +321,224 @@ func TestObtain(t *testing.T) {
 		})
 	}
 
+}
+
+func TestValidate(t *testing.T) {
+
+	testCases := []struct {
+		name    string
+		authCmd *types.AuthCodeCmd
+		err     error
+	}{
+		{
+			name: "valid auth code cmd",
+			authCmd: &types.AuthCodeCmd{
+				Session:      TestValidSession,
+				AuthCode:     "authcode not tested/validated by this service",
+				ResponseType: TestValidResponseCode,
+				State:        TestValidState,
+				Nonce:        TestValidNonce,
+				ClientId:     mockOauthRedirect.CallbackClientId,
+				Redirect:     mockOauthRedirect.CallbackUrl,
+			},
+			err: nil,
+		},
+		{
+			name: "empty session token",
+			authCmd: &types.AuthCodeCmd{
+				Session:      "",
+				AuthCode:     "authcode not tested/validated by this service",
+				ResponseType: TestValidResponseCode,
+				State:        TestValidState,
+				Nonce:        TestValidNonce,
+				ClientId:     mockOauthRedirect.CallbackClientId,
+				Redirect:     mockOauthRedirect.CallbackUrl,
+			},
+			err: errors.New(ErrInvalidAuthCodeCmd),
+		},
+		{
+			name: "empty auth code",
+			authCmd: &types.AuthCodeCmd{
+				Session:      TestValidSession,
+				AuthCode:     "",
+				ResponseType: TestValidResponseCode,
+				State:        TestValidState,
+				Nonce:        TestValidNonce,
+				ClientId:     mockOauthRedirect.CallbackClientId,
+				Redirect:     mockOauthRedirect.CallbackUrl,
+			},
+			err: errors.New(ErrInvalidAuthCodeCmd),
+		},
+		{
+			name: "empty response type",
+			authCmd: &types.AuthCodeCmd{
+				Session:      TestValidSession,
+				AuthCode:     "authcode not tested/validated by this service",
+				ResponseType: "",
+				State:        TestValidState,
+				Nonce:        TestValidNonce,
+				ClientId:     mockOauthRedirect.CallbackClientId,
+				Redirect:     mockOauthRedirect.CallbackUrl,
+			},
+			err: errors.New(ErrInvalidAuthCodeCmd),
+		},
+		{
+			name: "empty state",
+			authCmd: &types.AuthCodeCmd{
+				Session:      TestValidSession,
+				AuthCode:     "authcode not tested/validated by this service",
+				ResponseType: TestValidResponseCode,
+				State:        "",
+				Nonce:        TestValidNonce,
+				ClientId:     mockOauthRedirect.CallbackClientId,
+				Redirect:     mockOauthRedirect.CallbackUrl,
+			},
+			err: errors.New(ErrInvalidAuthCodeCmd),
+		},
+		{
+			name: "empty nonce",
+			authCmd: &types.AuthCodeCmd{
+				Session: TestValidSession,
+
+				AuthCode:     "authcode not tested/validated by this service",
+				ResponseType: TestValidResponseCode,
+				State:        TestValidState,
+				Nonce:        "",
+				ClientId:     mockOauthRedirect.CallbackClientId,
+				Redirect:     mockOauthRedirect.CallbackUrl,
+			},
+			err: errors.New(ErrInvalidAuthCodeCmd),
+		},
+		{
+			name: "empty client id",
+			authCmd: &types.AuthCodeCmd{
+				Session:      TestValidSession,
+				AuthCode:     "authcode not tested/validated by this service",
+				ResponseType: TestValidResponseCode,
+				State:        TestValidState,
+				Nonce:        TestValidNonce,
+				ClientId:     "",
+				Redirect:     mockOauthRedirect.CallbackUrl,
+			},
+			err: errors.New(ErrInvalidAuthCodeCmd),
+		},
+		{
+			name: "empty redirect url",
+			authCmd: &types.AuthCodeCmd{
+				Session:      TestValidSession,
+				AuthCode:     "authcode not tested/validated by this service",
+				ResponseType: TestValidResponseCode,
+				State:        TestValidState,
+				Nonce:        TestValidNonce,
+				ClientId:     mockOauthRedirect.CallbackClientId,
+				Redirect:     "",
+			},
+			err: errors.New(ErrInvalidAuthCodeCmd),
+		},
+		{
+			name: "failed to generate session lookup index",
+			authCmd: &types.AuthCodeCmd{
+				Session:      "failed-to-generate-session-lookup-index",
+				AuthCode:     "authcode not tested/validated by this service",
+				ResponseType: TestValidResponseCode,
+				State:        TestValidState,
+				Nonce:        TestValidNonce,
+				ClientId:     mockOauthRedirect.CallbackClientId,
+				Redirect:     mockOauthRedirect.CallbackUrl,
+			},
+			err: errors.New(ErrGenSessionIndex),
+		},
+		{
+			name: "invalid session - not found, revoked, or expired",
+			authCmd: &types.AuthCodeCmd{
+				Session:      TestSessionDoesNotExist,
+				AuthCode:     "authcode not tested/validated by this service",
+				ResponseType: TestValidResponseCode,
+				State:        TestValidState,
+				Nonce:        TestValidNonce,
+				ClientId:     mockOauthRedirect.CallbackClientId,
+				Redirect:     mockOauthRedirect.CallbackUrl,
+			},
+			err: errors.New(uxsession.ErrSessionNotFound),
+		},
+		{
+			name: "invalid response type",
+			authCmd: &types.AuthCodeCmd{
+				Session:      TestValidSession,
+				AuthCode:     "authcode not tested/validated by this service",
+				ResponseType: "fail",
+				State:        TestValidState,
+				Nonce:        TestValidNonce,
+				ClientId:     mockOauthRedirect.CallbackClientId,
+				Redirect:     mockOauthRedirect.CallbackUrl,
+			},
+			err: errors.New(ErrResponseTypeMismatch),
+		},
+		{
+			name: "invalide state",
+			authCmd: &types.AuthCodeCmd{
+				Session:      TestValidSession,
+				AuthCode:     "authcode not tested/validated by this service",
+				ResponseType: TestValidResponseCode,
+				State:        "invalid-state-code",
+				Nonce:        TestValidNonce,
+				ClientId:     mockOauthRedirect.CallbackClientId,
+				Redirect:     mockOauthRedirect.CallbackUrl,
+			},
+			err: errors.New(ErrStateCodeMismatch),
+		},
+		{
+			name: "invalid nonce",
+			authCmd: &types.AuthCodeCmd{
+				Session:      TestValidSession,
+				AuthCode:     "authcode not tested/validated by this service",
+				ResponseType: TestValidResponseCode,
+				State:        TestValidState,
+				Nonce:        "invalid-nonce-code",
+				ClientId:     mockOauthRedirect.CallbackClientId,
+				Redirect:     mockOauthRedirect.CallbackUrl,
+			},
+			err: errors.New(ErrNonceMismatch),
+		},
+		{
+			name: "invalid client id",
+			authCmd: &types.AuthCodeCmd{
+				Session:      TestValidSession,
+				AuthCode:     "authcode not tested/validated by this service",
+				ResponseType: TestValidResponseCode,
+				State:        TestValidState,
+				Nonce:        TestValidNonce,
+				ClientId:     "invalid-client-id",
+				Redirect:     mockOauthRedirect.CallbackUrl,
+			},
+			err: errors.New(ErrClientIdMismatch),
+		},
+		{
+			name: "invalid redirect url",
+			authCmd: &types.AuthCodeCmd{
+				Session:      TestValidSession,
+				AuthCode:     "authcode not tested/validated by this service",
+				ResponseType: TestValidResponseCode,
+				State:        TestValidState,
+				Nonce:        TestValidNonce,
+				ClientId:     mockOauthRedirect.CallbackClientId,
+				Redirect:     "invalid-redirect-url",
+			},
+			err: errors.New(ErrRedirectUrlMismatch),
+		},
+	}
+
+	oauthService := NewService(mockOauthRedirect, &mockAuthSqlRepository{}, &mockRegisterCryptor{}, &mockIndexer{})
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := oauthService.Validate(*tc.authCmd)
+			if err != nil {
+				t.Logf("error: %s", err.Error())
+				if !strings.Contains(err.Error(), tc.err.Error()) {
+					t.Errorf("expected error '%s' to contain '%s'", err.Error(), tc.err.Error())
+				}
+			}
+		})
+	}
 }

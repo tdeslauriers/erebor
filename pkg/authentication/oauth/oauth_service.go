@@ -27,7 +27,7 @@ type OauthService interface {
 
 	// Valiadate validates the oauth exchange variables returned from the client to the callback url
 	// against the values stored in the database to ensure the exchange is valid/untampered
-	Valiadate(oauth types.AuthCodeCmd) error
+	Validate(oauth types.AuthCodeCmd) error
 }
 
 type OauthErrService interface {
@@ -370,17 +370,17 @@ func (s *service) build() (*OauthExchange, error) {
 }
 
 // Valiadate implementation of the OauthService interface
-func (s *service) Valiadate(oauth types.AuthCodeCmd) error {
+func (s *service) Validate(cmd types.AuthCodeCmd) error {
 
 	// input validation -> redundant because also performed by handler
-	if err := oauth.ValidateCmd(); err != nil {
-		return fmt.Errorf("%s for session xxxxxx-%s: %v", ErrInvalidAuthCodeCmd, oauth.Session[len(oauth.Session)-6:], err)
+	if err := cmd.ValidateCmd(); err != nil {
+		return fmt.Errorf("%s: %v", ErrInvalidAuthCodeCmd, err)
 	}
 
 	// generate index blind index from session
-	index, err := s.indexer.ObtainBlindIndex(oauth.Session)
+	index, err := s.indexer.ObtainBlindIndex(cmd.Session)
 	if err != nil {
-		return fmt.Errorf("%s for session xxxxxx-%s: %v", ErrGenSessionIndex, oauth.Session[len(oauth.Session)-6:], err)
+		return fmt.Errorf("%s for session xxxxxx-%s: %v", ErrGenSessionIndex, cmd.Session[len(cmd.Session)-6:], err)
 	}
 
 	// look up the oauth exchange record
@@ -407,35 +407,35 @@ func (s *service) Valiadate(oauth types.AuthCodeCmd) error {
 		if err == sql.ErrNoRows {
 			return errors.New(uxsession.ErrSessionNotFound)
 		} else {
-			return fmt.Errorf("session xxxxxx-%s is %s: %v", oauth.Session[len(oauth.Session)-6:], ErrInvalidSessionToken, err)
+			return fmt.Errorf("session xxxxxx-%s is %s: %v", cmd.Session[len(cmd.Session)-6:], ErrInvalidSessionToken, err)
 		}
 	}
 
 	// decrypt the exchange record
 	exchange, err := s.decryptExchange(check)
 	if err != nil {
-		return fmt.Errorf("%s for session xxxxxx-%s: %v", ErrLookupOauthExchange, oauth.Session[len(oauth.Session)-6:], err)
+		return fmt.Errorf("%s for session xxxxxx-%s: %v", ErrLookupOauthExchange, cmd.Session[len(cmd.Session)-6:], err)
 	}
 
 	// validate the exchange record against the client request
-	if exchange.ResponseType != string(oauth.ResponseType) {
-		return fmt.Errorf("session xxxxxx-%s - %s - client: %s vs db record: %s", oauth.Session[len(oauth.Session)-6:], ErrResponseTypeMismatch, oauth.ResponseType, exchange.ResponseType)
+	if exchange.ResponseType != string(cmd.ResponseType) {
+		return fmt.Errorf("session xxxxxx-%s - %s - client: %s vs db record: %s", cmd.Session[len(cmd.Session)-6:], ErrResponseTypeMismatch, cmd.ResponseType, exchange.ResponseType)
 	}
 
-	if exchange.State != oauth.State {
-		return fmt.Errorf("session xxxxxx-%s: %s - client: xxxxx-%s vs db record: xxxxxx-%s", oauth.Session[len(oauth.Session)-6:], ErrStateCodeMismatch, oauth.State[len(oauth.State)-6:], exchange.State[len(exchange.State)-6:])
+	if exchange.State != cmd.State {
+		return fmt.Errorf("session xxxxxx-%s: %s - client: xxxxx-%s vs db record: xxxxxx-%s", cmd.Session[len(cmd.Session)-6:], ErrStateCodeMismatch, cmd.State[len(cmd.State)-6:], exchange.State[len(exchange.State)-6:])
 	}
 
-	if exchange.Nonce != oauth.Nonce {
-		return fmt.Errorf("session xxxxxx-%s: %s - client: xxxxxx-%s vs db record: xxxxxx-%s", oauth.Session[len(oauth.Session)-6:], ErrNonceMismatch, oauth.Nonce[len(oauth.Nonce)-6:], exchange.Nonce[len(exchange.Nonce)-6:])
+	if exchange.Nonce != cmd.Nonce {
+		return fmt.Errorf("session xxxxxx-%s: %s - client: xxxxxx-%s vs db record: xxxxxx-%s", cmd.Session[len(cmd.Session)-6:], ErrNonceMismatch, cmd.Nonce[len(cmd.Nonce)-6:], exchange.Nonce[len(exchange.Nonce)-6:])
 	}
 
-	if exchange.ClientId != oauth.ClientId {
-		return fmt.Errorf("failed to validate client id for session xxxxxx-%s: %s", oauth.Session[len(oauth.Session)-6:], ErrClientIdMismatch)
+	if exchange.ClientId != cmd.ClientId {
+		return fmt.Errorf("failed to validate client id for session xxxxxx-%s: %s", cmd.Session[len(cmd.Session)-6:], ErrClientIdMismatch)
 	}
 
-	if exchange.RedirectUrl != oauth.Redirect {
-		return fmt.Errorf("failed to validate redirect url for session xxxxxx-%s: %s", oauth.Session[len(oauth.Session)-6:], ErrRedirectUrlMismatch)
+	if exchange.RedirectUrl != cmd.Redirect {
+		return fmt.Errorf("failed to validate redirect url for session xxxxxx-%s: %s", cmd.Session[len(cmd.Session)-6:], ErrRedirectUrlMismatch)
 	}
 
 	return nil

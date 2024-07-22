@@ -3,6 +3,7 @@ package authentication
 import (
 	"encoding/json"
 	"erebor/internal/util"
+	"erebor/pkg/authentication/oauth"
 
 	"log/slog"
 	"net/http"
@@ -17,12 +18,13 @@ type CallbackHandler interface {
 	HandleCallback(w http.ResponseWriter, r *http.Request)
 }
 
-func NewCallbackHandler(s2sProvider provider.S2sTokenProvider, caller connect.S2sCaller, cryptor data.Cryptor, db data.SqlRepository) CallbackHandler {
+func NewCallbackHandler(s2sProvider provider.S2sTokenProvider, caller connect.S2sCaller, cryptor data.Cryptor, db data.SqlRepository, o oauth.Service) CallbackHandler {
 	return &callbackHandler{
-		s2sProvider: s2sProvider,
-		caller:      caller,
-		cryptor:     cryptor,
-		db:          db,
+		s2sProvider:  s2sProvider,
+		caller:       caller,
+		cryptor:      cryptor,
+		db:           db,
+		oauthService: o,
 
 		logger: slog.Default().With(slog.String(util.PackageKey, util.PackageAuth)).With(slog.String(util.ComponentKey, util.ComponentCallback)),
 	}
@@ -31,10 +33,11 @@ func NewCallbackHandler(s2sProvider provider.S2sTokenProvider, caller connect.S2
 var _ CallbackHandler = (*callbackHandler)(nil)
 
 type callbackHandler struct {
-	s2sProvider provider.S2sTokenProvider
-	caller      connect.S2sCaller
-	cryptor     data.Cryptor
-	db          data.SqlRepository
+	s2sProvider  provider.S2sTokenProvider
+	caller       connect.S2sCaller
+	cryptor      data.Cryptor
+	db           data.SqlRepository
+	oauthService oauth.Service
 
 	logger *slog.Logger
 }
@@ -74,7 +77,10 @@ func (h *callbackHandler) HandleCallback(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// TODO: validate state against the session token
+	// validate oauth variables (state, nonce, client id, redirect) against the session token
+	if err := h.oauthService.Validate(cmd); err != nil {
+		h.oauthService.HandleServiceErr(err, w)
+	}
 
 	// get service token
 	s2sToken, err := h.s2sProvider.GetServiceToken(util.ServiceUserIdentity)
@@ -103,5 +109,5 @@ func (h *callbackHandler) HandleCallback(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// update the user session
+	// TODO: update the user session
 }
