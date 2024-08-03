@@ -28,7 +28,7 @@ func main() {
 			S2sSigningKey:    false,
 			S2sVerifyingKey:  false,
 			UserSigningKey:   false,
-			UserVerifyingKey: false,
+			UserVerifyingKey: true,
 			OauthRedirect:    true,
 		},
 	}

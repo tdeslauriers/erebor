@@ -1,8 +1,11 @@
 package gateway
 
 import (
+	"crypto/ecdsa"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/base64"
+	"encoding/pem"
 	"erebor/internal/util"
 	"erebor/pkg/authentication"
 	"erebor/pkg/authentication/oauth"
@@ -18,6 +21,7 @@ import (
 	"github.com/tdeslauriers/carapace/pkg/connect"
 	"github.com/tdeslauriers/carapace/pkg/data"
 	"github.com/tdeslauriers/carapace/pkg/diagnostics"
+	"github.com/tdeslauriers/carapace/pkg/jwt"
 	"github.com/tdeslauriers/carapace/pkg/session/provider"
 )
 
@@ -108,24 +112,41 @@ func New(config config.Config) (Gateway, error) {
 	userIdentity := connect.NewS2sCaller(config.UserAuth.Url, util.ServiceUserIdentity, client, retry)
 
 	// s2s token provider
-	s2sProvider := provider.NewS2sTokenProvider(s2sIdentity, creds, repository, cryptor)
+	s2sToken := provider.NewS2sTokenProvider(s2sIdentity, creds, repository, cryptor)
 
 	// ux session service
-	uxSessionService := uxsession.NewService(repository, indexer, cryptor)
+	uxSession := uxsession.NewService(repository, indexer, cryptor)
 
 	// oauth service: state, nonce, redirect
-	oauthService := oauth.NewService(config.OauthRedirect, repository, cryptor, indexer)
+	oAuth := oauth.NewService(config.OauthRedirect, repository, cryptor, indexer)
 
-	// login service
+	// format public key for use in jwt verification
+	pubPem, err := base64.StdEncoding.DecodeString(config.Jwt.UserVerifyingKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode s2s jwt-verifying public key: %v", err)
+	}
+	pubBlock, _ := pem.Decode(pubPem)
+	genericPublicKey, err := x509.ParsePKIXPublicKey(pubBlock.Bytes)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse pub Block to generic public key: %v", err)
+	}
+	publicKey, ok := genericPublicKey.(*ecdsa.PublicKey)
+	if !ok {
+		return nil, fmt.Errorf("not an ECDSA public key")
+	}
+	
+	// id token jwt verifier
+	identityVerifier := jwt.NewVerifier(config.ServiceName, publicKey)
 
 	return &gateway{
-		config:           config,
-		serverTls:        serverTlsConfig,
-		repository:       repository,
-		s2sTokenProvider: s2sProvider,
-		userIdentity:     userIdentity,
-		uxSessionService: uxSessionService,
-		oauthService:     oauthService,
+		config:       config,
+		serverTls:    serverTlsConfig,
+		repository:   repository,
+		s2sToken:     s2sToken,
+		userIdentity: userIdentity,
+		uxSession:    uxSession,
+		oAuth:        oAuth,
+		verifier:     identityVerifier,
 
 		logger: slog.Default().With(slog.String(util.PackageKey, util.PackageGateway)),
 	}, nil
@@ -134,13 +155,14 @@ func New(config config.Config) (Gateway, error) {
 var _ Gateway = (*gateway)(nil)
 
 type gateway struct {
-	config           config.Config
-	serverTls        *tls.Config
-	repository       data.SqlRepository
-	s2sTokenProvider provider.S2sTokenProvider
-	userIdentity     connect.S2sCaller
-	uxSessionService uxsession.Service
-	oauthService     oauth.Service
+	config       config.Config
+	serverTls    *tls.Config
+	repository   data.SqlRepository
+	s2sToken     provider.S2sTokenProvider
+	userIdentity connect.S2sCaller
+	uxSession    uxsession.Service
+	oAuth        oauth.Service
+	verifier     jwt.Verifier
 
 	logger *slog.Logger
 }
@@ -156,13 +178,15 @@ func (g *gateway) CloseDb() error {
 func (g *gateway) Run() error {
 
 	// setup handlers
-	uxSessionHandler := uxsession.NewHandler(g.uxSessionService)
-	csrfHandler := csrf.NewHandler(g.uxSessionService)
+	uxSessionHandler := uxsession.NewHandler(g.uxSession)
+	csrfHandler := csrf.NewHandler(g.uxSession)
 
-	register := authentication.NewRegistrationHandler(g.config.OauthRedirect, g.uxSessionService, g.s2sTokenProvider, g.userIdentity)
+	register := authentication.NewRegistrationHandler(g.config.OauthRedirect, g.uxSession, g.s2sToken, g.userIdentity)
 
-	oauth := oauth.NewHandler(g.oauthService)
-	login := authentication.NewLoginHandler(g.uxSessionService, g.s2sTokenProvider, g.userIdentity)
+	oauth := oauth.NewHandler(g.oAuth)
+	login := authentication.NewLoginHandler(g.uxSession, g.s2sToken, g.userIdentity)
+
+	callback := authentication.NewCallbackHandler(g.s2sToken, g.userIdentity, g.oAuth, g.uxSession, g.verifier)
 
 	// setup mux
 	mux := http.NewServeMux()
@@ -174,9 +198,8 @@ func (g *gateway) Run() error {
 	mux.HandleFunc("/register", register.HandleRegistration)
 
 	mux.HandleFunc("/oauth/state", oauth.HandleGetState)
+	mux.HandleFunc("/oauth/callback", callback.HandleCallback)
 	mux.HandleFunc("/login", login.HandleLogin)
-
-	
 
 	erebor := &connect.TlsServer{
 		Addr:      g.config.ServicePort,

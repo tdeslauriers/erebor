@@ -22,10 +22,10 @@ type RegistrationHandler interface {
 
 func NewRegistrationHandler(o config.OauthRedirect, s uxsession.Service, p provider.S2sTokenProvider, c connect.S2sCaller) RegistrationHandler {
 	return &registrationHandler{
-		oauth:          o,
-		sessionService: s,
-		s2sProvider:    p,
-		caller:         c,
+		oAuth:     o,
+		uxSession: s,
+		s2sToken:  p,
+		caller:    c,
 
 		logger: slog.Default().With(slog.String(util.PackageKey, util.PackageAuth)).With(slog.String(util.ComponentKey, util.ComponentRegister)),
 	}
@@ -34,10 +34,10 @@ func NewRegistrationHandler(o config.OauthRedirect, s uxsession.Service, p provi
 var _ RegistrationHandler = (*registrationHandler)(nil)
 
 type registrationHandler struct {
-	oauth          config.OauthRedirect
-	sessionService uxsession.Service
-	s2sProvider    provider.S2sTokenProvider
-	caller         connect.S2sCaller
+	oAuth     config.OauthRedirect
+	uxSession uxsession.Service
+	s2sToken  provider.S2sTokenProvider
+	caller    connect.S2sCaller
 
 	logger *slog.Logger
 }
@@ -70,7 +70,7 @@ func (h *registrationHandler) HandleRegistration(w http.ResponseWriter, r *http.
 	// for now this is the primary website's client id
 	// Adding the client id here as a "hack" to pass input validation
 	// which is unnecessary in this case (because client id comes from config)
-	cmd.ClientId = h.oauth.CallbackClientId // association required by identity service for user login after registation
+	cmd.ClientId = h.oAuth.CallbackClientId // association required by identity service for user login after registation
 
 	// input validation
 	if err := cmd.ValidateCmd(); err != nil {
@@ -84,9 +84,9 @@ func (h *registrationHandler) HandleRegistration(w http.ResponseWriter, r *http.
 	}
 
 	// check for valid session with valid csrf token
-	if valid, err := h.sessionService.IsValidCsrf(cmd.Session, cmd.Csrf); !valid {
+	if valid, err := h.uxSession.IsValidCsrf(cmd.Session, cmd.Csrf); !valid {
 		h.logger.Error("invalid session or csrf token", "err", err.Error())
-		h.sessionService.HandleSessionErr(err, w)
+		h.uxSession.HandleSessionErr(err, w)
 		return
 	}
 
@@ -96,7 +96,7 @@ func (h *registrationHandler) HandleRegistration(w http.ResponseWriter, r *http.
 	cmd.Csrf = ""
 
 	// get shaw service token
-	s2sToken, err := h.s2sProvider.GetServiceToken(util.ServiceUserIdentity)
+	s2sToken, err := h.s2sToken.GetServiceToken(util.ServiceUserIdentity)
 	if err != nil {
 		h.logger.Error(err.Error())
 		e := connect.ErrorHttp{

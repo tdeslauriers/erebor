@@ -18,7 +18,7 @@ type Handler interface {
 
 func NewHandler(o Service) Handler {
 	return &handler{
-		oauthService: o,
+		oAuth: o,
 
 		logger: slog.Default().With(slog.String(util.PackageKey, util.PackageAuth)).With(slog.String(util.ComponentKey, util.ComponentOauth)),
 	}
@@ -27,7 +27,7 @@ func NewHandler(o Service) Handler {
 var _ Handler = (*handler)(nil)
 
 type handler struct {
-	oauthService Service
+	oAuth Service
 
 	logger *slog.Logger
 }
@@ -70,9 +70,9 @@ func (h *handler) HandleGetState(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// look up/create oauth state, nonce, client id, and callback url for the session
-	exchange, err := h.oauthService.Obtain(cmd.SessionToken)
+	exchange, err := h.oAuth.Obtain(cmd.SessionToken)
 	if err != nil {
-		h.oauthService.HandleServiceErr(err, w)
+		h.oAuth.HandleServiceErr(err, w)
 		return
 	}
 

@@ -19,6 +19,23 @@ import (
 	"github.com/tdeslauriers/carapace/pkg/session/types"
 )
 
+type Service interface {
+	OauthService
+	OauthErrService
+}
+
+// NewService creates a new instance of the login service
+func NewService(o config.OauthRedirect, db data.SqlRepository, c data.Cryptor, i data.Indexer) Service {
+	return &service{
+		oAuth:   o,
+		db:      db,
+		cryptor: c,
+		indexer: i,
+
+		logger: slog.Default().With(slog.String(util.PackageKey, util.PackageAuth)).With(slog.String(util.ComponentKey, util.ComponentOauth)),
+	}
+}
+
 type OauthService interface {
 
 	// Obtain returns the oauth exchange record associated with the uxsession from the database if it exists.
@@ -35,27 +52,10 @@ type OauthErrService interface {
 	HandleServiceErr(err error, w http.ResponseWriter)
 }
 
-type Service interface {
-	OauthService
-	OauthErrService
-}
-
-// NewService creates a new instance of the login service
-func NewService(o config.OauthRedirect, db data.SqlRepository, c data.Cryptor, i data.Indexer) Service {
-	return &service{
-		oauth:   o,
-		db:      db,
-		cryptor: c,
-		indexer: i,
-
-		logger: slog.Default().With(slog.String(util.PackageKey, util.PackageAuth)).With(slog.String(util.ComponentKey, util.ComponentOauth)),
-	}
-}
-
 var _ Service = (*service)(nil)
 
 type service struct {
-	oauth   config.OauthRedirect
+	oAuth   config.OauthRedirect
 	db      data.SqlRepository
 	cryptor data.Cryptor
 	indexer data.Indexer
@@ -92,8 +92,8 @@ func (s *service) Obtain(sessionToken string) (*OauthExchange, error) {
 			LEFT OUTER JOIN uxsession u ON uo.uxsession_uuid = u.uuid
 		WHERE u.session_index = ?
 			AND u.revoked = false
-			AND u.created_at > NOW() - INTERVAL 1 HOUR
-			AND o.created_at > NOW() - INTERVAL 1 HOUR` // check revoked and expiries
+			AND u.created_at > UTC_TIMESTAMP() - INTERVAL 1 HOUR
+			AND o.created_at > UTC_TIMESTAMP() - INTERVAL 1 HOUR` // check revoked and expiries
 
 	var exchange OauthExchange
 	if err := s.db.SelectRecord(qry, &exchange, index); err != nil {
@@ -303,7 +303,7 @@ func (s *service) build() (*OauthExchange, error) {
 	wgExchange.Add(1)
 	go func(encrypted *string, errChan chan error, wg *sync.WaitGroup) {
 		defer wgExchange.Done()
-		cipher, err := s.cryptor.EncryptServiceData(s.oauth.CallbackClientId)
+		cipher, err := s.cryptor.EncryptServiceData(s.oAuth.CallbackClientId)
 		if err != nil {
 			errChan <- fmt.Errorf("%s: %v", ErrEncryptCallbackClientId, err)
 		}
@@ -314,7 +314,7 @@ func (s *service) build() (*OauthExchange, error) {
 	wgExchange.Add(1)
 	go func(encrypted *string, errChan chan error, wg *sync.WaitGroup) {
 		defer wgExchange.Done()
-		cipher, err := s.cryptor.EncryptServiceData(s.oauth.CallbackUrl)
+		cipher, err := s.cryptor.EncryptServiceData(s.oAuth.CallbackUrl)
 		if err != nil {
 			errChan <- fmt.Errorf("%s: %v", ErrEncryptCallbackRedirectUrl, err)
 		}
@@ -363,8 +363,8 @@ func (s *service) build() (*OauthExchange, error) {
 		ResponseType: string(types.AuthCode),
 		Nonce:        nonce.String(),
 		State:        state.String(),
-		ClientId:     s.oauth.CallbackClientId,
-		RedirectUrl:  s.oauth.CallbackUrl,
+		ClientId:     s.oAuth.CallbackClientId,
+		RedirectUrl:  s.oAuth.CallbackUrl,
 		CreatedAt:    data.CustomTime{Time: currentTime},
 	}, nil
 }
@@ -448,11 +448,13 @@ func (s *service) decryptExchange(encrypted OauthExchange) (*OauthExchange, erro
 	var wg sync.WaitGroup
 	errChan := make(chan error, 5) // errors
 
-	var responseType string
-	var nonce string
-	var state string
-	var clientId string
-	var callbackUrl string
+	var (
+		responseType string
+		nonce        string
+		state        string
+		clientId     string
+		callbackUrl  string
+	)
 
 	// decrypt the response type
 	wg.Add(1)

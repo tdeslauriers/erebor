@@ -534,7 +534,7 @@ func TestValidate(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			err := oauthService.Validate(*tc.authCmd)
 			if err != nil {
-				t.Logf("error: %s", err.Error())
+
 				if !strings.Contains(err.Error(), tc.err.Error()) {
 					t.Errorf("expected error '%s' to contain '%s'", err.Error(), tc.err.Error())
 				}

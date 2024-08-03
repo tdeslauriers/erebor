@@ -21,9 +21,9 @@ type LoginHandler interface {
 
 func NewLoginHandler(ux uxsession.Service, p provider.S2sTokenProvider, c connect.S2sCaller) LoginHandler {
 	return &loginHandler{
-		sessionService: ux,
-		s2sProvider:    p,
-		caller:         c,
+		uxSession: ux,
+		s2sToken:  p,
+		caller:    c,
 
 		logger: slog.Default().With(slog.String(util.PackageKey, util.PackageAuth)).With(slog.String(util.ComponentKey, util.ComponentLogin)),
 	}
@@ -32,9 +32,9 @@ func NewLoginHandler(ux uxsession.Service, p provider.S2sTokenProvider, c connec
 var _ LoginHandler = (*loginHandler)(nil)
 
 type loginHandler struct {
-	sessionService uxsession.Service
-	s2sProvider    provider.S2sTokenProvider
-	caller         connect.S2sCaller
+	uxSession uxsession.Service
+	s2sToken  provider.S2sTokenProvider
+	caller    connect.S2sCaller
 
 	logger *slog.Logger
 }
@@ -76,14 +76,14 @@ func (h *loginHandler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// check for valid session with valid csrf token
-	if valid, err := h.sessionService.IsValidCsrf(cmd.Session, cmd.Csrf); !valid {
+	if valid, err := h.uxSession.IsValidCsrf(cmd.Session, cmd.Csrf); !valid {
 		h.logger.Error("invalid session or csrf token", "err", err.Error())
-		h.sessionService.HandleSessionErr(err, w)
+		h.uxSession.HandleSessionErr(err, w)
 		return
 	}
 
 	// get service token
-	s2sToken, err := h.s2sProvider.GetServiceToken(util.ServiceUserIdentity)
+	s2sToken, err := h.s2sToken.GetServiceToken(util.ServiceUserIdentity)
 	if err != nil {
 		h.logger.Error("failed to retreive s2s token")
 		e := connect.ErrorHttp{
