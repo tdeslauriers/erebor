@@ -134,7 +134,7 @@ func New(config config.Config) (Gateway, error) {
 	if !ok {
 		return nil, fmt.Errorf("not an ECDSA public key")
 	}
-	
+
 	// id token jwt verifier
 	identityVerifier := jwt.NewVerifier(config.ServiceName, publicKey)
 
@@ -147,6 +147,7 @@ func New(config config.Config) (Gateway, error) {
 		uxSession:    uxSession,
 		oAuth:        oAuth,
 		verifier:     identityVerifier,
+		cryptor:      cryptor,
 
 		logger: slog.Default().With(slog.String(util.PackageKey, util.PackageGateway)),
 	}, nil
@@ -163,6 +164,7 @@ type gateway struct {
 	uxSession    uxsession.Service
 	oAuth        oauth.Service
 	verifier     jwt.Verifier
+	cryptor      data.Cryptor
 
 	logger *slog.Logger
 }

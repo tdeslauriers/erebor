@@ -5,7 +5,7 @@ CREATE TABLE uxsession (
     session_index VARCHAR(128) NOT NULL,
     session_token VARCHAR(128) NOT NULL,
     csrf_token VARCHAR(128) NOT NULL,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP NOT NULL DEFAULT UTC_TIMESTAMP,
     authenticated BOOLEAN NOT NULL,
     revoked BOOLEAN NOT NULL
 );
@@ -15,11 +15,14 @@ CREATE UNIQUE INDEX idx_session_index ON uxsession(session_index);
 CREATE TABLE accesstoken (
     uuid CHAR(36) PRIMARY KEY,
     access_token VARCHAR(2048) NOT NULL,
-    token_expires TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    access_expires TIMESTAMP NOT NULL DEFAULT UTC_TIMESTAMP,
+    access_revoked BOOLEAN NOT NULL,
     refresh_token CHAR(128) NOT NULL,
-    refresh_expires TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    refresh_expires TIMESTAMP NOT NULL DEFAULT UTC_TIMESTAMP
+    refresh_revoked BOOLEAN NOT NULL,
+    refresh_claimed BOOLEAN NOT NULL,
 );
-CREATE INDEX idx_accesstoken_servicename ON accesstoken(service_name);
+
 -- ux session to access token xref
 CREATE TABLE uxsession_accesstoken (
     id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
@@ -39,9 +42,10 @@ CREATE TABLE oauthflow (
     state VARCHAR(128) NOT NULL,
     client_id VARCHAR(128) NOT NULL,
     redirect_url VARCHAR(2048) NOT NULL,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP NOT NULL DEFAULT UTC_TIMESTAMP
 );
 CREATE UNIQUE INDEX idx_state_index ON oauthflow(state_index);
+
 -- ux session to oauth flow xref
 CREATE TABLE uxsession_oauthflow (
     id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,

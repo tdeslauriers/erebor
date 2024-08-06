@@ -127,26 +127,26 @@ func (h *callbackHandler) HandleCallback(w http.ResponseWriter, r *http.Request)
 	}
 
 	var (
-		wg      sync.WaitGroup
-		errChan = make(chan error, 2)
+		wgVerify      sync.WaitGroup
+		errVerifyChan = make(chan error, 2)
 
-		idToken     *jwt.Token
-		accessToken *jwt.Token
+		idToken     jwt.Token
+		accessToken jwt.Token
 	)
 
-	wg.Add(2)
-	go h.verify(access.IdToken, ErrVerifyIdToken, idToken, errChan, &wg)
-	go h.verify(access.AccessToken, ErrVerifyAccessToken, accessToken, errChan, &wg)
+	wgVerify.Add(2)
+	go h.verify(access.IdToken, ErrVerifyIdToken, &idToken, errVerifyChan, &wgVerify)
+	go h.verify(access.AccessToken, ErrVerifyAccessToken, &accessToken, errVerifyChan, &wgVerify)
 
-	wg.Wait()
-	close(errChan)
+	wgVerify.Wait()
+	close(errVerifyChan)
 
-	if len(errChan) > 0 {
+	if len(errVerifyChan) > 0 {
 		var builder strings.Builder
 		count := 0
-		for err := range errChan {
+		for err := range errVerifyChan {
 			builder.WriteString(err.Error())
-			if count < len(errChan)-1 {
+			if count < len(errVerifyChan)-1 {
 				builder.WriteString("; ")
 			}
 			count++
@@ -162,21 +162,89 @@ func (h *callbackHandler) HandleCallback(w http.ResponseWriter, r *http.Request)
 
 	render := h.buildRender(accessToken.Claims.Audience)
 
-	// update the user session
-	session, err := h.uxSession.Build(uxsession.Authenticated)
-	if err != nil {
-		h.logger.Error("failed to create session", "err", err.Error())
+	var (
+		wgPersist sync.WaitGroup
+
+		session uxsession.UxSession
+		token   uxsession.AccessToken
+
+		errPersistChan = make(chan error, 2)
+	)
+
+	wgPersist.Add(1)
+	go func(session *uxsession.UxSession, ch chan error, wg *sync.WaitGroup) {
+		defer wgPersist.Done()
+
+		// build and persist new authenticated session
+		s, err := h.uxSession.Build(uxsession.Authenticated)
+		if err != nil {
+			ch <- fmt.Errorf("failed to create session: %v", err)
+			return
+		}
+
+		*session = *s
+	}(&session, errPersistChan, &wgPersist)
+
+	// persist access/refresh tokens
+	wgPersist.Add(1)
+	go func(access *provider.UserAuthorization, tok *uxsession.AccessToken, ch chan error, wg *sync.WaitGroup) {
+		defer wgPersist.Done()
+
+		a, err := h.uxSession.BuildToken(access)
+		if err != nil {
+			ch <- fmt.Errorf("failed to persist access token: %v", err)
+			return
+		}
+
+		*tok = *a
+
+	}(&access, &token, errPersistChan, &wgPersist)
+
+	wgPersist.Wait()
+	close(errPersistChan)
+
+	if len(errPersistChan) > 0 {
+		var builder strings.Builder
+		count := 0
+		for err := range errPersistChan {
+			builder.WriteString(err.Error())
+			if count < len(errPersistChan)-1 {
+				builder.WriteString("; ")
+			}
+			count++
+		}
+		h.logger.Error("failed to build authenticated session", "err", builder.String())
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusInternalServerError,
-			Message:    "failed to create user session",
+			Message:    "failed to persist callback session",
 		}
 		e.SendJsonErr(w)
 		return
 	}
 
-	// TODO: persist the authenticated session, access/refresh tokens, and xref
+	// perist xref between session and access/refresh tokens
+	xref := uxsession.SessionAccessXref{
+		UxsessionId:   session.Id,
+		AccessTokenId: token.Id,
+	}
 
-	// TODO: invalidate the unauthenticated session
+	if err := h.uxSession.PersistXref(xref); err != nil {
+		h.logger.Error("failed to persist session access xref", "err", err.Error())
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusInternalServerError,
+			Message:    "failed to persist session access xref",
+		}
+		e.SendJsonErr(w)
+		return
+	}
+
+	// revoked the old anonymous session token so it can no longer be used
+	// this does not need to succeed, so do not waiting for the response
+	go func(session string) {
+		if err := h.uxSession.RevokeSession(session); err != nil {
+			h.logger.Error("failed to revoke anonymous session token", "err", err.Error())
+		}
+	}(cmd.Session)
 
 	// return authentication data
 	response := CallbackResponse{
@@ -190,6 +258,18 @@ func (h *callbackHandler) HandleCallback(w http.ResponseWriter, r *http.Request)
 		// Birthdate: idToken.Claims.Birthdate,
 
 		Ux: render,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		h.logger.Error("failed to encode callback response to json", "err", err.Error())
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusInternalServerError,
+			Message:    "failed to encode callback response to json",
+		}
+		e.SendJsonErr(w)
+		return
 	}
 }
 

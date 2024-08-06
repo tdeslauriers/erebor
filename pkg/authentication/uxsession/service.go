@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -45,6 +46,10 @@ type SessionService interface {
 
 	// ValidateCsrt validates the csrf token provided is attached to the session token.
 	IsValidCsrf(session, csrf string) (bool, error)
+
+	// RevokeSession revokes the session and all associated access tokens if they exist.
+	// Note: this will often be used to revoke the anonymous session upon successful login.
+	RevokeSession(session string) error
 }
 
 type SessionErrService interface {
@@ -54,6 +59,7 @@ type SessionErrService interface {
 
 type Service interface {
 	SessionService
+	TokenService
 	SessionErrService
 }
 
@@ -79,64 +85,106 @@ type service struct {
 	logger *slog.Logger
 }
 
-const (
-	// 422
-	ErrInvalidSession = "invalid or not well formed session token"
-	ErrInvalidCsrf    = "invalid or not well formed csrf token"
-
-	// 401
-	ErrSessionRevoked  = "session is revoked"
-	ErrSessionExpired  = "session is expired"
-	ErrSessionNotFound = "session not found"
-
-	ErrCsrfMismatch = "decryped csrf token does not match csrf provided"
-
-	// 500
-	ErrGenSessionUuid         = "failed to generate session uuid"
-	ErrGenSessionToken        = "failed to generate session token"
-	ErrGenIndex        string = "failed to generate session index"
-	ErrGenCsrfToken           = "failed to generate csrf token"
-
-	ErrEncryptSession = "failed to encrypt session token"
-	ErrEncryptCsrf    = "failed to encrypt csrf token"
-
-	ErrDecryptSession = "failed to decrypt session token"
-	ErrDecryptCsrf    = "failed to decrypt csrf token"
-)
-
 func (s *service) Build(st UxSessionType) (*UxSession, error) {
 
-	id, err := uuid.NewRandom()
-	if err != nil {
-		return nil, fmt.Errorf("%s: %v", ErrGenSessionUuid, err)
-	}
+	var (
+		wg sync.WaitGroup
 
-	// session token
-	token, err := uuid.NewRandom()
-	if err != nil {
-		return nil, fmt.Errorf("%s %v", ErrGenSessionToken, err)
-	}
+		id             uuid.UUID
+		token          uuid.UUID
+		index          string
+		encryptedToken string
+		csrf           uuid.UUID
+		encryptedCsrf  string
 
-	encryptedToken, err := s.cryptor.EncryptServiceData(token.String())
-	if err != nil {
-		return nil, fmt.Errorf("%s: %v", ErrEncryptSession, err)
-	}
+		errChan = make(chan error, 3)
+	)
 
-	// create session index for later retrieval
-	index, err := s.indexer.ObtainBlindIndex(token.String())
-	if err != nil {
-		return nil, fmt.Errorf("%s: %v", ErrGenIndex, err)
-	}
+	// create primary key
+	wg.Add(1)
+	go func(id *uuid.UUID, ch chan error, wg *sync.WaitGroup) {
+		defer wg.Done()
 
-	// csrf token
-	csrf, err := uuid.NewRandom()
-	if err != nil {
-		return nil, fmt.Errorf("%s: %v", ErrGenCsrfToken, err)
-	}
+		i, err := uuid.NewRandom()
+		if err != nil {
+			ch <- fmt.Errorf("%s: %v", ErrGenSessionUuid, err)
+			return
+		}
+		*id = i
+	}(&id, errChan, &wg)
 
-	encryptedCsrf, err := s.cryptor.EncryptServiceData(csrf.String())
-	if err != nil {
-		return nil, fmt.Errorf("%s: %v", ErrDecryptCsrf, err)
+	// create session token
+	wg.Add(1)
+	go func(token *uuid.UUID, index, encrypted *string, ch chan error, wg *sync.WaitGroup) {
+		defer wg.Done()
+
+		t, err := uuid.NewRandom()
+		if err != nil {
+			ch <- fmt.Errorf("%s: %v", ErrGenSessionToken, err)
+			return
+		}
+
+		*token = t
+
+		// create session index for later retrieval
+		i, err := s.indexer.ObtainBlindIndex(t.String())
+		if err != nil {
+			ch <- fmt.Errorf("%s: %v", ErrGenIndex, err)
+			return
+		}
+
+		*index = i
+
+		// encrypt session token
+		e, err := s.cryptor.EncryptServiceData(t.String())
+		if err != nil {
+			ch <- fmt.Errorf("%s: %v", ErrEncryptSession, err)
+			return
+		}
+
+		*encrypted = e
+
+	}(&token, &index, &encryptedToken, errChan, &wg)
+
+	// create csrf token
+	wg.Add(1)
+	go func(csrf *uuid.UUID, encrypted *string, ch chan error, wg *sync.WaitGroup) {
+		defer wg.Done()
+
+		c, err := uuid.NewRandom()
+		if err != nil {
+			ch <- fmt.Errorf("%s: %v", ErrGenCsrfToken, err)
+			return
+		}
+
+		*csrf = c
+
+		// encrypt csrf token
+		e, err := s.cryptor.EncryptServiceData(c.String())
+		if err != nil {
+			ch <- fmt.Errorf("%s: %v", ErrEncryptCsrf, err)
+			return
+		}
+
+		*encrypted = e
+
+	}(&csrf, &encryptedCsrf, errChan, &wg)
+
+	wg.Wait()
+	close(errChan)
+
+	// check for errors
+	if len(errChan) > 0 {
+		var builder strings.Builder
+		count := 0
+		for err := range errChan {
+			builder.WriteString(err.Error())
+			if count < len(errChan)-1 {
+				builder.WriteString("; ")
+			}
+			count++
+		}
+		return nil, fmt.Errorf("failed to build session: %s", builder.String())
 	}
 
 	curretnTime := time.Now()
@@ -198,16 +246,32 @@ func (s *service) GetCsrf(session string) (*UxSession, error) {
 		return nil, fmt.Errorf("session id %s: %s", uxSession.Id, ErrSessionExpired)
 	}
 
-	// decrypt session token
-	sessionToken, err := s.cryptor.DecryptServiceData(uxSession.SessionToken)
-	if err != nil {
-		return nil, fmt.Errorf("sesion id %s - %s: %v", uxSession.Id, ErrDecryptSession, err)
-	}
+	var (
+		wg      sync.WaitGroup
+		errChan = make(chan error, 2)
 
-	// decrypt csrf token
-	csrfToken, err := s.cryptor.DecryptServiceData(uxSession.CsrfToken)
-	if err != nil {
-		return nil, fmt.Errorf("session id %s - %s: %v", uxSession.Id, ErrDecryptCsrf, err)
+		sessionToken string
+		csrfToken    string
+	)
+
+	wg.Add(2)
+	go s.decrypt(uxSession.SessionToken, &sessionToken, errChan, &wg)
+	go s.decrypt(uxSession.CsrfToken, &csrfToken, errChan, &wg)
+
+	wg.Wait()
+	close(errChan)
+
+	if len(errChan) > 0 {
+		var builder strings.Builder
+		count := 0
+		for err := range errChan {
+			builder.WriteString(err.Error())
+			if count < len(errChan)-1 {
+				builder.WriteString("; ")
+			}
+			count++
+		}
+		return nil, fmt.Errorf("failed to get csrf token: %s", builder.String())
 	}
 
 	return &UxSession{
@@ -216,6 +280,18 @@ func (s *service) GetCsrf(session string) (*UxSession, error) {
 		CreatedAt:     uxSession.CreatedAt,
 		Authenticated: uxSession.Authenticated,
 	}, nil
+}
+
+func (s *service) decrypt(encrypted string, decrypted *string, ch chan error, wg *sync.WaitGroup) {
+	defer wg.Done()
+
+	d, err := s.cryptor.DecryptServiceData(encrypted)
+	if err != nil {
+		ch <- fmt.Errorf("failed to decrypt: %v", err)
+		return
+	}
+
+	*decrypted = d
 }
 
 // implements ValidateCsrf of Service interface
@@ -299,6 +375,27 @@ func (s *service) IsValidCsrf(session, csrf string) (bool, error) {
 	}()
 
 	return true, nil
+}
+
+func (s *service) RevokeSession(session string) error {
+
+	// light weight input validation
+	if len(session) < 16 || len(session) > 64 {
+		return errors.New(ErrInvalidSession)
+	}
+
+	// build session index
+	index, err := s.indexer.ObtainBlindIndex(session)
+	if err != nil {
+		return fmt.Errorf("%s from provided session token xxxxxx-%s: %v", ErrGenIndex, session[len(session)-6:], err)
+	}
+
+	qry := "UPDATE uxsession SET revoked = ? WHERE session_index = ?"
+	if err := s.db.UpdateRecord(qry, true, index); err != nil {
+		return fmt.Errorf("failed to revok session xxxxxx-%s: %v", session[len(session)-6:], err)
+	}
+
+	return nil
 }
 
 // helper function to handle session errors in a consistent way
