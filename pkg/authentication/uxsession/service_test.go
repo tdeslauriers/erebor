@@ -87,8 +87,10 @@ func (dao *mockSqlRepository) SelectRecord(query string, record interface{}, arg
 func (dao *mockSqlRepository) SelectExists(query string, args ...interface{}) (bool, error) {
 	return true, nil
 }
-func (dao *mockSqlRepository) InsertRecord(query string, record interface{}) error  { return nil }
-func (dao *mockSqlRepository) UpdateRecord(query string, args ...interface{}) error { return nil }
+func (dao *mockSqlRepository) InsertRecord(query string, record interface{}) error { return nil }
+func (dao *mockSqlRepository) UpdateRecord(query string, args ...interface{}) error {
+	return nil
+}
 func (dao *mockSqlRepository) DeleteRecord(query string, args ...interface{}) error { return nil }
 func (dao *mockSqlRepository) Close() error                                         { return nil }
 
@@ -105,6 +107,9 @@ func (c *mockCryptor) DecryptServiceData(encrypted string) (string, error) {
 type mockIndexer struct{}
 
 func (i *mockIndexer) ObtainBlindIndex(record string) (string, error) {
+	if record == "failed-index-generation" {
+		return "", errors.New(ErrGenIndex)
+	}
 	return fmt.Sprintf("index-%s", record), nil
 }
 
@@ -336,6 +341,50 @@ func TestIsValidCsrf(t *testing.T) {
 					t.Errorf("test failed: expected error '%v' to contain '%v'", err, tc.err.Error())
 				}
 
+			}
+		})
+	}
+}
+
+func TestRevokeSession(t *testing.T) {
+
+	testCases := []struct {
+		name    string
+		session string
+		err     error
+	}{
+		{
+			name:    "success - session revoked",
+			session: TestValidSession,
+			err:     nil,
+		},
+		{
+			name:    "invalid session - empty session token",
+			session: "",
+			err:     errors.New(ErrInvalidSession),
+		},
+		{
+			name:    "invalid session - too long session token",
+			session: "this-session-token-is-too-long-to-be-valid-and-should-return-an-error",
+			err:     errors.New(ErrInvalidSession),
+		},
+		{
+			name:    "invalid session - failed index",
+			session: "failed-index-generation",
+			err:     errors.New(ErrGenIndex),
+		},
+		// stmt.Exec(args...) returns successfully even when no rows are affected by returning the count as zero, not an error
+		// carapace's current impl dumps the row count.
+	}
+
+	sessionSvc := NewService(&mockSqlRepository{}, &mockIndexer{}, &mockCryptor{})
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := sessionSvc.RevokeSession(tc.session)
+			if err != nil {
+				if !strings.Contains(err.Error(), tc.err.Error()) {
+					t.Errorf("test failed: expected error '%v' to contain '%v'", err, tc.err.Error())
+				}
 			}
 		})
 	}

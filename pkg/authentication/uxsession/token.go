@@ -14,7 +14,7 @@ import (
 // particularly in relation to the authenticated uxsession.
 type TokenService interface {
 	// Build creates a new AccessToken record, persisting it to the database, and returns the struct.
-	BuildToken(access *provider.UserAuthorization) (*AccessToken, error)
+	PersistToken(access *provider.UserAuthorization) (*AccessToken, error)
 
 	// PersistXref persists the xref between the authenticated uxsession and the access token.
 	PersistXref(xref SessionAccessXref) error
@@ -22,19 +22,15 @@ type TokenService interface {
 
 // this interface is implemented by the service object in serivic.go
 // I am breaking this out to an interface for readability and to make it easier to test
-func (s *service) BuildToken(access *provider.UserAuthorization) (*AccessToken, error) {
+func (s *service) PersistToken(access *provider.UserAuthorization) (*AccessToken, error) {
 
 	// create primary key for access token
 	id, err := uuid.NewRandom()
 	if err != nil {
-		return nil, fmt.Errorf("failed to create primary key for access token: %v", err)
+		return nil, fmt.Errorf("%s for access token: %v", ErrGenPrimaryKey, err)
 	}
 
-	if err := s.fieldLevelEncrypt(access); err != nil {
-		return nil, errors.New(err.Error())
-	}
-
-	// persist access token
+	// create new access token record
 	persist := AccessToken{
 		Id:             id.String(),
 		AccessToken:    access.AccessToken, // encrypted above
@@ -46,6 +42,11 @@ func (s *service) BuildToken(access *provider.UserAuthorization) (*AccessToken, 
 		RefreshClaimed: false,
 	}
 
+	// encrypt access and refresh tokens
+	if err := s.fieldLevelEncrypt(&persist); err != nil {
+		return nil, errors.New(err.Error())
+	}
+
 	qry := `INSERT INTO access_tokens (uuid, access_token, access_expires, access_revoked, refresh_token, refresh_expires, refresh_revoked, refresh_claimed) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
 	if err := s.db.InsertRecord(qry, persist); err != nil {
 		return nil, fmt.Errorf("failed to persist access token: %v", err)
@@ -54,7 +55,9 @@ func (s *service) BuildToken(access *provider.UserAuthorization) (*AccessToken, 
 	return &persist, nil
 }
 
-func (s *service) fieldLevelEncrypt(access *provider.UserAuthorization) error {
+// fieldLevelEncrypt is a helper function which encrypts the access and refresh tokens
+// and can be updated to encrypt other fields as needed.
+func (s *service) fieldLevelEncrypt(access *AccessToken) error {
 
 	var (
 		wgEncrypt      sync.WaitGroup
@@ -65,8 +68,8 @@ func (s *service) fieldLevelEncrypt(access *provider.UserAuthorization) error {
 	)
 
 	wgEncrypt.Add(2)
-	go s.encrypt(access.AccessToken, &encryptedAccess, errEncryptChan, &wgEncrypt)
-	go s.encrypt(access.Refresh, &encryptedRefresh, errEncryptChan, &wgEncrypt)
+	go s.encrypt(access.AccessToken, ErrEncryptAccessToken, &encryptedAccess, errEncryptChan, &wgEncrypt)
+	go s.encrypt(access.RefreshToken, ErrEncryptRefreshToken, &encryptedRefresh, errEncryptChan, &wgEncrypt)
 
 	wgEncrypt.Wait()
 	close(errEncryptChan)
@@ -87,28 +90,38 @@ func (s *service) fieldLevelEncrypt(access *provider.UserAuthorization) error {
 
 	// replace access and refresh tokens with encrypted values
 	access.AccessToken = encryptedAccess
-	access.Refresh = encryptedRefresh
+	access.RefreshToken = encryptedRefresh
 
 	return nil
 }
 
-func (h *service) encrypt(plaintext string, encrypted *string, ch chan error, wg *sync.WaitGroup) {
+// encrypt is a helper function which encrypts the plaintext string and returns the encrypted string.
+func (h *service) encrypt(plaintext, errMsg string, encrypted *string, ch chan error, wg *sync.WaitGroup) {
 
 	defer wg.Done()
 
 	enc, err := h.cryptor.EncryptServiceData(plaintext)
 	if err != nil {
-		ch <- fmt.Errorf("failed to encrypt service data: %v", err)
+		ch <- fmt.Errorf("%s: %v", errMsg, err)
 		return
 	}
 
 	*encrypted = enc
-
 }
 
+// PersistXref persists the xref between the authenticated uxsession and the access token.
 func (s *service) PersistXref(xref SessionAccessXref) error {
 
-	qry := `INSERT INTO uxsession_access_tokens (uxsession_id, access_token_id) VALUES (?, ?)`
+	// lightweight input validation: redundant, but good practice
+	if xref.UxsessionId == "" || len(xref.UxsessionId) > 64 {
+		return fmt.Errorf("failed to persist uxsession_access_token xref: %v", ErrInvalidSessionId)
+	}
+
+	if xref.AccessTokenId == "" || len(xref.AccessTokenId) > 64 {
+		return fmt.Errorf("failed to persist uxsession_access_token xref: %v", ErrInvalidAccessTokenId)
+	}
+
+	qry := `INSERT INTO uxsession_accesstokens (uxsession_id, accesstoken_id) VALUES (?, ?)`
 	if err := s.db.InsertRecord(qry, xref); err != nil {
 		return fmt.Errorf("failed to persist uxsession_access_token xref: %v", err)
 	}

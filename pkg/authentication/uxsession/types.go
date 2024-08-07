@@ -15,16 +15,25 @@ const (
 	ErrCsrfMismatch = "decryped csrf token does not match csrf provided"
 
 	// 500
+	ErrGenPrimaryKey          = "failed to generate primary key"
 	ErrGenSessionUuid         = "failed to generate session uuid"
 	ErrGenSessionToken        = "failed to generate session token"
 	ErrGenIndex        string = "failed to generate session index"
 	ErrGenCsrfToken           = "failed to generate csrf token"
 
-	ErrEncryptSession = "failed to encrypt session token"
-	ErrEncryptCsrf    = "failed to encrypt csrf token"
+	ErrEncryptSession      = "failed to encrypt session token"
+	ErrEncryptCsrf         = "failed to encrypt csrf token"
+	ErrEncryptAccessToken  = "failed to encrypt access token"
+	ErrEncryptRefreshToken = "failed to encrypt refresh token"
 
-	ErrDecryptSession = "failed to decrypt session token"
-	ErrDecryptCsrf    = "failed to decrypt csrf token"
+	ErrDecryptSession      = "failed to decrypt session token"
+	ErrDecryptCsrf         = "failed to decrypt csrf token"
+	ErrDecryptAccessToken  = "failed to decrypt access token"
+	ErrDecryptRefreshToken = "failed to decrypt refresh token"
+
+	// returns a 500 because these values are not user provided -> system error
+	ErrInvalidSessionId     = "invalid or not well formed session id"
+	ErrInvalidAccessTokenId = "invalid or not well formed access token id"
 )
 
 // AccessToken is a model for the database record that persists

@@ -190,7 +190,7 @@ func (h *callbackHandler) HandleCallback(w http.ResponseWriter, r *http.Request)
 	go func(access *provider.UserAuthorization, tok *uxsession.AccessToken, ch chan error, wg *sync.WaitGroup) {
 		defer wgPersist.Done()
 
-		a, err := h.uxSession.BuildToken(access)
+		a, err := h.uxSession.PersistToken(access)
 		if err != nil {
 			ch <- fmt.Errorf("failed to persist access token: %v", err)
 			return
@@ -244,6 +244,7 @@ func (h *callbackHandler) HandleCallback(w http.ResponseWriter, r *http.Request)
 		if err := h.uxSession.RevokeSession(session); err != nil {
 			h.logger.Error("failed to revoke anonymous session token", "err", err.Error())
 		}
+		h.logger.Info("successfully revoked anonymous session token")
 	}(cmd.Session)
 
 	// return authentication data

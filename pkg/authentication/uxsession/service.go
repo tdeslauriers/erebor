@@ -377,6 +377,8 @@ func (s *service) IsValidCsrf(session, csrf string) (bool, error) {
 	return true, nil
 }
 
+// RevokeSession revokes the session
+// Note: does not revoke access tokens or refresh tokens, that is done in the identity service
 func (s *service) RevokeSession(session string) error {
 
 	// light weight input validation
