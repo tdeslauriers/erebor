@@ -240,12 +240,12 @@ func (h *callbackHandler) HandleCallback(w http.ResponseWriter, r *http.Request)
 
 	// revoked the old anonymous session token so it can no longer be used
 	// this does not need to succeed, so do not waiting for the response
-	go func(session string) {
-		if err := h.uxSession.RevokeSession(session); err != nil {
-			h.logger.Error("failed to revoke anonymous session token", "err", err.Error())
-		}
-		h.logger.Info("successfully revoked anonymous session token")
-	}(cmd.Session)
+	// go func(session string) {
+	// 	if err := h.uxSession.RevokeSession(session); err != nil {
+	// 		h.logger.Error("failed to revoke anonymous session token", "err", err.Error())
+	// 	}
+	// 	h.logger.Info("successfully revoked anonymous session token")
+	// }(cmd.Session)
 
 	// return authentication data
 	response := CallbackResponse{
@@ -262,7 +262,7 @@ func (h *callbackHandler) HandleCallback(w http.ResponseWriter, r *http.Request)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
+
 	if err := json.NewEncoder(w).Encode(response); err != nil {
 		h.logger.Error("failed to encode callback response to json", "err", err.Error())
 		e := connect.ErrorHttp{

@@ -123,7 +123,7 @@ func New(config config.Config) (Gateway, error) {
 	// format public key for use in jwt verification
 	pubPem, err := base64.StdEncoding.DecodeString(config.Jwt.UserVerifyingKey)
 	if err != nil {
-		return nil, fmt.Errorf("failed to decode s2s jwt-verifying public key: %v", err)
+		return nil, fmt.Errorf("failed to decode user jwt-verifying public key: %v", err)
 	}
 	pubBlock, _ := pem.Decode(pubPem)
 	genericPublicKey, err := x509.ParsePKIXPublicKey(pubBlock.Bytes)

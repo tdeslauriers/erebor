@@ -187,7 +187,7 @@ func (s *service) Build(st UxSessionType) (*UxSession, error) {
 		return nil, fmt.Errorf("failed to build session: %s", builder.String())
 	}
 
-	curretnTime := time.Now()
+	curretnTime := time.Now().UTC()
 
 	persist := UxSession{
 		Id:            id.String(),
@@ -204,11 +204,14 @@ func (s *service) Build(st UxSessionType) (*UxSession, error) {
 		return nil, err
 	}
 
-	// only returning values needed by FE
 	return &UxSession{
+		Id:            id.String(),
+		Index:         index,
 		SessionToken:  token.String(),
+		CsrfToken:     csrf.String(),
 		CreatedAt:     data.CustomTime{Time: curretnTime},
 		Authenticated: bool(st),
+		Revoked:       false,
 	}, nil
 }
 

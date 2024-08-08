@@ -62,7 +62,7 @@ func (h *handler) HandleGetSession(w http.ResponseWriter, r *http.Request) {
 	// respond with anonymous session
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	if err := json.NewEncoder(w).Encode(session); err != nil {
+	if err := json.NewEncoder(w).Encode(&UxSession{SessionToken: session.SessionToken, CreatedAt: session.CreatedAt, Authenticated: false}); err != nil {
 		h.logger.Error("failed to encode session to json", "err", err.Error())
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusInternalServerError,

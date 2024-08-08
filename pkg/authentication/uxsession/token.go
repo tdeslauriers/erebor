@@ -47,7 +47,7 @@ func (s *service) PersistToken(access *provider.UserAuthorization) (*AccessToken
 		return nil, errors.New(err.Error())
 	}
 
-	qry := `INSERT INTO access_tokens (uuid, access_token, access_expires, access_revoked, refresh_token, refresh_expires, refresh_revoked, refresh_claimed) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+	qry := `INSERT INTO accesstoken (uuid, access_token, access_expires, access_revoked, refresh_token, refresh_expires, refresh_revoked, refresh_claimed) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
 	if err := s.db.InsertRecord(qry, persist); err != nil {
 		return nil, fmt.Errorf("failed to persist access token: %v", err)
 	}
@@ -121,7 +121,7 @@ func (s *service) PersistXref(xref SessionAccessXref) error {
 		return fmt.Errorf("failed to persist uxsession_access_token xref: %v", ErrInvalidAccessTokenId)
 	}
 
-	qry := `INSERT INTO uxsession_accesstokens (uxsession_id, accesstoken_id) VALUES (?, ?)`
+	qry := `INSERT INTO uxsession_accesstoken (id, uxsession_uuid, accesstoken_uuid) VALUES (?, ?, ?)`
 	if err := s.db.InsertRecord(qry, xref); err != nil {
 		return fmt.Errorf("failed to persist uxsession_access_token xref: %v", err)
 	}

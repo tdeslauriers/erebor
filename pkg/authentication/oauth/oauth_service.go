@@ -86,7 +86,7 @@ func (s *service) Obtain(sessionToken string) (*OauthExchange, error) {
 			o.state, 
 			o.client_id, 
 			o.redirect_url, 
-			o.created_at,
+			o.created_at
 		FROM oauthflow o 
 			LEFT OUTER JOIN uxsession_oauthflow uo ON o.uuid = uo.oauthflow_uuid
 			LEFT OUTER JOIN uxsession u ON uo.uxsession_uuid = u.uuid
@@ -393,7 +393,7 @@ func (s *service) Validate(cmd types.AuthCodeCmd) error {
 			o.state, 
 			o.client_id, 
 			o.redirect_url, 
-			o.created_at,
+			o.created_at
 		FROM oauthflow o 
 			LEFT OUTER JOIN uxsession_oauthflow uo ON o.uuid = uo.oauthflow_uuid
 			LEFT OUTER JOIN uxsession u ON uo.uxsession_uuid = u.uuid
