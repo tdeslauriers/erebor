@@ -50,7 +50,7 @@ func (h *handler) HandleGetState(w http.ResponseWriter, r *http.Request) {
 	var cmd SessionCmd
 	err := json.NewDecoder(r.Body).Decode(&cmd)
 	if err != nil {
-		h.logger.Error("unable to decode session_token json in the request body", "err", err.Error())
+		h.logger.Error("failed to decode session_token json in the request body", "err", err.Error())
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusBadRequest,
 			Message:    "improperly formatted json for session token",
