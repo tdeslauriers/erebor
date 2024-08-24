@@ -1,9 +1,7 @@
 package authentication
 
-const (
-	ErrVerifyAccessToken = "failed to verify/build access token"
-	ErrVerifyIdToken     = "unable to verify/build id token"
-)
+import "fmt"
+
 
 // CallbackResponse is a struct that is used to return the callback authentication response to the client
 // The session should be an authenticated session token that is linked to the access/refresh tokens
@@ -14,8 +12,8 @@ type CallbackResponse struct {
 	Authenticated bool   `json:"authenticated"` // convenience only, not proof of authentication
 	Username      string `json:"username"`
 	Fullname      string `json:"fullname"`
-	Firstname     string `json:"firstname"`
-	Lastname      string `json:"lastname"`
+	GivenName     string `json:"given_name"`
+	FamilyName    string `json:"family_name"`
 	Birthdate     string `json:"birthdate,omitempty"`
 
 	Ux Render `json:"access,omitempty"`
@@ -33,4 +31,17 @@ type Render struct {
 	Gallery    bool `json:"gallery_access,omitempty"`
 	Judo       bool `json:"judo_access,omitempty"`
 	FaimlyTree bool `json:"familytree_access,omitempty"`
+}
+
+// LogoutCmd is a struct that is used to logout the user from their active session.
+type LogoutCmd struct {
+	Session string `json:"session"`
+}
+
+// ValidateCmd is a method that is used to validate the logout command.
+func (c *LogoutCmd) ValidateCmd() error {
+	if len(c.Session) < 16 || len(c.Session) > 64 {
+		return fmt.Errorf("session token is required")
+	}
+	return nil
 }

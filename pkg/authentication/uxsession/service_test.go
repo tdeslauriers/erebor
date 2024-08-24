@@ -4,12 +4,14 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"net/http"
 	"reflect"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/tdeslauriers/carapace/pkg/data"
+	"github.com/tdeslauriers/carapace/pkg/session/types"
 )
 
 const (
@@ -20,12 +22,114 @@ const (
 	TestRevokedSession = "revoked-session-token"
 	TestExpiredSession = "expired-session-token"
 	TestValidCsrf      = "valid-csrf-token"
+
+	// test cases for DestroySession
+	TestValidSessionNoAccessTokens          = "valid-session-uuid-no-access-tokens"
+	TestValidSessionWithAccessTokens        = "valid-session-uuid-with-access-tokens"
+	TestValidSessionNoOauthFlows            = "valid-session-uuid-no-oauthflows"
+	TestValidSessionWithOauthFlows          = "valid-session-uuid-with-oauthflows"
+	TestValidSessionFailDeleteAccessTokens  = "valid-session-uuid-fail-delete-access-tokens"
+	TestValidSessionFailDeleteOauthExchange = "valid-session-uuid-fail-delete-oauth-exchange"
+	TestValidSessionFailDecryptRefreshToken = "valid-session-uuid-fail-decrypt-refresh-token"
+
+	TestValidSessionFailCallS2s                = "valid-session-uuid-fail-call-s2s"
+	TestValidSessionFailDeleteAccessTokensXref = "valid-session-uuid-fail-delete-access-tokens-xref"
+	TestValidSessionFailDeleteOauthflowXref    = "valid-session-uuid-fail-delete-oauthflow-xref"
+	TestValidSessionFailDeleteUxsession        = "valid-session-uuid-fail-delete-uxsession"
 )
 
 type mockSqlRepository struct{}
 
 func (dao *mockSqlRepository) SelectRecords(query string, records interface{}, args ...interface{}) error {
-	return nil
+	switch r := records.(type) {
+	case *[]LiveAccessToken:
+
+		if args[0] == TestValidSessionWithAccessTokens {
+
+			// slice is declared, will have one element
+			*records.(*[]LiveAccessToken) = []LiveAccessToken{
+				{
+					Id:            123,
+					UxsessionId:   "valid-uxsession-uuid",
+					AccessTokenId: "valid-accesstoken-uuid",
+					RefreshToken:  "encrypted-valid-refresh-token",
+				},
+			}
+		} else if args[0] == TestValidSessionFailDeleteAccessTokens {
+			// slice is declared, will have one element
+			*records.(*[]LiveAccessToken) = []LiveAccessToken{
+				{
+					Id:            123,
+					UxsessionId:   "valid-uxsession-uuid",
+					AccessTokenId: "invalid-accesstoken-uuid",
+					RefreshToken:  "encrypted-valid-refresh-token",
+				},
+			}
+		} else if args[0] == TestValidSessionFailDecryptRefreshToken {
+			// slice is declared, will have one element
+			*records.(*[]LiveAccessToken) = []LiveAccessToken{
+				{
+					Id:            123,
+					UxsessionId:   "valid-uxsession-uuid",
+					AccessTokenId: "valid-accesstoken-uuid",
+					RefreshToken:  "invalid-refresh-token",
+				},
+			}
+		} else if args[0] == TestValidSessionFailCallS2s {
+			// slice is declared, will have one element
+			*records.(*[]LiveAccessToken) = []LiveAccessToken{
+				{
+					Id:            123,
+					UxsessionId:   "valid-uxsession-uuid",
+					AccessTokenId: "invalid-accesstoken-uuid",
+					RefreshToken:  "encrypted-invalid-refresh-token",
+				},
+			}
+		} else if args[0] == TestValidSessionFailDeleteAccessTokensXref {
+			// slice is declared, will have one element
+			*records.(*[]LiveAccessToken) = []LiveAccessToken{
+				{
+					Id:            456, // fail id number
+					UxsessionId:   "valid-uxsession-uuid",
+					AccessTokenId: "invalid-accesstoken-uuid",
+					RefreshToken:  "encrypted-invalid-refresh-token",
+				},
+			}
+		}
+		return nil
+	case *[]UxsesionOauthFlow:
+
+		if args[0] == TestValidSessionWithOauthFlows {
+
+			*records.(*[]UxsesionOauthFlow) = []UxsesionOauthFlow{
+				{
+					Id:              123,
+					UxsessionId:     "valid-uxsession-uuid",
+					OauthExchangeId: "valid-oauthexchange-uuid",
+				},
+			}
+		} else if args[0] == TestValidSessionFailDeleteOauthExchange {
+			*records.(*[]UxsesionOauthFlow) = []UxsesionOauthFlow{
+				{
+					Id:              123,
+					UxsessionId:     "valid-uxsession-uuid",
+					OauthExchangeId: TestValidSessionFailDeleteOauthExchange,
+				},
+			}
+		} else if args[0] == TestValidSessionFailDeleteOauthflowXref {
+			*records.(*[]UxsesionOauthFlow) = []UxsesionOauthFlow{
+				{
+					Id:              123,
+					UxsessionId:     "valid-uxsession-uuid",
+					OauthExchangeId: TestValidSessionFailDeleteOauthflowXref,
+				},
+			}
+		}
+		return nil
+	default:
+		return fmt.Errorf("unexpected record type: %T", r)
+	}
+
 }
 
 // mocks the SelectRecord method of the SqlRepository interface used by Validate Credentials func
@@ -49,6 +153,161 @@ func (dao *mockSqlRepository) SelectRecord(query string, record interface{}, arg
 			}
 		}
 		return nil
+	case "index-" + TestValidSessionNoAccessTokens:
+		testResults := []string{TestValidSessionNoAccessTokens, TestValidIndex, "encrypted-" + TestValidSession, "encrypted-" + TestValidCsrf}
+		for i := 0; i < uxsession.NumField(); i++ {
+			if i == 4 {
+				now := time.Now()
+				unexpired := now.Add(-30 * time.Minute)
+				uxsession.Field(i).Set(reflect.ValueOf(data.CustomTime{Time: unexpired}))
+			} else if i == 5 || i == 6 {
+				uxsession.Field(i).SetBool(false)
+			} else {
+				uxsession.Field(i).SetString(testResults[i])
+			}
+		}
+		return nil
+	case "index-" + TestValidSessionWithAccessTokens:
+		testResults := []string{TestValidSessionWithAccessTokens, TestValidIndex, "encrypted-" + TestValidSession, "encrypted-" + TestValidCsrf}
+		for i := 0; i < uxsession.NumField(); i++ {
+			if i == 4 {
+				now := time.Now()
+				unexpired := now.Add(-30 * time.Minute)
+				uxsession.Field(i).Set(reflect.ValueOf(data.CustomTime{Time: unexpired}))
+			} else if i == 5 || i == 6 {
+				uxsession.Field(i).SetBool(false)
+			} else {
+				uxsession.Field(i).SetString(testResults[i])
+			}
+		}
+		return nil
+	case "index-" + TestValidSessionNoOauthFlows:
+		testResults := []string{TestValidSessionNoOauthFlows, TestValidIndex, "encrypted-" + TestValidSession, "encrypted-" + TestValidCsrf}
+		for i := 0; i < uxsession.NumField(); i++ {
+			if i == 4 {
+				now := time.Now()
+				unexpired := now.Add(-30 * time.Minute)
+				uxsession.Field(i).Set(reflect.ValueOf(data.CustomTime{Time: unexpired}))
+			} else if i == 5 || i == 6 {
+				uxsession.Field(i).SetBool(false)
+			} else {
+				uxsession.Field(i).SetString(testResults[i])
+			}
+		}
+		return nil
+	case "index-" + TestValidSessionWithOauthFlows:
+		testResults := []string{TestValidSessionWithOauthFlows, TestValidIndex, "encrypted-" + TestValidSession, "encrypted-" + TestValidCsrf}
+		for i := 0; i < uxsession.NumField(); i++ {
+			if i == 4 {
+				now := time.Now()
+				unexpired := now.Add(-30 * time.Minute)
+				uxsession.Field(i).Set(reflect.ValueOf(data.CustomTime{Time: unexpired}))
+			} else if i == 5 || i == 6 {
+				uxsession.Field(i).SetBool(false)
+			} else {
+				uxsession.Field(i).SetString(testResults[i])
+			}
+		}
+		return nil
+	case "index-" + TestValidSessionFailDeleteAccessTokens:
+		testResults := []string{TestValidSessionFailDeleteAccessTokens, TestValidIndex, "encrypted-" + TestValidSession, "encrypted-" + TestValidCsrf}
+		for i := 0; i < uxsession.NumField(); i++ {
+			if i == 4 {
+				now := time.Now()
+				unexpired := now.Add(-30 * time.Minute)
+				uxsession.Field(i).Set(reflect.ValueOf(data.CustomTime{Time: unexpired}))
+			} else if i == 5 || i == 6 {
+				uxsession.Field(i).SetBool(false)
+			} else {
+				uxsession.Field(i).SetString(testResults[i])
+			}
+		}
+		return nil
+	case "index-" + TestValidSessionFailDeleteOauthExchange:
+		testResults := []string{TestValidSessionFailDeleteOauthExchange, TestValidIndex, "encrypted-" + TestValidSession, "encrypted-" + TestValidCsrf}
+		for i := 0; i < uxsession.NumField(); i++ {
+			if i == 4 {
+				now := time.Now()
+				unexpired := now.Add(-30 * time.Minute)
+				uxsession.Field(i).Set(reflect.ValueOf(data.CustomTime{Time: unexpired}))
+			} else if i == 5 || i == 6 {
+				uxsession.Field(i).SetBool(false)
+			} else {
+				uxsession.Field(i).SetString(testResults[i])
+			}
+		}
+		return nil
+	case "index-" + TestValidSessionFailDecryptRefreshToken:
+		testResults := []string{TestValidSessionFailDecryptRefreshToken, TestValidIndex, "encrypted-" + TestValidSession, "encrypted-" + TestValidCsrf}
+		for i := 0; i < uxsession.NumField(); i++ {
+			if i == 4 {
+				now := time.Now()
+				unexpired := now.Add(-30 * time.Minute)
+				uxsession.Field(i).Set(reflect.ValueOf(data.CustomTime{Time: unexpired}))
+			} else if i == 5 || i == 6 {
+				uxsession.Field(i).SetBool(false)
+			} else {
+				uxsession.Field(i).SetString(testResults[i])
+			}
+		}
+		return nil
+	case "index-" + TestValidSessionFailCallS2s:
+		testResults := []string{TestValidSessionFailCallS2s, TestValidIndex, "encrypted-" + TestValidSession, "encrypted-" + TestValidCsrf}
+		for i := 0; i < uxsession.NumField(); i++ {
+			if i == 4 {
+				now := time.Now()
+				unexpired := now.Add(-30 * time.Minute)
+				uxsession.Field(i).Set(reflect.ValueOf(data.CustomTime{Time: unexpired}))
+			} else if i == 5 || i == 6 {
+				uxsession.Field(i).SetBool(false)
+			} else {
+				uxsession.Field(i).SetString(testResults[i])
+			}
+		}
+		return nil
+	case "index-" + TestValidSessionFailDeleteAccessTokensXref:
+		testResults := []string{TestValidSessionFailDeleteAccessTokensXref, TestValidIndex, "encrypted-" + TestValidSession, "encrypted-" + TestValidCsrf}
+		for i := 0; i < uxsession.NumField(); i++ {
+			if i == 4 {
+				now := time.Now()
+				unexpired := now.Add(-30 * time.Minute)
+				uxsession.Field(i).Set(reflect.ValueOf(data.CustomTime{Time: unexpired}))
+			} else if i == 5 || i == 6 {
+				uxsession.Field(i).SetBool(false)
+			} else {
+				uxsession.Field(i).SetString(testResults[i])
+			}
+		}
+		return nil
+	case "index-" + TestValidSessionFailDeleteOauthflowXref:
+		testResults := []string{TestValidSessionFailDeleteOauthflowXref, TestValidIndex, "encrypted-" + TestValidSession, "encrypted-" + TestValidCsrf}
+		for i := 0; i < uxsession.NumField(); i++ {
+			if i == 4 {
+				now := time.Now()
+				unexpired := now.Add(-30 * time.Minute)
+				uxsession.Field(i).Set(reflect.ValueOf(data.CustomTime{Time: unexpired}))
+			} else if i == 5 || i == 6 {
+				uxsession.Field(i).SetBool(false)
+			} else {
+				uxsession.Field(i).SetString(testResults[i])
+			}
+		}
+		return nil
+	case "index-" + TestValidSessionFailDeleteUxsession:
+		testResults := []string{TestValidSessionFailDeleteUxsession, TestValidIndex, "encrypted-" + TestValidSession, "encrypted-" + TestValidCsrf}
+		for i := 0; i < uxsession.NumField(); i++ {
+			if i == 4 {
+				now := time.Now()
+				unexpired := now.Add(-30 * time.Minute)
+				uxsession.Field(i).Set(reflect.ValueOf(data.CustomTime{Time: unexpired}))
+			} else if i == 5 || i == 6 {
+				uxsession.Field(i).SetBool(true)
+			} else {
+				uxsession.Field(i).SetString(testResults[i])
+			}
+		}
+		return nil
+
 	case "index-" + TestInvalidSession:
 		return sql.ErrNoRows
 	case "index-" + TestRevokedSession:
@@ -91,8 +350,33 @@ func (dao *mockSqlRepository) InsertRecord(query string, record interface{}) err
 func (dao *mockSqlRepository) UpdateRecord(query string, args ...interface{}) error {
 	return nil
 }
-func (dao *mockSqlRepository) DeleteRecord(query string, args ...interface{}) error { return nil }
-func (dao *mockSqlRepository) Close() error                                         { return nil }
+func (dao *mockSqlRepository) DeleteRecord(query string, args ...interface{}) error {
+
+	if args[0] == TestValidSessionFailDeleteAccessTokens {
+		return errors.New(ErrDeleteAccessToken)
+	}
+
+	if args[0] == TestValidSessionFailDeleteOauthExchange {
+		return errors.New(ErrDeleteOauthExchange)
+
+	}
+
+	if args[0] == 456 {
+		return errors.New(ErrDeleteUxsessionAccesstokenXref)
+	}
+
+	if args[0] == TestValidSessionFailDeleteOauthExchange {
+		return errors.New(ErrDeleteOauthExchange)
+	}
+
+	if args[0] == TestValidSessionFailDeleteUxsession {
+		return errors.New("failed to delete authenticated(true) session")
+	}
+
+	return nil
+}
+
+func (dao *mockSqlRepository) Close() error { return nil }
 
 type mockCryptor struct{}
 
@@ -112,6 +396,28 @@ func (i *mockIndexer) ObtainBlindIndex(record string) (string, error) {
 	}
 	return fmt.Sprintf("index-%s", record), nil
 }
+
+type mockS2sProvider struct{}
+
+func (p *mockS2sProvider) GetServiceToken(svc string) (string, error) {
+	return "valid-access-token", nil
+}
+
+type mockS2sCaller struct{}
+
+func (m *mockS2sCaller) GetServiceData(endpoint, s2sToken, authToken string, data interface{}) error {
+	return nil
+}
+
+func (m *mockS2sCaller) PostToService(endpoint, s2sToken, authToken string, cmd interface{}, data interface{}) error {
+
+	if cmd.(types.DestroyRefreshCmd).DestroyRefreshToken == "invalid-refresh-token" {
+		return errors.New("call to identity service /refresh/destory endpoint failed")
+	}
+	return nil
+}
+
+func (m *mockS2sCaller) RespondUpstreamError(err error, w http.ResponseWriter) {}
 
 func TestBuildSession(t *testing.T) {
 
@@ -142,7 +448,7 @@ func TestBuildSession(t *testing.T) {
 		},
 	}
 
-	sessionSvc := NewService(&mockSqlRepository{}, &mockIndexer{}, &mockCryptor{})
+	sessionSvc := NewService(&mockSqlRepository{}, &mockIndexer{}, &mockCryptor{}, nil, nil)
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			session, err := sessionSvc.Build(tc.UxSessionType)
@@ -227,7 +533,7 @@ func TestGetCsrf(t *testing.T) {
 		},
 	}
 
-	sessionSvc := NewService(&mockSqlRepository{}, &mockIndexer{}, &mockCryptor{})
+	sessionSvc := NewService(&mockSqlRepository{}, &mockIndexer{}, &mockCryptor{}, nil, nil)
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -332,7 +638,7 @@ func TestIsValidCsrf(t *testing.T) {
 		},
 	}
 
-	sessionSvc := NewService(&mockSqlRepository{}, &mockIndexer{}, &mockCryptor{})
+	sessionSvc := NewService(&mockSqlRepository{}, &mockIndexer{}, &mockCryptor{}, nil, nil)
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			valid, err := sessionSvc.IsValidCsrf(tc.session, tc.csrf)
@@ -377,10 +683,108 @@ func TestRevokeSession(t *testing.T) {
 		// carapace's current impl dumps the row count.
 	}
 
-	sessionSvc := NewService(&mockSqlRepository{}, &mockIndexer{}, &mockCryptor{})
+	sessionSvc := NewService(&mockSqlRepository{}, &mockIndexer{}, &mockCryptor{}, nil, nil)
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			err := sessionSvc.RevokeSession(tc.session)
+			if err != nil {
+				if !strings.Contains(err.Error(), tc.err.Error()) {
+					t.Errorf("test failed: expected error '%v' to contain '%v'", err, tc.err.Error())
+				}
+			}
+		})
+	}
+}
+
+func TestDestroySession(t *testing.T) {
+
+	testCases := []struct {
+		name    string
+		session string
+		err     error
+	}{
+		{
+			name:    "success - no access tokens on record",
+			session: TestValidSessionNoAccessTokens,
+			err:     nil,
+		},
+		{
+			name:    "success - access tokens on record",
+			session: TestValidSessionWithAccessTokens,
+			err:     nil,
+		},
+		{
+			name:    "success - no oauthflow records",
+			session: TestValidSessionNoOauthFlows,
+			err:     nil,
+		},
+		{
+			name:    "success - oauthflow records exist",
+			session: TestValidSessionWithOauthFlows,
+			err:     nil,
+		},
+		{
+			name:    "invalid session - empty session token",
+			session: "",
+			err:     errors.New(ErrInvalidSession),
+		},
+		{
+			name:    "invalid session - too long session token",
+			session: "this-session-token-is-too-long-to-be-valid-and-should-return-an-error",
+			err:     errors.New(ErrInvalidSession),
+		},
+		{
+			name:    "invalid session - failed index",
+			session: "failed-index-generation",
+			err:     errors.New(ErrGenIndex),
+		},
+		{
+			name:    "session not in db - returns error",
+			session: TestInvalidSession,
+			err:     sql.ErrNoRows,
+		},
+		{
+			name:    "valid session id - failed to delete access tokens",
+			session: TestValidSessionFailDeleteAccessTokens,
+			err:     errors.New(ErrDeleteAccessToken),
+		},
+		{
+			name:    "valid session id - failed to decrypt refresh token",
+			session: TestValidSessionFailDecryptRefreshToken,
+			err:     errors.New("failed to decrypt"),
+		},
+		// no good way to test/hook failure to get service token
+		{
+			name:    "valid session id - failed call to s2s service",
+			session: TestValidSessionFailCallS2s,
+			err:     errors.New("call to identity service /refresh/destory endpoint failed"),
+		},
+		{
+			name:    "valid session id - failed to delete uxsession_accesstoken xref",
+			session: TestValidSessionFailDeleteAccessTokensXref,
+			err:     errors.New(ErrDeleteUxsessionAccesstokenXref),
+		},
+		{
+			name:    "valid session id - failed to delete oauth exchange records",
+			session: TestValidSessionFailDeleteOauthExchange,
+			err:     errors.New(ErrDeleteOauthExchange),
+		},
+		{
+			name:    "valid session id - failed to delete uxsession_oauthflow xref",
+			session: TestValidSessionFailDeleteOauthflowXref,
+			err:     errors.New("failed to delete oauth flow id"),
+		},
+		{
+			name:    "valid session id - failed to delete uxsession record",
+			session: TestValidSessionFailDeleteUxsession,
+			err:     errors.New("failed to delete authenticated(true) session id"),
+		},
+	}
+
+	sessionSvc := NewService(&mockSqlRepository{}, &mockIndexer{}, &mockCryptor{}, &mockS2sProvider{}, &mockS2sCaller{})
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := sessionSvc.DestroySession(tc.session)
 			if err != nil {
 				if !strings.Contains(err.Error(), tc.err.Error()) {
 					t.Errorf("test failed: expected error '%v' to contain '%v'", err, tc.err.Error())

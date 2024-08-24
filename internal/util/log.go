@@ -14,6 +14,7 @@ const (
 	ComponentUxSession string = "ux session"
 	ComponentCsrf      string = "csrf"
 	ComponentLogin     string = "login"
+	ComponentLogout    string = "logout"
 	ComponentRegister  string = "register"
 	ComponentOauth     string = "oauth flow exchange"
 	ComponentCallback  string = "oauth flow callback"

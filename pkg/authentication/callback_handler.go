@@ -115,7 +115,7 @@ func (h *callbackHandler) HandleCallback(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// validate and build the id and access token
+	// validate  id and access token
 	if access.IdTokenExpires.Before(time.Now().UTC()) {
 		h.logger.Error("id token has expired")
 		e := connect.ErrorHttp{
@@ -135,8 +135,8 @@ func (h *callbackHandler) HandleCallback(w http.ResponseWriter, r *http.Request)
 	)
 
 	wgVerify.Add(2)
-	go h.verify(access.IdToken, ErrVerifyIdToken, &idToken, errVerifyChan, &wgVerify)
-	go h.verify(access.AccessToken, ErrVerifyAccessToken, &accessToken, errVerifyChan, &wgVerify)
+	go h.verify(access.IdToken, uxsession.ErrVerifyIdToken, &idToken, errVerifyChan, &wgVerify)
+	go h.verify(access.AccessToken, uxsession.ErrVerifyAccessToken, &accessToken, errVerifyChan, &wgVerify)
 
 	wgVerify.Wait()
 	close(errVerifyChan)
@@ -238,14 +238,14 @@ func (h *callbackHandler) HandleCallback(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// revoked the old anonymous session token so it can no longer be used
-	// this does not need to succeed, so do not waiting for the response
-	// go func(session string) {
-	// 	if err := h.uxSession.RevokeSession(session); err != nil {
-	// 		h.logger.Error("failed to revoke anonymous session token", "err", err.Error())
-	// 	}
-	// 	h.logger.Info("successfully revoked anonymous session token")
-	// }(cmd.Session)
+	// destroy previous anonymous session
+	// do not wait to return callback response
+	go func() {
+		if err := h.uxSession.DestroySession(cmd.Session); err != nil {
+			h.logger.Error("failed to destroy anonymous session", "err", err.Error())
+			return
+		}
+	}()
 
 	// return authentication data
 	response := CallbackResponse{
@@ -254,8 +254,8 @@ func (h *callbackHandler) HandleCallback(w http.ResponseWriter, r *http.Request)
 		Authenticated: session.Authenticated,
 		Username:      idToken.Claims.Email,
 		Fullname:      idToken.Claims.Name,
-		Firstname:     idToken.Claims.GivenName,
-		Lastname:      idToken.Claims.FamilyName,
+		GivenName:     idToken.Claims.GivenName,
+		FamilyName:    idToken.Claims.FamilyName,
 		// Birthdate: idToken.Claims.Birthdate,
 
 		Ux: render,

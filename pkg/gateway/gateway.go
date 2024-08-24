@@ -115,7 +115,7 @@ func New(config config.Config) (Gateway, error) {
 	s2sToken := provider.NewS2sTokenProvider(s2sIdentity, creds, repository, cryptor)
 
 	// ux session service
-	uxSession := uxsession.NewService(repository, indexer, cryptor)
+	uxSession := uxsession.NewService(repository, indexer, cryptor, s2sToken, userIdentity)
 
 	// oauth service: state, nonce, redirect
 	oAuth := oauth.NewService(config.OauthRedirect, repository, cryptor, indexer)
@@ -187,6 +187,7 @@ func (g *gateway) Run() error {
 
 	oauth := oauth.NewHandler(g.oAuth)
 	login := authentication.NewLoginHandler(g.uxSession, g.s2sToken, g.userIdentity)
+	logout := authentication.NewLogoutHandler(g.uxSession)
 
 	callback := authentication.NewCallbackHandler(g.s2sToken, g.userIdentity, g.oAuth, g.uxSession, g.verifier)
 
@@ -202,6 +203,7 @@ func (g *gateway) Run() error {
 	mux.HandleFunc("/oauth/state", oauth.HandleGetState)
 	mux.HandleFunc("/oauth/callback", callback.HandleCallback)
 	mux.HandleFunc("/login", login.HandleLogin)
+	mux.HandleFunc("/logout", logout.HandleLogout)
 
 	erebor := &connect.TlsServer{
 		Addr:      g.config.ServicePort,

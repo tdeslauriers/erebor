@@ -13,12 +13,14 @@ import (
 	"github.com/tdeslauriers/carapace/pkg/session/types"
 )
 
+// LoginHandler is the interface for handling login requests from the client.
 type LoginHandler interface {
 	// HandleLogin handles the login request from the client by submitting it against the user auth service.
 	// The user auth service will return an auth code (as well as state/redirect/etc) that returned to the client if login successful.
 	HandleLogin(w http.ResponseWriter, r *http.Request)
 }
 
+// NewLoginHandler creates a new LoginHandler instance.
 func NewLoginHandler(ux uxsession.Service, p provider.S2sTokenProvider, c connect.S2sCaller) LoginHandler {
 	return &loginHandler{
 		uxSession: ux,
@@ -31,6 +33,7 @@ func NewLoginHandler(ux uxsession.Service, p provider.S2sTokenProvider, c connec
 
 var _ LoginHandler = (*loginHandler)(nil)
 
+// loginHandler is the concrete implementation of the LoginHandler interface.
 type loginHandler struct {
 	uxSession uxsession.Service
 	s2sToken  provider.S2sTokenProvider
@@ -38,6 +41,8 @@ type loginHandler struct {
 
 	logger *slog.Logger
 }
+
+// HandleLogin handles the login request from the client by submitting it against the user auth service.
 
 func (h *loginHandler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 

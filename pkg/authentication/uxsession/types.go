@@ -14,6 +14,9 @@ const (
 
 	ErrCsrfMismatch = "decryped csrf token does not match csrf provided"
 
+	ErrVerifyAccessToken = "failed to verify/build access token"
+	ErrVerifyIdToken     = "unable to verify/build id token"
+
 	// 500
 	ErrGenPrimaryKey          = "failed to generate primary key"
 	ErrGenSessionUuid         = "failed to generate session uuid"
@@ -34,6 +37,12 @@ const (
 	// returns a 500 because these values are not user provided -> system error
 	ErrInvalidSessionId     = "invalid or not well formed session id"
 	ErrInvalidAccessTokenId = "invalid or not well formed access token id"
+
+	ErrDeleteUxsession                = "failed to delete uxsession"
+	ErrDeleteAccessToken              = "failed to delete access token"
+	ErrDeleteOauthExchange            = "failed to delete oauth exchange record"
+	ErrDeleteUxsessionAccesstokenXref = "failed to delete uxsession_accesstoken xref record"
+	ErrDeleteUxsessionOauthflowXref   = "failed to delete uxsession_oauthflow xref record"
 )
 
 // AccessToken is a model for the database record that persists
@@ -55,4 +64,20 @@ type SessionAccessXref struct {
 	Id            int    `json:"id,omitempty" db:"id"`
 	UxsessionId   string `json:"uxsession_id,omitempty" db:"uxsession_uuid"`
 	AccessTokenId string `json:"access_token,omitempty" db:"accesstoken_uuid"`
+}
+
+// Uxsession is a model for the database record in the uxsession_oauthflow table
+type UxsesionOauthFlow struct {
+	Id              int    `json:"id,omitempty" db:"id"`
+	UxsessionId     string `json:"uxsession_id,omitempty" db:"uxsession_uuid"`
+	OauthExchangeId string `json:"oauth_exchange_id,omitempty" db:"oauthflow_uuid"`
+}
+
+// LiveAccessToken is a model for the database query output which includes the uxsession_accesstoken table fields
+// and the accesstoken table fields.
+type LiveAccessToken struct {
+	Id            int    `json:"id,omitempty" db:"id"`
+	UxsessionId   string `json:"uxsession_id,omitempty" db:"uxsession_uuid"`
+	AccessTokenId string `json:"access_token,omitempty" db:"accesstoken_uuid"` // primary key for deletion from accesstoken table
+	RefreshToken  string `json:"refresh_token" db:"refresh_token"`             // refresh token for destroy call to identity service
 }

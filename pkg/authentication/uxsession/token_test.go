@@ -145,7 +145,7 @@ func TestPersistToken(t *testing.T) {
 		},
 	}
 
-	svc := NewService(&mockTokenSqlRepository{}, &mockTokenIndexer{}, &mockTokenCryptor{})
+	svc := NewService(&mockTokenSqlRepository{}, &mockTokenIndexer{}, &mockTokenCryptor{}, nil, nil)
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			access, err := svc.PersistToken(tc.access)
@@ -200,7 +200,7 @@ func TestPersistXref(t *testing.T) {
 		},
 	}
 
-	svc := NewService(&mockTokenSqlRepository{}, &mockTokenIndexer{}, &mockTokenCryptor{})
+	svc := NewService(&mockTokenSqlRepository{}, &mockTokenIndexer{}, &mockTokenCryptor{}, nil, nil)
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			err := svc.PersistXref(*tc.xref)

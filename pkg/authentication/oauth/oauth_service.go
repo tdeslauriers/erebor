@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"erebor/internal/util"
 	"erebor/pkg/authentication/uxsession"
+
 	"errors"
 	"fmt"
 	"log/slog"
@@ -168,7 +169,7 @@ func (s *service) Obtain(sessionToken string) (*OauthExchange, error) {
 				return nil, errors.New(builder.String())
 			} else {
 
-				xref := UxsesionOauthFlow{
+				xref := uxsession.UxsesionOauthFlow{
 					Id:              0,
 					UxsessionId:     sessionId,
 					OauthExchangeId: persisted.Id,

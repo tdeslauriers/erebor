@@ -41,12 +41,6 @@ const (
 	ErrPersistXref          = "failed to persist uxsession_oauthflow xref record"
 )
 
-type UxsesionOauthFlow struct {
-	Id              int    `json:"id,omitempty" db:"id"`
-	UxsessionId     string `json:"uxsession_id,omitempty" db:"uxsession_uuid"`
-	OauthExchangeId string `json:"oauth_exchange_id,omitempty" db:"oauthflow_uuid"`
-}
-
 type OauthExchange struct {
 	Id           string          `json:"id,omitempty" db:"uuid"`
 	StateIndex   string          `json:"state_index,omitempty" db:"state_index"`
