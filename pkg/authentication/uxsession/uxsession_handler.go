@@ -9,6 +9,7 @@ import (
 	"github.com/tdeslauriers/carapace/pkg/connect"
 )
 
+// Handler is the interface for handling session requests from the client.
 type Handler interface {
 
 	// HandleGetSession handles the request to create a new ANONYMOUS session
@@ -16,9 +17,10 @@ type Handler interface {
 	HandleGetSession(w http.ResponseWriter, r *http.Request)
 }
 
+// NewHandler creates a new session Handler instance.
 func NewHandler(s Service) Handler {
 	return &handler{
-		service: s,
+		session: s,
 
 		logger: slog.Default().
 			With(slog.String(util.PackageKey, util.PackageSession)).
@@ -28,13 +30,14 @@ func NewHandler(s Service) Handler {
 
 var _ Handler = (*handler)(nil)
 
+// handler is the concrete implementation of the Handler interface.
 type handler struct {
-	service Service
+	session Service
 
 	logger *slog.Logger
 }
 
-// implement GetSession of SessionHandler interface
+// HandleGetSession implements HandleGetSession of session Handler interface
 func (h *handler) HandleGetSession(w http.ResponseWriter, r *http.Request) {
 
 	if r.Method != "GET" {
@@ -48,7 +51,7 @@ func (h *handler) HandleGetSession(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// create/persist session (anonymous session)
-	session, err := h.service.Build(Anonymous)
+	session, err := h.session.Build(Anonymous)
 	if err != nil {
 		h.logger.Error("failed to create session", "err", err.Error())
 		e := connect.ErrorHttp{

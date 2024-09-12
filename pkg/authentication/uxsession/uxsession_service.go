@@ -18,36 +18,20 @@ import (
 	"github.com/tdeslauriers/carapace/pkg/session/types"
 )
 
-// frontend only every sees session and csrf tokens,
-// the rest of theses fields are internal metadata for the gateway
-type UxSession struct {
-	Id            string          `json:"id,omitempty" db:"uuid"`
-	Index         string          `json:"session_index,omitempty" db:"session_index"`
-	SessionToken  string          `json:"session_token" db:"session_token"`
-	CsrfToken     string          `json:"csrf_token,omitempty" db:"csrf_token"`
-	CreatedAt     data.CustomTime `json:"created_at" db:"created_at"`
-	Authenticated bool            `json:"authenticated" db:"authenticated"` // convenience field, not used for actual auth decisions
-	Revoked       bool            `json:"revoked,omitempty" db:"revoked"`
+// container interface for multiple task specific interfaces
+type Service interface {
+	SessionService
+	CsrfService
+	TokenService
+	SessionErrService
 }
 
-type UxSessionType bool
-
-const (
-	Anonymous     UxSessionType = false
-	Authenticated UxSessionType = true
-)
-
+// SessionService is the interface for handling ux session specific operations.
 type SessionService interface {
 	// Build creates a new seesion record, persisting it to the database, and returns the struct.  It builds both authenticated and unauthenticated sessions.
 	// However, the authentication designation in the struct is just a convenience, the presesnce of Access and Refresh tokens is the real indicator of authentication status.
 	// If no access tokens exist, user will be redirected to login page.
 	Build(UxSessionType) (*UxSession, error)
-
-	// GetCsrf returns a csrf token for the given session id.
-	GetCsrf(session string) (*UxSession, error)
-
-	// ValidateCsrt validates the csrf token provided is attached to the session token.
-	IsValidCsrf(session, csrf string) (bool, error)
 
 	// RevokeSession revokes the session.
 	RevokeSession(session string) error
@@ -56,17 +40,13 @@ type SessionService interface {
 	DestroySession(session string) error
 }
 
+// SessionErrService is the interface for handling ux session service (and it's underlying interfaces') errors in a consistent way
 type SessionErrService interface {
 	// HandleSessionErr is a helper function to handle session errors in a consistent way
 	HandleSessionErr(err error, w http.ResponseWriter)
 }
 
-type Service interface {
-	SessionService
-	TokenService
-	SessionErrService
-}
-
+// NewService creates a new instance of the container Session Service interface and returns a pointer to its concrete implementation.
 func NewService(db data.SqlRepository, i data.Indexer, c data.Cryptor, p provider.S2sTokenProvider, call connect.S2sCaller) Service {
 	return &service{
 		db:           db,
@@ -83,6 +63,7 @@ func NewService(db data.SqlRepository, i data.Indexer, c data.Cryptor, p provide
 
 var _ Service = (*service)(nil)
 
+// service is the concrete implementation of the Service interface.
 type service struct {
 	db           data.SqlRepository
 	indexer      data.Indexer
@@ -93,6 +74,9 @@ type service struct {
 	logger *slog.Logger
 }
 
+// Build creates a new seesion record, persisting it to the database, and returns the struct.  It builds both authenticated and unauthenticated sessions.
+// However, the authentication designation in the struct is just a convenience, the presesnce of Access and Refresh tokens is the real indicator of authentication status.
+// If no access tokens exist, user will be redirected to login page.
 func (s *service) Build(st UxSessionType) (*UxSession, error) {
 
 	var (
@@ -223,171 +207,6 @@ func (s *service) Build(st UxSessionType) (*UxSession, error) {
 	}, nil
 }
 
-// implements GetCsrf of Service interface
-func (s *service) GetCsrf(session string) (*UxSession, error) {
-
-	// light weight input validation (not checking if session id is valid or well-formed)
-	if len(session) < 16 || len(session) > 64 {
-		return nil, errors.New(ErrInvalidSession)
-	}
-
-	// re generate session index
-	index, err := s.indexer.ObtainBlindIndex(session)
-	if err != nil {
-		return nil, fmt.Errorf("%s from provided session token xxxxxx-%s: %v", ErrGenIndex, session[len(session)-6:], err)
-	}
-
-	// look up uxSession from db by index
-	var uxSession UxSession
-	qry := "SELECT uuid, session_index, session_token, csrf_token, created_at, authenticated, revoked FROM uxsession WHERE session_index = ?"
-	if err := s.db.SelectRecord(qry, &uxSession, index); err != nil {
-		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("session xxxxxx-%s - %s: %v", session[len(session)-6:], ErrSessionNotFound, err)
-		}
-		return nil, err
-	}
-
-	// check if session is revoked before decyption:
-	if uxSession.Revoked {
-		return nil, fmt.Errorf("session id %s: %s", uxSession.Id, ErrSessionRevoked)
-	}
-
-	// check if session is expired before decryption:
-	if uxSession.CreatedAt.Add(1 * time.Hour).Before(time.Now().UTC()) {
-		return nil, fmt.Errorf("session id %s: %s", uxSession.Id, ErrSessionExpired)
-	}
-
-	var (
-		wg      sync.WaitGroup
-		errChan = make(chan error, 2)
-
-		sessionToken string
-		csrfToken    string
-	)
-
-	wg.Add(2)
-	go s.decrypt(uxSession.SessionToken, &sessionToken, errChan, &wg)
-	go s.decrypt(uxSession.CsrfToken, &csrfToken, errChan, &wg)
-
-	wg.Wait()
-	close(errChan)
-
-	if len(errChan) > 0 {
-		var builder strings.Builder
-		count := 0
-		for err := range errChan {
-			builder.WriteString(err.Error())
-			if count < len(errChan)-1 {
-				builder.WriteString("; ")
-			}
-			count++
-		}
-		return nil, fmt.Errorf("failed to get csrf token: %s", builder.String())
-	}
-
-	return &UxSession{
-		SessionToken:  sessionToken,
-		CsrfToken:     csrfToken,
-		CreatedAt:     uxSession.CreatedAt,
-		Authenticated: uxSession.Authenticated,
-	}, nil
-}
-
-func (s *service) decrypt(encrypted string, decrypted *string, ch chan error, wg *sync.WaitGroup) {
-	defer wg.Done()
-
-	d, err := s.cryptor.DecryptServiceData(encrypted)
-	if err != nil {
-		ch <- fmt.Errorf("failed to decrypt: %v", err)
-		return
-	}
-
-	*decrypted = d
-}
-
-// implements ValidateCsrf of Service interface
-// csrf tokens are single use, so this function will delete the token from the db after validation
-// and assign a new one (asyncronously, so the user doesn't have to wait for the db write to complete)
-func (s *service) IsValidCsrf(session, csrf string) (bool, error) {
-
-	// light weight input validation)
-	if len(session) < 16 || len(session) > 64 {
-		return false, errors.New(ErrInvalidSession)
-	}
-
-	if len(csrf) < 16 || len(csrf) > 64 {
-		return false, errors.New(ErrInvalidCsrf)
-	}
-
-	// regenerate index
-	index, err := s.indexer.ObtainBlindIndex(session)
-	if err != nil {
-		return false, fmt.Errorf("%s from provided session token xxxxxx-%s: %v", ErrGenIndex, session[len(session)-6:], err)
-	}
-
-	var uxSession UxSession
-	qry := "SELECT uuid, session_index, session_token, csrf_token, created_at, authenticated, revoked FROM uxsession WHERE session_index = ?"
-	if err := s.db.SelectRecord(qry, &uxSession, index); err != nil {
-		if err == sql.ErrNoRows {
-			return false, fmt.Errorf("session xxxxxx-%s - %s: %v", session[len(session)-6:], ErrSessionNotFound, err)
-		}
-		return false, err
-	}
-
-	// check if session is revoked before decryption:
-	if uxSession.Revoked {
-		return false, fmt.Errorf("session id %s: %s", uxSession.Id, ErrSessionRevoked)
-	}
-
-	// check if session is expired before decryption:
-	if uxSession.CreatedAt.Add(time.Hour).Before(time.Now().UTC()) {
-		return false, fmt.Errorf("session id %s: %s", uxSession.Id, ErrSessionExpired)
-	}
-
-	// decrypt csrf token
-	decrypted, err := s.cryptor.DecryptServiceData(uxSession.CsrfToken)
-	if err != nil {
-		return false, fmt.Errorf("%s - %s: %v", uxSession.Id, ErrDecryptCsrf, err)
-	}
-
-	// check if csrf token matches
-	// return error if not
-	if decrypted != csrf {
-		return false, fmt.Errorf("session id %s - xxxxxx-%s vs xxxxxx-%s: %s", uxSession.Id, decrypted[len(decrypted)-6:], csrf[len(csrf)-6:], ErrCsrfMismatch)
-	}
-
-	// generate a new csrf token and persist it to the db
-	// perist concurrently so returns immediately on validation
-	// if this fails, the old csrf token will still be valid
-	// for the length of the session which is only an hour.
-	go func() {
-
-		csrf, err := uuid.NewRandom()
-		if err != nil {
-			s.logger.Error(fmt.Sprintf("session id %s - failed to generated replacement csrf token: %s", uxSession.Id, ErrGenCsrfToken))
-			return
-		}
-
-		encryptedCsrf, err := s.cryptor.EncryptServiceData(csrf.String())
-		if err != nil {
-			s.logger.Error(fmt.Sprintf("session id %s - failed to encrypt replacement csrf token: %s", uxSession.Id, ErrEncryptCsrf))
-			return
-		}
-
-		// update db
-		qry := "UPDATE uxsession SET csrf_token = ? WHERE session_index = ?"
-		if err := s.db.UpdateRecord(qry, encryptedCsrf, index); err != nil {
-			s.logger.Error(fmt.Sprintf("session id %s - failed to update (replace used) csrf token in db", uxSession.Id), "err", err.Error())
-			return
-		}
-
-		// log success
-		s.logger.Info(fmt.Sprintf("session id %s - successfully updated/replaced csrf token in db", uxSession.Id))
-	}()
-
-	return true, nil
-}
-
 // RevokeSession revokes the session
 // Note: does not revoke access tokens or refresh tokens, that is done in the identity service
 func (s *service) RevokeSession(session string) error {
@@ -482,13 +301,13 @@ func (s *service) removeAccessTokens(sessionId string, errChan chan error, wg *s
 				ua.id,
 				ua.uxsession_uuid,
 				ua.accesstoken_uuid,
-				a.refresh_token,
+				a.refresh_token
 				FROM uxsession_accesstoken ua
 					LEFT OUTER JOIN accesstoken a ON ua.accesstoken_uuid = a.uuid
 				WHERE ua.uxsession_uuid = ?
 					AND (
-						a.access_expires > TIMESTAMP_UTC()
-						OR (a.refresh_expires > TIMESTAMP_UTC()
+						a.access_expires > UTC_TIMESTAMP()
+						OR (a.refresh_expires > UTC_TIMESTAMP()
 							AND a.refresh_claimed = FALSE)
 						)`
 	if err := s.db.SelectRecords(qry, &live, sessionId); err != nil {
@@ -508,25 +327,45 @@ func (s *service) removeAccessTokens(sessionId string, errChan chan error, wg *s
 		return
 	}
 
-	var wgAccess sync.WaitGroup
+	// remove xref records
+	var wgXref sync.WaitGroup
+	for _, token := range live {
+		// remove xref records
+		wgXref.Add(1)
+		go func(id int, ch chan error, wg *sync.WaitGroup) {
+			defer wg.Done()
+
+			qry := "DELETE FROM uxsession_accesstoken WHERE id = ?"
+			if err := s.db.DeleteRecord(qry, id); err != nil {
+				ch <- fmt.Errorf("%s id %d: %v", ErrDeleteUxsessionAccesstokenXref, id, err)
+			}
+
+			s.logger.Info(fmt.Sprintf("successfully removed uxsession_accesstoken xref id %d", id))
+		}(token.Id, errChan, &wgXref)
+	}
+
+	// need to wait until xrefs deleted or foreign key constraint will prevent deletion of access token(s)
+	wgXref.Wait()
+	// errors collected to primary error channel
+
 	for _, token := range live {
 
 		// delete access token from local db
-		wgAccess.Add(1)
+		wg.Add(1) // adding to primary wait group
 		go func(id string, ch chan error, wg *sync.WaitGroup) {
 			defer wg.Done()
 
 			qry := "DELETE FROM accesstoken WHERE uuid = ?"
 			if err := s.db.DeleteRecord(qry, id); err != nil {
-				ch <- fmt.Errorf("failed to delete access token id/jti %s: %v", id, err)
+				ch <- fmt.Errorf("%s id/jti %s: %v", ErrDeleteAccessToken, id, err)
 				return
 			}
 
 			s.logger.Info(fmt.Sprintf("successfully removed access token id/jti %s", id))
-		}(token.AccessTokenId, errChan, &wgAccess)
+		}(token.AccessTokenId, errChan, wg)
 
 		// call identity service to destroy refresh token
-		wgAccess.Add(1)
+		wg.Add(1) // adding to primary wait group
 		go func(encrypted, jti, s2sBearer string, ch chan error, wg *sync.WaitGroup) {
 			defer wg.Done()
 
@@ -540,31 +379,12 @@ func (s *service) removeAccessTokens(sessionId string, errChan chan error, wg *s
 			cmd := types.DestroyRefreshCmd{DestroyRefreshToken: refresh}
 
 			if err := s.userIdentity.PostToService("/refresh/destroy", s2sBearer, "", cmd, nil); err != nil {
-				ch <- fmt.Errorf("call to identity service /refresh/destory endpoint failed: %v", err)
+				ch <- fmt.Errorf("call to identity service /refresh/destroy endpoint failed: %v", err)
 				return
 			}
 
 			s.logger.Info(fmt.Sprintf("successfully destroyed refresh token xxxxxx-%s", refresh[len(refresh)-6:]))
-		}(token.RefreshToken, token.AccessTokenId, s2sToken, errChan, &wgAccess)
-	}
-
-	wgAccess.Wait()
-	// errors collected to primary error channel
-
-	for _, token := range live {
-		// remove xref records
-		// using primary wait group
-		wg.Add(1)
-		go func(id int, ch chan error, wg *sync.WaitGroup) {
-			defer wg.Done()
-
-			qry := "DELETE FROM uxsession_accesstoken WHERE id = ?"
-			if err := s.db.DeleteRecord(qry, id); err != nil {
-				ch <- fmt.Errorf("failed to delete uxsession_accesstoken xref id %d: %v", id, err)
-			}
-
-			s.logger.Info(fmt.Sprintf("successfully removed xref id %d", id))
-		}(token.Id, errChan, wg)
+		}(token.RefreshToken, token.AccessTokenId, s2sToken, errChan, wg)
 	}
 }
 
@@ -573,7 +393,7 @@ func (s *service) removeOauthFlow(sessionId string, errChan chan error, wg *sync
 	defer wg.Done()
 
 	oauthXref := make([]UxsesionOauthFlow, 0, 32)
-	qry := `"SELECT id, uxsession_uuid, oauthflow_uuid FROM uxsession_oauthflow WHERE uxsession_uuid = ?"`
+	qry := "SELECT id, uxsession_uuid, oauthflow_uuid FROM uxsession_oauthflow WHERE uxsession_uuid = ?"
 	if err := s.db.SelectRecords(qry, &oauthXref, sessionId); err != nil {
 		errChan <- err
 		return
@@ -585,40 +405,41 @@ func (s *service) removeOauthFlow(sessionId string, errChan chan error, wg *sync
 	}
 
 	// remove oauth flow records
-	var wgOauth sync.WaitGroup
-	for _, xref := range oauthXref {
-		wgOauth.Add(1)
-		go func(id string, ch chan error, wg *sync.WaitGroup) {
-			defer wg.Done()
-
-			qry := "DELETE FROM oauthflow WHERE id = ?"
-			if err := s.db.DeleteRecord(qry, id); err != nil {
-				ch <- fmt.Errorf("failed to delete oauthflow id %s: %v", id, err)
-				return
-			}
-
-			s.logger.Info(fmt.Sprintf("successfully removed oauthflow id %s", id))
-		}(xref.OauthExchangeId, errChan, &wgOauth)
-	}
-
-	wgOauth.Wait()
-	// errors collected to primary error channel
+	var wgXref sync.WaitGroup
 
 	// remove xref records
 	for _, xref := range oauthXref {
 		// using the primary wait group
-		wg.Add(1)
+		wgXref.Add(1)
 		go func(id int, ch chan error, wg *sync.WaitGroup) {
 			defer wg.Done()
 
 			qry := "DELETE FROM uxsession_oauthflow WHERE id = ?"
 			if err := s.db.DeleteRecord(qry, id); err != nil {
-				ch <- fmt.Errorf("failed to delete oauth flow id %d: %v", id, err)
+				ch <- fmt.Errorf("%s id %d: %v", ErrDeleteUxsessionOauthflowXref, id, err)
 				return
 			}
 
 			s.logger.Info(fmt.Sprintf("successfully removed oauth flow id %d", id))
-		}(xref.Id, errChan, wg)
+		}(xref.Id, errChan, &wgXref)
+	}
+	// need to wait until xrefs deleted or foreign key constraint will prevent deletion of oauth flow(s)
+	wgXref.Wait()
+	// errors collected to primary error channel
+
+	for _, xref := range oauthXref {
+		wg.Add(1) // adding to primary wait group
+		go func(id string, ch chan error, wg *sync.WaitGroup) {
+			defer wg.Done()
+
+			qry := "DELETE FROM oauthflow WHERE id = ?"
+			if err := s.db.DeleteRecord(qry, id); err != nil {
+				ch <- fmt.Errorf("%s id %s: %v", ErrDeleteOauthExchange, id, err)
+				return
+			}
+
+			s.logger.Info(fmt.Sprintf("successfully removed oauthflow id %s", id))
+		}(xref.OauthExchangeId, errChan, wg)
 	}
 }
 

@@ -40,9 +40,28 @@ const (
 
 	ErrDeleteUxsession                = "failed to delete uxsession"
 	ErrDeleteAccessToken              = "failed to delete access token"
-	ErrDeleteOauthExchange            = "failed to delete oauth exchange record"
+	ErrDeleteOauthExchange            = "failed to delete oauthfow record"
 	ErrDeleteUxsessionAccesstokenXref = "failed to delete uxsession_accesstoken xref record"
 	ErrDeleteUxsessionOauthflowXref   = "failed to delete uxsession_oauthflow xref record"
+)
+
+// frontend only every sees session and csrf tokens,
+// the rest of theses fields are internal metadata for the gateway
+type UxSession struct {
+	Id            string          `json:"id,omitempty" db:"uuid"`
+	Index         string          `json:"session_index,omitempty" db:"session_index"`
+	SessionToken  string          `json:"session_token" db:"session_token"`
+	CsrfToken     string          `json:"csrf_token,omitempty" db:"csrf_token"`
+	CreatedAt     data.CustomTime `json:"created_at" db:"created_at"`
+	Authenticated bool            `json:"authenticated" db:"authenticated"` // convenience field, not used for actual auth decisions
+	Revoked       bool            `json:"revoked,omitempty" db:"revoked"`
+}
+
+type UxSessionType bool
+
+const (
+	Anonymous     UxSessionType = false
+	Authenticated UxSessionType = true
 )
 
 // AccessToken is a model for the database record that persists

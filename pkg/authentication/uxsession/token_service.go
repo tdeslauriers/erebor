@@ -13,15 +13,22 @@ import (
 // TokenService is performs build and persistance operations on access tokens,
 // particularly in relation to the authenticated uxsession.
 type TokenService interface {
-	// Build creates a new AccessToken record, persisting it to the database, and returns the struct.
+	// GetAccessToken retrieves the access token record from the database, decrypts the access and refresh tokens,
+	// and returns the struct.  If the access token is expired, it will use an active refesh token to retrieve a new access token.
+	// Note: this will error if the uxsession is not authenticated, or is expired or revoked.
+	GetAccessToken(uxSessionId string) (*AccessToken, error)
+
+	// PeristToken creates a new AccessToken record, performs field level encryption for db record,
+	// persists it to the database, and returns the struct.
 	PersistToken(access *provider.UserAuthorization) (*AccessToken, error)
 
 	// PersistXref persists the xref between the authenticated uxsession and the access token.
 	PersistXref(xref SessionAccessXref) error
 }
 
-// this interface is implemented by the service object in serivic.go
-// I am breaking this out to an interface for readability and to make it easier to test
+// PeristToken creates a new AccessToken record, performs field level encryption for db record,
+// persists it to the database, and returns the struct.
+// Note: this interface is implemented by the service object in serivic.go
 func (s *service) PersistToken(access *provider.UserAuthorization) (*AccessToken, error) {
 
 	// create primary key for access token
@@ -95,7 +102,7 @@ func (s *service) fieldLevelEncrypt(access *AccessToken) error {
 	return nil
 }
 
-// encrypt is a helper function which encrypts the plaintext string and returns the encrypted string.
+// encrypt is a helper function which abstracts the encryption process for concurency operations readability
 func (h *service) encrypt(plaintext, errMsg string, encrypted *string, ch chan error, wg *sync.WaitGroup) {
 
 	defer wg.Done()

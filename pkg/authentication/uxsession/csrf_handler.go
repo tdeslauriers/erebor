@@ -1,9 +1,9 @@
-package csrf
+package uxsession
 
 import (
 	"encoding/json"
 	"erebor/internal/util"
-	"erebor/pkg/authentication/uxsession"
+
 	"log/slog"
 	"net/http"
 	"strings"
@@ -11,24 +11,26 @@ import (
 	"github.com/tdeslauriers/carapace/pkg/connect"
 )
 
-type Handler interface {
+type CsrfHandler interface {
+
 	// HandleGetCsrf handles the request to get a csrf token for the given session id.
 	HandleGetCsrf(w http.ResponseWriter, r *http.Request)
 }
 
-func NewHandler(s uxsession.Service) Handler {
+func NewCsrfHandler(s Service) CsrfHandler {
 	return &csrfHandler{
 		service: s,
 
 		logger: slog.Default().
+			With(slog.String(util.PackageKey, util.PackageSession)).
 			With(slog.String(util.ComponentKey, util.ComponentCsrf)),
 	}
 }
 
-var _ Handler = (*csrfHandler)(nil)
+var _ CsrfHandler = (*csrfHandler)(nil)
 
 type csrfHandler struct {
-	service uxsession.Service
+	service Service
 
 	logger *slog.Logger
 }
@@ -44,7 +46,7 @@ func (h *csrfHandler) HandleGetCsrf(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// split ut rule path by "/" to get the last element => the session id
+	// split url path by "/" to get the last element => the session id
 	segments := strings.Split(r.URL.Path, "/")
 
 	var sessionId string
@@ -87,7 +89,7 @@ func (h *csrfHandler) HandleGetCsrf(w http.ResponseWriter, r *http.Request) {
 
 func (h *csrfHandler) handleServiceErrors(err error, w http.ResponseWriter) {
 	switch {
-	case strings.Contains(err.Error(), uxsession.ErrInvalidSession):
+	case strings.Contains(err.Error(), ErrInvalidSession):
 		h.logger.Error(err.Error())
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusBadRequest,
@@ -95,27 +97,27 @@ func (h *csrfHandler) handleServiceErrors(err error, w http.ResponseWriter) {
 		}
 		e.SendJsonErr(w)
 		return
-	case strings.Contains(err.Error(), uxsession.ErrSessionRevoked):
+	case strings.Contains(err.Error(), ErrSessionRevoked):
 		h.logger.Error(err.Error())
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusUnauthorized,
-			Message:    uxsession.ErrSessionRevoked,
+			Message:    ErrSessionRevoked,
 		}
 		e.SendJsonErr(w)
 		return
-	case strings.Contains(err.Error(), uxsession.ErrSessionExpired):
+	case strings.Contains(err.Error(), ErrSessionExpired):
 		h.logger.Error(err.Error())
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusUnauthorized,
-			Message:    uxsession.ErrSessionExpired,
+			Message:    ErrSessionExpired,
 		}
 		e.SendJsonErr(w)
 		return
-	case strings.Contains(err.Error(), uxsession.ErrSessionNotFound):
+	case strings.Contains(err.Error(), ErrSessionNotFound):
 		h.logger.Error(err.Error())
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusUnauthorized,
-			Message:    uxsession.ErrSessionNotFound,
+			Message:    ErrSessionNotFound,
 		}
 		e.SendJsonErr(w)
 	default:

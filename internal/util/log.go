@@ -7,6 +7,7 @@ const (
 	PackageGateway string = "gateway"
 	PackageAuth    string = "authentication"
 	PackageSession string = "uxsession"
+	PackageUser    string = "user"
 
 	ComponentKey string = "component"
 
@@ -18,4 +19,5 @@ const (
 	ComponentRegister  string = "register"
 	ComponentOauth     string = "oauth flow exchange"
 	ComponentCallback  string = "oauth flow callback"
+	ComponentProfile   string = "profile"
 )

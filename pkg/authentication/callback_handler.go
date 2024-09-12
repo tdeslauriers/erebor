@@ -238,14 +238,14 @@ func (h *callbackHandler) HandleCallback(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// destroy previous anonymous session
-	// do not wait to return callback response
-	go func() {
-		if err := h.uxSession.DestroySession(cmd.Session); err != nil {
-			h.logger.Error("failed to destroy anonymous session", "err", err.Error())
-			return
-		}
-	}()
+	// // destroy previous anonymous session
+	// // do not wait to return callback response
+	// go func() {
+	// 	if err := h.uxSession.DestroySession(cmd.Session); err != nil {
+	// 		h.logger.Error("failed to destroy anonymous session", "err", err.Error())
+	// 		return
+	// 	}
+	// }()
 
 	// return authentication data
 	response := CallbackResponse{

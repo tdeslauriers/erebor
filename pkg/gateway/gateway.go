@@ -10,7 +10,6 @@ import (
 	"erebor/pkg/authentication"
 	"erebor/pkg/authentication/oauth"
 	"erebor/pkg/authentication/uxsession"
-	"erebor/pkg/authentication/uxsession/csrf"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -22,6 +21,7 @@ import (
 	"github.com/tdeslauriers/carapace/pkg/data"
 	"github.com/tdeslauriers/carapace/pkg/diagnostics"
 	"github.com/tdeslauriers/carapace/pkg/jwt"
+	"github.com/tdeslauriers/carapace/pkg/schedule"
 	"github.com/tdeslauriers/carapace/pkg/session/provider"
 )
 
@@ -138,6 +138,9 @@ func New(config config.Config) (Gateway, error) {
 	// id token jwt verifier
 	identityVerifier := jwt.NewVerifier(config.ServiceName, publicKey)
 
+	// clean up
+	cleanup := schedule.NewCleanup(repository)
+
 	return &gateway{
 		config:       config,
 		serverTls:    serverTlsConfig,
@@ -148,6 +151,7 @@ func New(config config.Config) (Gateway, error) {
 		oAuth:        oAuth,
 		verifier:     identityVerifier,
 		cryptor:      cryptor,
+		cleanup:      cleanup,
 
 		logger: slog.Default().With(slog.String(util.PackageKey, util.PackageGateway)),
 	}, nil
@@ -165,6 +169,7 @@ type gateway struct {
 	oAuth        oauth.Service
 	verifier     jwt.Verifier
 	cryptor      data.Cryptor
+	cleanup      schedule.Cleanup
 
 	logger *slog.Logger
 }
@@ -181,7 +186,7 @@ func (g *gateway) Run() error {
 
 	// setup handlers
 	uxSessionHandler := uxsession.NewHandler(g.uxSession)
-	csrfHandler := csrf.NewHandler(g.uxSession)
+	csrfHandler := uxsession.NewCsrfHandler(g.uxSession)
 
 	register := authentication.NewRegistrationHandler(g.config.OauthRedirect, g.uxSession, g.s2sToken, g.userIdentity)
 
@@ -218,7 +223,11 @@ func (g *gateway) Run() error {
 			g.logger.Error(fmt.Sprintf("failed to start %s gateway service", g.config.ServiceName), "err", err.Error())
 			os.Exit(1)
 		}
-
 	}()
+
+	go g.cleanup.ExpiredAccess()
+	go g.cleanup.ExpiredS2s()
+	go g.cleanup.ExpiredSession(1)
+
 	return nil
 }

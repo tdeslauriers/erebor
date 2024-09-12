@@ -27,7 +27,9 @@ func NewLoginHandler(ux uxsession.Service, p provider.S2sTokenProvider, c connec
 		s2sToken:  p,
 		caller:    c,
 
-		logger: slog.Default().With(slog.String(util.PackageKey, util.PackageAuth)).With(slog.String(util.ComponentKey, util.ComponentLogin)),
+		logger: slog.Default().
+			With(slog.String(util.PackageKey, util.PackageAuth)).
+			With(slog.String(util.ComponentKey, util.ComponentLogin)),
 	}
 }
 
