@@ -39,7 +39,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	gateway, err := gateway.New(*config)
+	gateway, err := gateway.New(config)
 	if err != nil {
 		logger.Error(fmt.Sprintf("failed to create %s gateway", config.ServiceName), "err", err.Error())
 		os.Exit(1)

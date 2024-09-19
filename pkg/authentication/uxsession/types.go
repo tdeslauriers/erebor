@@ -8,9 +8,19 @@ const (
 	ErrInvalidCsrf    = "invalid or not well formed csrf token"
 
 	// 401
-	ErrSessionRevoked  = "session is revoked"
-	ErrSessionExpired  = "session is expired"
-	ErrSessionNotFound = "session not found"
+	ErrSessionRevoked          = "session is revoked"
+	ErrSessionExpired          = "session is expired"
+	ErrSessionNotFound         = "session not found"
+	ErrSessionNotAuthenticated = "session is not authenticated"
+
+	ErrAccessRefreshNotFound = "no valid access or refresh tokens found"
+	ErrAccessTokenNotFound   = "access token not found"
+	ErrAccessTokenExpired    = "access token is expired"
+	ErrAccessTokenRevoked    = "access token is revoked"
+	ErrRefreshNotFound       = "refresh token not found"
+	ErrRefreshTokenExpired   = "refresh token is expired"
+	ErrRefreshTokenClaimed   = "refresh token is claimed"
+	ErrRefreshTokenRevoked   = "refresh token is revoked"
 
 	ErrCsrfMismatch = "decryped csrf token does not match csrf provided"
 
@@ -18,11 +28,11 @@ const (
 	ErrVerifyIdToken     = "unable to verify/build id token"
 
 	// 500
-	ErrGenPrimaryKey          = "failed to generate primary key"
-	ErrGenSessionUuid         = "failed to generate session uuid"
-	ErrGenSessionToken        = "failed to generate session token"
-	ErrGenIndex        string = "failed to generate session index"
-	ErrGenCsrfToken           = "failed to generate csrf token"
+	ErrGenPrimaryKey   = "failed to generate primary key"
+	ErrGenSessionUuid  = "failed to generate session uuid"
+	ErrGenSessionToken = "failed to generate session token"
+	ErrGenIndex        = "failed to generate session index"
+	ErrGenCsrfToken    = "failed to generate csrf token"
 
 	ErrEncryptSession      = "failed to encrypt session token"
 	ErrEncryptCsrf         = "failed to encrypt csrf token"
@@ -92,11 +102,33 @@ type UxsesionOauthFlow struct {
 	OauthExchangeId string `json:"oauth_exchange_id,omitempty" db:"oauthflow_uuid"`
 }
 
-// LiveAccessToken is a model for the database query output which includes the uxsession_accesstoken table fields
+// LiveAccessToken is a model for the database query/xref table output which includes the uxsession_accesstoken table fields
 // and the accesstoken table fields.
 type LiveAccessToken struct {
 	Id            int    `json:"id,omitempty" db:"id"`
 	UxsessionId   string `json:"uxsession_id,omitempty" db:"uxsession_uuid"`
 	AccessTokenId string `json:"access_token,omitempty" db:"accesstoken_uuid"` // primary key for deletion from accesstoken table
 	RefreshToken  string `json:"refresh_token" db:"refresh_token"`             // refresh token for destroy call to identity service
+}
+
+// SessionAccessToken is a model for the database query output which includes
+// fields from the uxsession table and the accesstoken table
+// Note: NOT all fields are included, only the ones needed for the service
+type UxsessionAccesstoken struct {
+	// uxsession fields
+	// omitting sensitive/unused fields: session_token, csrf_token, session_index
+	UxsessionId    string          `json:"uxsession_id,omitempty" db:"uxsession_uuid"`
+	CreatedAt      data.CustomTime `json:"created_at" db:"created_at"`
+	Authenticated  bool            `json:"authenticated" db:"authenticated"`
+	SessionRevoked bool            `json:"revoked,omitempty" db:"revoked"`
+
+	// accesstoken fields
+	AccessTokenId  string          `json:"access_token_id,omitempty" db:"accesstoken_uuid"`
+	AccessToken    string          `json:"access_token" db:"access_token"`
+	AccessExpires  data.CustomTime `json:"access_expires" db:"access_expires"`
+	AccessRevoked  bool            `json:"access_revoked" db:"access_revoked"`
+	RefreshToken   string          `json:"refresh_token" db:"refresh_token"`
+	RefreshExpires data.CustomTime `json:"refresh_expires" db:"refresh_expires"`
+	RefreshRevoked bool            `json:"refresh_revoked" db:"refresh_revoked"`
+	RefreshClaimed bool            `json:"refresh_claimed" db:"refresh_claimed"`
 }

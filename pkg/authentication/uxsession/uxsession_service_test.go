@@ -448,7 +448,7 @@ func TestBuildSession(t *testing.T) {
 		},
 	}
 
-	sessionSvc := NewService(&mockSqlRepository{}, &mockIndexer{}, &mockCryptor{}, nil, nil)
+	sessionSvc := NewService(nil, &mockSqlRepository{}, &mockIndexer{}, &mockCryptor{}, nil, nil)
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			session, err := sessionSvc.Build(tc.UxSessionType)
@@ -533,7 +533,7 @@ func TestGetCsrf(t *testing.T) {
 		},
 	}
 
-	sessionSvc := NewService(&mockSqlRepository{}, &mockIndexer{}, &mockCryptor{}, nil, nil)
+	sessionSvc := NewService(nil, &mockSqlRepository{}, &mockIndexer{}, &mockCryptor{}, nil, nil)
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -638,7 +638,7 @@ func TestIsValidCsrf(t *testing.T) {
 		},
 	}
 
-	sessionSvc := NewService(&mockSqlRepository{}, &mockIndexer{}, &mockCryptor{}, nil, nil)
+	sessionSvc := NewService(nil, &mockSqlRepository{}, &mockIndexer{}, &mockCryptor{}, nil, nil)
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			valid, err := sessionSvc.IsValidCsrf(tc.session, tc.csrf)
@@ -683,7 +683,7 @@ func TestRevokeSession(t *testing.T) {
 		// carapace's current impl dumps the row count.
 	}
 
-	sessionSvc := NewService(&mockSqlRepository{}, &mockIndexer{}, &mockCryptor{}, nil, nil)
+	sessionSvc := NewService(nil, &mockSqlRepository{}, &mockIndexer{}, &mockCryptor{}, nil, nil)
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			err := sessionSvc.RevokeSession(tc.session)
@@ -781,7 +781,7 @@ func TestDestroySession(t *testing.T) {
 		},
 	}
 
-	sessionSvc := NewService(&mockSqlRepository{}, &mockIndexer{}, &mockCryptor{}, &mockS2sProvider{}, &mockS2sCaller{})
+	sessionSvc := NewService(nil, &mockSqlRepository{}, &mockIndexer{}, &mockCryptor{}, &mockS2sProvider{}, &mockS2sCaller{})
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			err := sessionSvc.DestroySession(tc.session)

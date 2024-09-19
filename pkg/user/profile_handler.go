@@ -89,4 +89,8 @@ func (h *profileHandler) handleGetProfile(w http.ResponseWriter, r *http.Request
 
 	// get access token if session is valid, authenticated, and unexpired
 	accessToken, err := h.session.GetAccessToken(session.Value)
+	if err != nil {
+		h.session.HandleSessionErr(err, w)
+		return
+	}
 }

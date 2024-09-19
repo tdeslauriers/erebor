@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/tdeslauriers/carapace/pkg/config"
 	"github.com/tdeslauriers/carapace/pkg/connect"
 	"github.com/tdeslauriers/carapace/pkg/data"
 	"github.com/tdeslauriers/carapace/pkg/session/provider"
@@ -47,8 +48,9 @@ type SessionErrService interface {
 }
 
 // NewService creates a new instance of the container Session Service interface and returns a pointer to its concrete implementation.
-func NewService(db data.SqlRepository, i data.Indexer, c data.Cryptor, p provider.S2sTokenProvider, call connect.S2sCaller) Service {
+func NewService(cfg *config.OauthRedirect, db data.SqlRepository, i data.Indexer, c data.Cryptor, p provider.S2sTokenProvider, call connect.S2sCaller) Service {
 	return &service{
+		cfg:          cfg,
 		db:           db,
 		indexer:      i,
 		cryptor:      c,
@@ -65,6 +67,7 @@ var _ Service = (*service)(nil)
 
 // service is the concrete implementation of the Service interface.
 type service struct {
+	cfg          *config.OauthRedirect // needed to populate client id for refresh requests
 	db           data.SqlRepository
 	indexer      data.Indexer
 	cryptor      data.Cryptor
@@ -474,6 +477,12 @@ func (s *service) HandleSessionErr(err error, w http.ResponseWriter) {
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusUnauthorized,
 			Message:    ErrSessionNotFound,
+		}
+		e.SendJsonErr(w)
+	case strings.Contains(err.Error(), ErrSessionNotAuthenticated):
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusUnauthorized,
+			Message:    ErrSessionNotAuthenticated,
 		}
 		e.SendJsonErr(w)
 	case strings.Contains(err.Error(), ErrCsrfMismatch):

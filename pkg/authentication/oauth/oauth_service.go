@@ -28,7 +28,7 @@ type Service interface {
 // NewService creates a new instance of the login service
 func NewService(o config.OauthRedirect, db data.SqlRepository, c data.Cryptor, i data.Indexer) Service {
 	return &service{
-		oAuth:   o,
+		oauth:   o,
 		db:      db,
 		cryptor: c,
 		indexer: i,
@@ -56,7 +56,7 @@ type OauthErrService interface {
 var _ Service = (*service)(nil)
 
 type service struct {
-	oAuth   config.OauthRedirect
+	oauth   config.OauthRedirect
 	db      data.SqlRepository
 	cryptor data.Cryptor
 	indexer data.Indexer
@@ -304,7 +304,7 @@ func (s *service) build() (*OauthExchange, error) {
 	wgExchange.Add(1)
 	go func(encrypted *string, errChan chan error, wg *sync.WaitGroup) {
 		defer wgExchange.Done()
-		cipher, err := s.cryptor.EncryptServiceData(s.oAuth.CallbackClientId)
+		cipher, err := s.cryptor.EncryptServiceData(s.oauth.CallbackClientId)
 		if err != nil {
 			errChan <- fmt.Errorf("%s: %v", ErrEncryptCallbackClientId, err)
 		}
@@ -315,7 +315,7 @@ func (s *service) build() (*OauthExchange, error) {
 	wgExchange.Add(1)
 	go func(encrypted *string, errChan chan error, wg *sync.WaitGroup) {
 		defer wgExchange.Done()
-		cipher, err := s.cryptor.EncryptServiceData(s.oAuth.CallbackUrl)
+		cipher, err := s.cryptor.EncryptServiceData(s.oauth.CallbackUrl)
 		if err != nil {
 			errChan <- fmt.Errorf("%s: %v", ErrEncryptCallbackRedirectUrl, err)
 		}
@@ -364,8 +364,8 @@ func (s *service) build() (*OauthExchange, error) {
 		ResponseType: string(types.AuthCode),
 		Nonce:        nonce.String(),
 		State:        state.String(),
-		ClientId:     s.oAuth.CallbackClientId,
-		RedirectUrl:  s.oAuth.CallbackUrl,
+		ClientId:     s.oauth.CallbackClientId,
+		RedirectUrl:  s.oauth.CallbackUrl,
 		CreatedAt:    data.CustomTime{Time: currentTime},
 	}, nil
 }

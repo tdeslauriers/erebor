@@ -30,7 +30,7 @@ type Gateway interface {
 	CloseDb() error
 }
 
-func New(config config.Config) (Gateway, error) {
+func New(config *config.Config) (Gateway, error) {
 
 	// server
 	serverPki := &connect.Pki{
@@ -115,7 +115,7 @@ func New(config config.Config) (Gateway, error) {
 	s2sToken := provider.NewS2sTokenProvider(s2sIdentity, creds, repository, cryptor)
 
 	// ux session service
-	uxSession := uxsession.NewService(repository, indexer, cryptor, s2sToken, userIdentity)
+	uxSession := uxsession.NewService(&config.OauthRedirect, repository, indexer, cryptor, s2sToken, userIdentity)
 
 	// oauth service: state, nonce, redirect
 	oAuth := oauth.NewService(config.OauthRedirect, repository, cryptor, indexer)
@@ -142,7 +142,7 @@ func New(config config.Config) (Gateway, error) {
 	cleanup := schedule.NewCleanup(repository)
 
 	return &gateway{
-		config:       config,
+		config:       *config,
 		serverTls:    serverTlsConfig,
 		repository:   repository,
 		s2sToken:     s2sToken,

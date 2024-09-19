@@ -17,9 +17,9 @@ type CsrfHandler interface {
 	HandleGetCsrf(w http.ResponseWriter, r *http.Request)
 }
 
-func NewCsrfHandler(s Service) CsrfHandler {
+func NewCsrfHandler(c CsrfService) CsrfHandler {
 	return &csrfHandler{
-		service: s,
+		csrf: c,
 
 		logger: slog.Default().
 			With(slog.String(util.PackageKey, util.PackageSession)).
@@ -30,11 +30,12 @@ func NewCsrfHandler(s Service) CsrfHandler {
 var _ CsrfHandler = (*csrfHandler)(nil)
 
 type csrfHandler struct {
-	service Service
+	csrf CsrfService
 
 	logger *slog.Logger
 }
 
+// HandleGetCsrf implements HandleGetCsrf of CsrfHandler interface
 func (h *csrfHandler) HandleGetCsrf(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "GET" {
 		h.logger.Error("only GET requests are allowed to /csrf endpoint")
@@ -66,7 +67,7 @@ func (h *csrfHandler) HandleGetCsrf(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// get csrf token
-	uxSession, err := h.service.GetCsrf(sessionId)
+	uxSession, err := h.csrf.GetCsrf(sessionId)
 	if err != nil {
 		h.handleServiceErrors(err, w)
 		return
