@@ -86,12 +86,12 @@ func (s *service) GetAccessToken(session string) (string, error) {
 		}
 
 		// check if session listed as authenticated: this is a convenience value only, but should not be false
-		if !token.Authenticated {
+		if !token.SessionAuthenticated {
 			return "", fmt.Errorf("%s - session token xxxxxx-%s", ErrSessionNotAuthenticated, session[len(session)-6:])
 		}
 
 		// chcek if session token is expired
-		if token.CreatedAt.Add(1 * time.Hour).Before(time.Now().UTC()) {
+		if token.SessionCreatedAt.Add(1 * time.Hour).Before(time.Now().UTC()) {
 			return "", fmt.Errorf("%s - session token xxxxxx-%s", ErrAccessTokenExpired, session[len(session)-6:])
 		}
 

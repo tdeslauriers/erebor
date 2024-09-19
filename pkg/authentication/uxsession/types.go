@@ -117,10 +117,10 @@ type LiveAccessToken struct {
 type UxsessionAccesstoken struct {
 	// uxsession fields
 	// omitting sensitive/unused fields: session_token, csrf_token, session_index
-	UxsessionId    string          `json:"uxsession_id,omitempty" db:"uxsession_uuid"`
-	CreatedAt      data.CustomTime `json:"created_at" db:"created_at"`
-	Authenticated  bool            `json:"authenticated" db:"authenticated"`
-	SessionRevoked bool            `json:"revoked,omitempty" db:"revoked"`
+	UxsessionId          string          `json:"uxsession_id,omitempty" db:"uxsession_uuid"`
+	SessionCreatedAt     data.CustomTime `json:"created_at" db:"created_at"`
+	SessionAuthenticated bool            `json:"authenticated" db:"authenticated"`
+	SessionRevoked       bool            `json:"revoked,omitempty" db:"revoked"`
 
 	// accesstoken fields
 	AccessTokenId  string          `json:"access_token_id,omitempty" db:"accesstoken_uuid"`

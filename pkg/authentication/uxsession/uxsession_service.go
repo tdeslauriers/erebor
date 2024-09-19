@@ -492,6 +492,61 @@ func (s *service) HandleSessionErr(err error, w http.ResponseWriter) {
 		}
 		e.SendJsonErr(w)
 		return
+	case strings.Contains(err.Error(), ErrAccessRefreshNotFound):
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusUnauthorized,
+			Message:    ErrAccessRefreshNotFound,
+		}
+		e.SendJsonErr(w)
+		return
+	case strings.Contains(err.Error(), ErrAccessTokenNotFound):
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusUnauthorized,
+			Message:    ErrAccessTokenNotFound,
+		}
+		e.SendJsonErr(w)
+		return
+	case strings.Contains(err.Error(), ErrAccessTokenExpired):
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusUnauthorized,
+			Message:    ErrAccessTokenExpired,
+		}
+		e.SendJsonErr(w)
+		return
+	case strings.Contains(err.Error(), ErrAccessTokenRevoked):
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusUnauthorized,
+			Message:    ErrAccessTokenRevoked,
+		}
+		e.SendJsonErr(w)
+		return
+	case strings.Contains(err.Error(), ErrRefreshNotFound):
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusUnauthorized,
+			Message:    ErrRefreshNotFound,
+		}
+		e.SendJsonErr(w)
+		return
+	case strings.Contains(err.Error(), ErrRefreshTokenExpired):
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusUnauthorized,
+			Message:    ErrRefreshTokenExpired,
+		}
+		e.SendJsonErr(w)
+		return
+	case strings.Contains(err.Error(), ErrRefreshTokenClaimed):
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusUnauthorized,
+			Message:    ErrRefreshTokenClaimed,
+		}
+		e.SendJsonErr(w)
+		return
+	case strings.Contains(err.Error(), ErrRefreshTokenRevoked):
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusUnauthorized,
+			Message:    ErrRefreshTokenRevoked,
+		}
+		e.SendJsonErr(w)
 	default:
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusInternalServerError,
