@@ -1,12 +1,14 @@
 package user
 
 import (
+	"encoding/json"
 	"erebor/internal/util"
 	"erebor/pkg/authentication/uxsession"
 	"log/slog"
 	"net/http"
 
 	"github.com/tdeslauriers/carapace/pkg/connect"
+	"github.com/tdeslauriers/carapace/pkg/profile"
 	"github.com/tdeslauriers/carapace/pkg/session/provider"
 )
 
@@ -19,10 +21,11 @@ type ProfileHandler interface {
 }
 
 // NewProfileHandler returns a pointer to a concrete implementation of the ProfileHandler interface.
-func NewProfileHandler(ux uxsession.Service, p provider.S2sTokenProvider) ProfileHandler {
+func NewProfileHandler(ux uxsession.Service, p provider.S2sTokenProvider, c connect.S2sCaller) ProfileHandler {
 	return &profileHandler{
 		session:  ux,
-		s2sToken: p,
+		provider: p,
+		identity: c,
 
 		logger: slog.Default().
 			With(slog.String(util.PackageKey, util.PackageUser)).
@@ -35,7 +38,9 @@ var _ ProfileHandler = (*profileHandler)(nil)
 // profileHandler is the concrete implementation of the ProfileHandler interface.
 type profileHandler struct {
 	session  uxsession.Service
-	s2sToken provider.S2sTokenProvider
+	provider provider.S2sTokenProvider
+	identity connect.S2sCaller
+	// profile connect.S2sCaller: silhoutte service, ie, non-identity data that is part of user profile, address, phone, preferences, etc
 
 	logger *slog.Logger
 }
@@ -87,10 +92,44 @@ func (h *profileHandler) handleGetProfile(w http.ResponseWriter, r *http.Request
 		}
 	}
 
-	// get access token if session is valid, authenticated, and unexpired
+	// get user access token from session
 	accessToken, err := h.session.GetAccessToken(session.Value)
 	if err != nil {
+		h.logger.Error("failed to get access token from session", "err", err.Error())
 		h.session.HandleSessionErr(err, w)
+		return
+	}
+
+	// get s2s token for identity service
+	s2sToken, err := h.provider.GetServiceToken(util.ServiceS2sIdentity)
+	if err != nil {
+		h.logger.Error("failed to get s2s token for call to profile service", "err", err.Error())
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusInternalServerError,
+			Message:    "failed to get s2s token",
+		}
+		e.SendJsonErr(w)
+		return
+	}
+
+	// get user data from identity service
+	var user profile.User
+	if err := h.identity.GetServiceData("/profile", accessToken, s2sToken, user); err != nil {
+		h.logger.Error("failed to get user profile", "err", err.Error())
+		h.identity.RespondUpstreamError(err, w)
+		return
+	}
+
+	// respond user profile to client
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(user); err != nil {
+		h.logger.Error("failed to encode user profile to json", "err", err.Error())
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusInternalServerError,
+			Message:    "failed to encode user profile to json",
+		}
+		e.SendJsonErr(w)
 		return
 	}
 }

@@ -6,3 +6,5 @@ github.com/google/uuid v1.6.0 h1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=
 github.com/google/uuid v1.6.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
 github.com/tdeslauriers/carapace v0.0.146 h1:fi0XJJqhf/57lp8ikokOOW6FUy8X4RdbuAsUq1+vcQQ=
 github.com/tdeslauriers/carapace v0.0.146/go.mod h1:sBb/Im2oYwhkEeU8rJP85LHAqBe6SKX74mlbTjr/lac=
+github.com/tdeslauriers/carapace v0.0.148 h1:3QdgXzuyISb5x1ZMr+OJZ8uRUhurWxZD2HFH69v9BF0=
+github.com/tdeslauriers/carapace v0.0.148/go.mod h1:sBb/Im2oYwhkEeU8rJP85LHAqBe6SKX74mlbTjr/lac=

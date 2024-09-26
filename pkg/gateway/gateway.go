@@ -10,6 +10,7 @@ import (
 	"erebor/pkg/authentication"
 	"erebor/pkg/authentication/oauth"
 	"erebor/pkg/authentication/uxsession"
+	"erebor/pkg/user"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -185,9 +186,11 @@ func (g *gateway) CloseDb() error {
 func (g *gateway) Run() error {
 
 	// setup handlers
+	// session
 	uxSessionHandler := uxsession.NewHandler(g.uxSession)
 	csrfHandler := uxsession.NewCsrfHandler(g.uxSession)
 
+	// authentication
 	register := authentication.NewRegistrationHandler(g.config.OauthRedirect, g.uxSession, g.s2sToken, g.userIdentity)
 
 	oauth := oauth.NewHandler(g.oAuth)
@@ -195,6 +198,9 @@ func (g *gateway) Run() error {
 	logout := authentication.NewLogoutHandler(g.uxSession)
 
 	callback := authentication.NewCallbackHandler(g.s2sToken, g.userIdentity, g.oAuth, g.uxSession, g.verifier)
+
+	// profile 
+	profile := user.NewProfileHandler(g.uxSession, g.s2sToken, g.userIdentity)
 
 	// setup mux
 	mux := http.NewServeMux()
@@ -209,6 +215,8 @@ func (g *gateway) Run() error {
 	mux.HandleFunc("/oauth/callback", callback.HandleCallback)
 	mux.HandleFunc("/login", login.HandleLogin)
 	mux.HandleFunc("/logout", logout.HandleLogout)
+
+	mux.HandleFunc("/profile", profile.HandleProfile)
 
 	erebor := &connect.TlsServer{
 		Addr:      g.config.ServicePort,

@@ -19,6 +19,7 @@ import (
 type TokenService interface {
 	// GetAccessToken retrieves the access token record from the database, decrypts the access and refresh tokens,
 	// and returns the struct.  If the access token is expired, it will use an active refesh token to retrieve a new access token.
+	// Note: will will return an error if the provided session is not found, not authenticated, or revoked.
 	GetAccessToken(session string) (string, error)
 
 	// PeristToken creates a new AccessToken record, performs field level encryption for db record,
