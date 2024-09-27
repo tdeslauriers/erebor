@@ -71,29 +71,20 @@ func (h *profileHandler) HandleProfile(w http.ResponseWriter, r *http.Request) {
 func (h *profileHandler) handleGetProfile(w http.ResponseWriter, r *http.Request) {
 
 	// validate the user has an active, authenticated session
-	session, err := r.Cookie("session_id")
-	if err != nil {
-		if err == http.ErrNoCookie {
-			h.logger.Error("no session_id cookie found in request")
-			e := connect.ErrorHttp{
-				StatusCode: http.StatusUnauthorized,
-				Message:    "no session_id cookie found in request",
-			}
-			e.SendJsonErr(w)
-			return
-		} else {
-			h.logger.Error("failed to get session_id cookie from request", "err", err.Error())
-			e := connect.ErrorHttp{
-				StatusCode: http.StatusInternalServerError,
-				Message:    "failed to get session_id cookie from request",
-			}
-			e.SendJsonErr(w)
-			return
+	session := r.Header.Get("Authorization")
+	if session == "" {
+		h.logger.Error("no session token found in authorization header")
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusUnauthorized,
+			Message:    "no session_id cookie found in request",
 		}
+		e.SendJsonErr(w)
+		return
+
 	}
 
 	// get user access token from session
-	accessToken, err := h.session.GetAccessToken(session.Value)
+	accessToken, err := h.session.GetAccessToken(session)
 	if err != nil {
 		h.logger.Error("failed to get access token from session", "err", err.Error())
 		h.session.HandleSessionErr(err, w)
@@ -101,7 +92,7 @@ func (h *profileHandler) handleGetProfile(w http.ResponseWriter, r *http.Request
 	}
 
 	// get s2s token for identity service
-	s2sToken, err := h.provider.GetServiceToken(util.ServiceS2sIdentity)
+	s2sToken, err := h.provider.GetServiceToken(util.ServiceUserIdentity)
 	if err != nil {
 		h.logger.Error("failed to get s2s token for call to profile service", "err", err.Error())
 		e := connect.ErrorHttp{
@@ -114,7 +105,7 @@ func (h *profileHandler) handleGetProfile(w http.ResponseWriter, r *http.Request
 
 	// get user data from identity service
 	var user profile.User
-	if err := h.identity.GetServiceData("/profile", accessToken, s2sToken, user); err != nil {
+	if err := h.identity.GetServiceData("/profile", s2sToken, accessToken, &user); err != nil {
 		h.logger.Error("failed to get user profile", "err", err.Error())
 		h.identity.RespondUpstreamError(err, w)
 		return
