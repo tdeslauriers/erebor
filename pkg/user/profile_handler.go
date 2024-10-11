@@ -6,6 +6,7 @@ import (
 	"erebor/pkg/authentication/uxsession"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/tdeslauriers/carapace/pkg/connect"
 	"github.com/tdeslauriers/carapace/pkg/profile"
@@ -97,7 +98,7 @@ func (h *profileHandler) handleGetProfile(w http.ResponseWriter, r *http.Request
 		h.logger.Error("failed to get s2s token for call to profile service", "err", err.Error())
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusInternalServerError,
-			Message:    "failed to get s2s token",
+			Message:    "internl service error",
 		}
 		e.SendJsonErr(w)
 		return
@@ -111,10 +112,55 @@ func (h *profileHandler) handleGetProfile(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// respond user profile to client
+	// build profile model from user data + silhoutte data
+	profile := ProfileCmd{
+		// NEVER RETURN SESSION TOKEN TO CLIENT: it is only used for server-side validation
+		// and will be dropped from the model before sending to the client anyway
+
+		Username:       user.Username,
+		Firstname:      user.Firstname,
+		Lastname:       user.Lastname,
+		Slug:           user.Slug,
+		CreatedAt:      user.CreatedAt,
+		Enabled:        user.Enabled,
+		AccountExpired: user.AccountExpired,
+		AccountLocked:  user.AccountLocked,
+	}
+
+	// get csrf token from session to add to profile form data
+	csrf, err := h.session.GetCsrf(session)
+	if err != nil {
+		h.logger.Error("failed to get csrf token from session to append to profile data for user form", "err", err.Error())
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusInternalServerError,
+			Message:    "failed to fetch all profile data",
+		}
+		e.SendJsonErr(w)
+		return
+	}
+	profile.Csrf = csrf.CsrfToken
+
+	// add date of birth fields to profile model if birthdate is present
+	if user.BirthDate != "" {
+		dob, err := time.Parse("2006-01-02", user.BirthDate)
+		if err != nil {
+			h.logger.Error("failed to parse user birthdate", "err", err.Error())
+			e := connect.ErrorHttp{
+				StatusCode: http.StatusInternalServerError,
+				Message:    "failed to parse user birthdate",
+			}
+			e.SendJsonErr(w)
+			return
+		}
+		profile.BirthMonth = int(dob.Month())
+		profile.BirthDay = dob.Day()
+		profile.BirthYear = dob.Year()
+	}
+
+	// profile model will be returned to the client
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	if err := json.NewEncoder(w).Encode(user); err != nil {
+	if err := json.NewEncoder(w).Encode(profile); err != nil {
 		h.logger.Error("failed to encode user profile to json", "err", err.Error())
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusInternalServerError,
