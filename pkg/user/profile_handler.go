@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"erebor/internal/util"
 	"erebor/pkg/authentication/uxsession"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"time"
@@ -53,10 +54,12 @@ func (h *profileHandler) HandleProfile(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case "GET":
 		// get user profile
-		h.handleGetProfile(w, r)
+		h.handleGet(w, r)
 		return
 	case "PUT":
-	// update user profile
+		// update user profile
+		h.handlePut(w, r)
+		return
 	default:
 		h.logger.Error("only GET and PUT requests are allowed to /profile endpoint")
 		e := connect.ErrorHttp{
@@ -68,8 +71,8 @@ func (h *profileHandler) HandleProfile(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// handleGetProfile handles the GET request for a user's profile.
-func (h *profileHandler) handleGetProfile(w http.ResponseWriter, r *http.Request) {
+// handleGet handles the GET request for a user's profile.
+func (h *profileHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 
 	// validate the user has an active, authenticated session
 	session := r.Header.Get("Authorization")
@@ -159,6 +162,144 @@ func (h *profileHandler) handleGetProfile(w http.ResponseWriter, r *http.Request
 
 	// profile model will be returned to the client
 	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(profile); err != nil {
+		h.logger.Error("failed to encode user profile to json", "err", err.Error())
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusInternalServerError,
+			Message:    "failed to encode user profile to json",
+		}
+		e.SendJsonErr(w)
+		return
+	}
+}
+
+func (h *profileHandler) handlePut(w http.ResponseWriter, r *http.Request) {
+
+	// validate the user has an active, authenticated session
+	session := r.Header.Get("Authorization")
+	if session == "" {
+		h.logger.Error("no session token found in authorization header")
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusUnauthorized,
+			Message:    "no session_id cookie found in request",
+		}
+		e.SendJsonErr(w)
+		return
+	}
+
+	if valid, err := h.session.IsValid(session); !valid {
+		h.logger.Error("invalid csrf token", "err", err.Error())
+		h.session.HandleSessionErr(err, w)
+		return
+	}
+
+	// get request body
+	var cmd ProfileCmd
+	if err := json.NewDecoder(r.Body).Decode(&cmd); err != nil {
+		h.logger.Error("failed to decode json in user profile request body", "err", err.Error())
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusBadRequest,
+			Message:    "improperly formatted json",
+		}
+		e.SendJsonErr(w)
+		return
+	}
+
+	// input validation of the profile request
+	if err := cmd.ValidateCmd(); err != nil {
+		h.logger.Error("invalid profile request", "err", err.Error())
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusBadRequest,
+			Message:    err.Error(),
+		}
+		e.SendJsonErr(w)
+		return
+	}
+
+	// validate csrf token
+	if valid, err := h.session.IsValidCsrf(session, cmd.Csrf); !valid {
+		h.logger.Error("invalid csrf token", "err", err.Error())
+		h.session.HandleSessionErr(err, w)
+		return
+	}
+
+	// prepare user data update cmd (build dob string if all dob fields are present)
+	var dob string
+	if cmd.BirthMonth != 0 && cmd.BirthDay != 0 && cmd.BirthYear != 0 {
+		dob = fmt.Sprintf("%d-%02d-%02d", cmd.BirthYear, cmd.BirthMonth, cmd.BirthDay)
+	}
+
+	user := profile.User{
+		Id:             cmd.Id,       // possibly "", but doesnt matter because it is not used in the update
+		Username:       cmd.Username, // possibly "", but dropped from update cmd upstream: usename/subject will be taken from token
+		Firstname:      cmd.Firstname,
+		Lastname:       cmd.Lastname,
+		BirthDate:      dob,
+		Slug:           cmd.Slug,           // possibly "", not used in the update (profile only, is used in admin user update)
+		CreatedAt:      cmd.CreatedAt,      // possibly "", not used in the update
+		Enabled:        cmd.Enabled,        // passed, but dropped upstream because user not allowed to change enabled status
+		AccountExpired: cmd.AccountExpired, // passed, but dropped upstream because user not allowed to change account expired status
+		AccountLocked:  cmd.AccountLocked,  // passed, but dropped upstream because user not allowed to change account locked status
+	}
+
+	// get user access token from session
+	accessToken, err := h.session.GetAccessToken(session)
+	if err != nil {
+		h.logger.Error("failed to get access token from session", "err", err.Error())
+		h.session.HandleSessionErr(err, w)
+		return
+	}
+
+	// get s2s token for identity service
+	s2sToken, err := h.provider.GetServiceToken(util.ServiceUserIdentity)
+	if err != nil {
+		h.logger.Error("failed to get s2s token for call to profile service", "err", err.Error())
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusInternalServerError,
+			Message:    "internl service error",
+		}
+		e.SendJsonErr(w)
+		return
+	}
+
+	// update user data in identity service
+	var updated profile.User
+	if err := h.identity.PostToService("/profile", s2sToken, accessToken, user, &updated); err != nil {
+		h.logger.Error("failed to update user profile", "err", err.Error())
+		h.identity.RespondUpstreamError(err, w)
+		return
+	}
+
+	// build profile model from user data + silhoutte data
+	profile := ProfileCmd{
+		// drop id no need for it in the response
+		Username:       updated.Username,
+		Firstname:      updated.Firstname,
+		Lastname:       updated.Lastname,
+		Slug:           updated.Slug,
+		CreatedAt:      updated.CreatedAt,
+		Enabled:        updated.Enabled,
+		AccountExpired: updated.AccountExpired,
+		AccountLocked:  updated.AccountLocked,
+	}
+
+	// add date of birth fields to profile model if birthdate is present
+	if updated.BirthDate != "" {
+		birthdate, err := time.Parse("2006-01-02", updated.BirthDate)
+		if err != nil {
+			h.logger.Error("failed to parse user birthdate returned from identity service", "err", err.Error())
+			h.identity.RespondUpstreamError(err, w)
+			return
+		}
+		profile.BirthMonth = int(birthdate.Month())
+		profile.BirthDay = birthdate.Day()
+		profile.BirthYear = birthdate.Year()
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	// cant be 204 because will need to return the new csrf token to the client,
+	// TODO: replace used csrf with new one
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(profile); err != nil {
 		h.logger.Error("failed to encode user profile to json", "err", err.Error())

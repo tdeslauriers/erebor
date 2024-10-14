@@ -40,10 +40,12 @@ func (cmd *ProfileCmd) ValidateCmd() error {
 	}
 
 	// Username is immutable at this time, and will be dropped for update operations
-	// TODO: make funcitonality to change username
 	// only lightweight validation to make sure it isnt too long
-	if len(cmd.Username) < validate.EmailMin || len(cmd.Username) > validate.EmailMax {
-		return fmt.Errorf("invalid username: must be greater than %d and less than %d characters long", validate.EmailMin, validate.EmailMax)
+	// may not be present on user initiated updates since using name not taken from update cmd
+	if cmd.Username != "" {
+		if len(cmd.Username) < validate.EmailMin || len(cmd.Username) > validate.EmailMax {
+			return fmt.Errorf("invalid username: must be greater than %d and less than %d characters long", validate.EmailMin, validate.EmailMax)
+		}
 	}
 
 	// validate firstname

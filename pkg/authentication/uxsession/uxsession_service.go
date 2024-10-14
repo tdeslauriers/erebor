@@ -34,6 +34,9 @@ type SessionService interface {
 	// If no access tokens exist, user will be redirected to login page.
 	Build(UxSessionType) (*UxSession, error)
 
+	// IsValid checks if the session is valid, ie, not revoked, not expired, etc.
+	IsValid(session string) (bool, error)
+
 	// RevokeSession revokes the session.
 	RevokeSession(session string) error
 
@@ -208,6 +211,43 @@ func (s *service) Build(st UxSessionType) (*UxSession, error) {
 		Authenticated: bool(st),
 		Revoked:       false,
 	}, nil
+}
+
+// IsValid checks if the session is valid, ie, not revoked, not expired, etc.
+func (s *service) IsValid(session string) (bool, error) {
+
+	// light weight input validation
+	if len(session) < 16 || len(session) > 64 {
+		return false, errors.New(ErrInvalidSession)
+	}
+
+	// build session index
+	index, err := s.indexer.ObtainBlindIndex(session)
+	if err != nil {
+		return false, fmt.Errorf("%s from provided session token xxxxxx-%s: %v", ErrGenIndex, session[len(session)-6:], err)
+	}
+
+	// look up uxSession from db by index
+	var uxSession UxSession
+	qry := "SELECT uuid, session_index, session_token, csrf_token, created_at, authenticated, revoked FROM uxsession WHERE session_index = ?"
+	if err := s.db.SelectRecord(qry, &uxSession, index); err != nil {
+		if err == sql.ErrNoRows {
+			return false, fmt.Errorf("session xxxxxx-%s - %s: %v", session[len(session)-6:], ErrSessionNotFound, err)
+		}
+		return false, err
+	}
+
+	// check if session is revoked
+	if uxSession.Revoked {
+		return false, fmt.Errorf("session id %s: %s", uxSession.Id, ErrSessionRevoked)
+	}
+
+	// check if session is expired
+	if uxSession.CreatedAt.UTC().Add(1 * time.Hour).Before(time.Now().UTC()) {
+		return false, fmt.Errorf("session id %s: %s", uxSession.Id, ErrSessionExpired)
+	}
+
+	return true, nil
 }
 
 // RevokeSession revokes the session
