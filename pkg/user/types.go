@@ -11,8 +11,7 @@ import (
 // Profile is a model for a user's profile as it is expected to be returned to the frontend ui.
 // It is also the model that will be submitted back to the gateway to update service data.
 type ProfileCmd struct {
-	Session string `json:"session,omitempty"`
-	Csrf    string `json:"csrf"`
+	Csrf string `json:"csrf"`
 
 	Id             string          `json:"id,omitempty"`
 	Username       string          `json:"username"`
@@ -30,11 +29,7 @@ type ProfileCmd struct {
 
 func (cmd *ProfileCmd) ValidateCmd() error {
 
-	// light validation of session and csrf
-	if len(cmd.Session) <= 16 || len((cmd.Session)) > 64 {
-		return fmt.Errorf("invalid session token: must be between 16 and 64 characters")
-	}
-
+	// light weight validation of csrf
 	if len(cmd.Csrf) <= 16 || len((cmd.Csrf)) > 64 {
 		return fmt.Errorf("invalid csrf token: must be between 16 and 64 characters")
 	}
