@@ -46,19 +46,22 @@ func (s *service) GetAccessToken(session string) (string, error) {
 	}
 
 	// look up uxSession from db by index
+	// Note: the coalesce function is used to return defaults for null values.  Revoked and expired checks are set to trigger their errors
+	// in the checks below just to make double sure if the session is untenticated a token will n ever be tried.
+	// checks are also done for empty strings which would indicate an unauthenticated session.
 	qry := `SELECT 
 				u.uuid AS uxsession_uuid, 
 				u.created_at, 
 				u.authenticated, 
 				u.revoked,
-				a.uuid AS accesstoken_uuid,
-				a.access_token,
-				a.access_expires,
-				a.access_revoked,
-				a.refresh_token,
-				a.refresh_expires,
-				a.refresh_revoked,
-				a.refresh_claimed
+				COALESCE(a.uuid, '') AS accesstoken_uuid,
+				COALESCE(a.access_token, '') AS access_token,
+				COALESCE(a.access_expires, '1970-01-01 00:00:00') AS access_expires,
+				COALESCE(a.access_revoked, true) AS access_revoked,
+				COALESCE(a.refresh_token, '') AS refresh_token,
+				COALESCE(a.refresh_expires, '1970-01-01 00:00:00') AS refresh_expires,
+				COALESCE(a.refresh_revoked, true) AS refresh_revoked,
+				COALESCE(a.refresh_claimed, true) AS refresh_claimed
 			FROM uxsession u
 				LEFT OUTER JOIN uxsession_accesstoken ua ON u.uuid = ua.uxsession_uuid
 				LEFT OUTER JOIN accesstoken a ON ua.accesstoken_uuid = a.uuid
@@ -71,24 +74,34 @@ func (s *service) GetAccessToken(session string) (string, error) {
 		return "", fmt.Errorf("failed to retrieve access token records for session token xxxxxx-%s: %v", session[len(session)-6:], err)
 	}
 
+	fmt.Printf("tokens: %+v\n", tokens)
+
 	// if there are no tokens, return an error
 	// this should be caught above, but good practice to check
 	if len(tokens) == 0 {
 		return "", fmt.Errorf("%s - session token xxxxxx-%s", ErrSessionNotFound, session[len(session)-6:])
 	}
 
+	// if there is only one session returned, check for empty/default values in access token fields
+	// this means the session is not authenticated or has no access token records, ie, fields were null.
+	if len(tokens) == 1 {
+		if tokens[0].AccessToken == "" || tokens[0].RefreshToken == "" {
+			return "", fmt.Errorf("%s - session token xxxxxx-%s", ErrAccessTokenNotFound, session[len(session)-6:])
+		}
+	}
+
 	// return the first token that passes all checks.  If none pass, function will ultimately return error.
 	for _, token := range tokens {
 
 		// session checks are returns not continues because same value in all records
-		// check if session is revoked
-		if token.SessionRevoked {
-			return "", fmt.Errorf("%s - session token xxxxxx-%s", ErrSessionRevoked, session[len(session)-6:])
-		}
-
 		// check if session listed as authenticated: this is a convenience value only, but should not be false
 		if !token.SessionAuthenticated {
 			return "", fmt.Errorf("%s - session token xxxxxx-%s", ErrSessionNotAuthenticated, session[len(session)-6:])
+		}
+
+		// check if session is revoked
+		if token.SessionRevoked {
+			return "", fmt.Errorf("%s - session token xxxxxx-%s", ErrSessionRevoked, session[len(session)-6:])
 		}
 
 		// chcek if session token is expired
