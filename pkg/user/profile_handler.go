@@ -130,19 +130,6 @@ func (h *profileHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 		AccountLocked:  user.AccountLocked,
 	}
 
-	// get csrf token from session to add to profile form data
-	csrf, err := h.session.GetCsrf(session)
-	if err != nil {
-		h.logger.Error("failed to get csrf token from session to append to profile data for user form", "err", err.Error())
-		e := connect.ErrorHttp{
-			StatusCode: http.StatusInternalServerError,
-			Message:    "failed to fetch all profile data",
-		}
-		e.SendJsonErr(w)
-		return
-	}
-	profile.Csrf = csrf.CsrfToken
-
 	// add date of birth fields to profile model if birthdate is present
 	if user.BirthDate != "" {
 		dob, err := time.Parse("2006-01-02", user.BirthDate)
@@ -189,7 +176,7 @@ func (h *profileHandler) handlePut(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if valid, err := h.session.IsValid(session); !valid {
-		h.logger.Error("invalid csrf token", "err", err.Error())
+		h.logger.Error("invalid session token", "err", err.Error())
 		h.session.HandleSessionErr(err, w)
 		return
 	}

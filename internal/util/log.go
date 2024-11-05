@@ -20,4 +20,5 @@ const (
 	ComponentOauth     string = "oauth flow exchange"
 	ComponentCallback  string = "oauth flow callback"
 	ComponentProfile   string = "profile"
+	ComponentReset     string = "password reset"
 )

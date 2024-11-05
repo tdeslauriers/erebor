@@ -74,8 +74,6 @@ func (s *service) GetAccessToken(session string) (string, error) {
 		return "", fmt.Errorf("failed to retrieve access token records for session token xxxxxx-%s: %v", session[len(session)-6:], err)
 	}
 
-	fmt.Printf("tokens: %+v\n", tokens)
-
 	// if there are no tokens, return an error
 	// this should be caught above, but good practice to check
 	if len(tokens) == 0 {

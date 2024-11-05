@@ -199,8 +199,9 @@ func (g *gateway) Run() error {
 
 	callback := authentication.NewCallbackHandler(g.s2sToken, g.userIdentity, g.oAuth, g.uxSession, g.verifier)
 
-	// profile 
+	// profile
 	profile := user.NewProfileHandler(g.uxSession, g.s2sToken, g.userIdentity)
+	reset := user.NewResetHandler(g.uxSession, g.s2sToken, g.userIdentity)
 
 	// setup mux
 	mux := http.NewServeMux()
@@ -217,6 +218,7 @@ func (g *gateway) Run() error {
 	mux.HandleFunc("/logout", logout.HandleLogout)
 
 	mux.HandleFunc("/profile", profile.HandleProfile)
+	mux.HandleFunc("/reset", reset.HandleReset)
 
 	erebor := &connect.TlsServer{
 		Addr:      g.config.ServicePort,

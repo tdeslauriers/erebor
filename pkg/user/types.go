@@ -11,7 +11,7 @@ import (
 // Profile is a model for a user's profile as it is expected to be returned to the frontend ui.
 // It is also the model that will be submitted back to the gateway to update service data.
 type ProfileCmd struct {
-	Csrf string `json:"csrf"`
+	Csrf string `json:"csrf,omitempty"`
 
 	Id             string          `json:"id,omitempty"`
 	Username       string          `json:"username"`

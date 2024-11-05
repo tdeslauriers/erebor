@@ -14,6 +14,10 @@ const (
 	ErrNonceMismatch        = "nonce value mismatch"
 	ErrClientIdMismatch     = "client id mismatch"
 	ErrRedirectUrlMismatch  = "redirect url mismatch"
+	ErrOauthExchangeExpired = "oauth exchange record expired"
+
+	// 422 Unprocessable Entity
+	ErrSessionAuthenticated = "session is authenticated"
 
 	// 500 Internal Server Error
 	ErrGenOauthUuid = "failed to generate oauth exchange uuid"
@@ -36,11 +40,13 @@ const (
 	ErrDecryptRedirectUrl   = "failed to decrypt oauth exchange redirect/callback url"
 
 	ErrLookupOauthExchange = "failed to look up oauth exchange record" // sql error/problem => NOT zero results
+	ErrLookupUxSession     = "failed to look up uxsession record"      // sql error/problem => NOT zero results
 
 	ErrPersistOauthExchange = "failed to build/persist oauth exchange record"
 	ErrPersistXref          = "failed to persist uxsession_oauthflow xref record"
 )
 
+// OauthExchange is a model for an oauth exchange in the database.
 type OauthExchange struct {
 	Id           string          `json:"id,omitempty" db:"uuid"`
 	StateIndex   string          `json:"state_index,omitempty" db:"state_index"`
@@ -50,4 +56,20 @@ type OauthExchange struct {
 	ClientId     string          `json:"client_id" db:"client_id"`
 	RedirectUrl  string          `json:"redirect_url" db:"redirect_url"`
 	CreatedAt    data.CustomTime `json:"created_at" db:"created_at"`
+}
+
+// OauthSession is a model for an oauth session as it is expected to be returned from a database query.
+type OauthSession struct {
+	UxsessionId        string          `db:"uxsession_uuid"`
+	UxsessionCreatedAt data.CustomTime `db:"uxsession_created_at"`
+	Authenticated      bool            `db:"authenticated"`
+	Revoked            bool            `db:"revoked"`
+
+	OauthId        string          `db:"oauth_uuid"`
+	ResponseType   string          `db:"response_type"`
+	Nonce          string          `db:"nonce"`
+	State          string          `db:"state"`
+	ClientId       string          `db:"client_id"`
+	RedirectUrl    string          `db:"redirect_url"`
+	OauthCreatedAt data.CustomTime `db:"oauth_created_at"`
 }
