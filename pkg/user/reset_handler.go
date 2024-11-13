@@ -139,5 +139,7 @@ func (h *resetHandler) HandleReset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.logger.Info("password reset successful")
+
 	w.WriteHeader(http.StatusNoContent)
 }

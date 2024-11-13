@@ -160,7 +160,7 @@ func (h *callbackHandler) HandleCallback(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	render := h.buildRender(accessToken.Claims.Audience)
+	render := BuildRender(accessToken.Claims.Scopes)
 
 	var (
 		wgPersist sync.WaitGroup
@@ -290,24 +290,4 @@ func (h *callbackHandler) verify(token, errMsg string, jot *jwt.Token, ch chan e
 	}
 
 	*jot = *tkn
-}
-
-func (h *callbackHandler) buildRender(audiences []string) Render {
-
-	var render Render
-
-	for _, audience := range audiences {
-
-		switch audience {
-		case util.ServiceS2sIdentity:
-			// identity and profile service are the same from ui perspective
-			render.Profile = true
-		case util.ServiceBlog:
-			render.Blog = true
-		case util.ServiceGallery:
-			render.Gallery = true
-		}
-	}
-
-	return render
 }

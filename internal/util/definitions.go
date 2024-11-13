@@ -6,4 +6,7 @@ const (
 	ServiceProfile      string = "silohette"
 	ServiceBlog         string = "junk"
 	ServiceGallery      string = "gallery"
+	ServiceAllowance    string = "piggybank"
+	ServiceJudo         string = "judo"
+	ServiceFamilyTree   string = "familytree"
 )
