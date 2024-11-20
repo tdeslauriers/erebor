@@ -18,8 +18,7 @@ type CallbackResponse struct {
 	GivenName     string `json:"given_name"`
 	FamilyName    string `json:"family_name"`
 	Birthdate     string `json:"birthdate,omitempty"`
-
-	Ux Render `json:"access,omitempty"`
+	Ux            Render `json:"ux_render,omitempty"`
 }
 
 // Render is a struct that reflects the visual elements that are available to the user
@@ -27,26 +26,21 @@ type CallbackResponse struct {
 // NOTE: these flags are ux/ui convenience for feature display ONLY:
 // they in no way give the user access to the data that is being called by the respective apis.
 type Render struct {
-	ProfileRead  *bool `json:"profile_read,omitempty"`
-	ProfileWrite *bool `json:"profile_write,omitempty"`
-
-	UserList   *bool `json:"user_list,omitempty"`
-	UserRead   *bool `json:"user_read,omitempty"`
-	UserWrite  *bool `json:"user_write,omitempty"`
-	UserDelete *bool `json:"user_delete,omitempty"`
+	// users
+	ProfileRead *bool `json:"profile_read,omitempty"`
+	UserRead    *bool `json:"user_read,omitempty"`
+	UserWrite   *bool `json:"user_write,omitempty"`
+	ScopeRead   *bool `json:"scope_read,omitempty"`
+	ScopeWrite  *bool `json:"scope_write,omitempty"`
 
 	BlogRead  *bool `json:"blog_read,omitempty"`
 	BlogWrite *bool `json:"blog_write,omitempty"`
 
 	// Allowance
-	TaskList      *bool `json:"task_list,omitempty"`
-	TaskRead      *bool `json:"task_read,omitempty"`
-	TaskWrite     *bool `json:"task_write,omitempty"`
-	TaskDelete    *bool `json:"task_delete,omitempty"`
-	PayRollList   *bool `json:"payroll_list,omitempty"`
-	PayrollRead   *bool `json:"payroll_read,omitempty"`
-	PayrollWrite  *bool `json:"payroll_write,omitempty"`
-	PayrollDelete *bool `json:"payroll_delete,omitempty"`
+	TaskRead     *bool `json:"task_read,omitempty"`
+	TaskWrite    *bool `json:"task_write,omitempty"`
+	PayrollRead  *bool `json:"payroll_read,omitempty"`
+	PayrollWrite *bool `json:"payroll_write,omitempty"`
 
 	GalleryRead  *bool `json:"gallery_read,omitempty"`
 	GalleryWrite *bool `json:"gallery_write,omitempty"`
@@ -69,6 +63,7 @@ const (
 
 	Profile ApiEndpoint = "profile"
 	User    ApiEndpoint = "user"
+	Scope   ApiEndpoint = "scope"
 
 	Task    ApiEndpoint = "task"
 	Payroll ApiEndpoint = "payroll"
@@ -114,16 +109,9 @@ func BuildRender(scopes string) Render {
 					render.ProfileRead = setRenderFlag(true)
 					continue
 				}
-				if s[0] == string(Write) {
-					render.ProfileWrite = setRenderFlag(true)
-					continue
-				}
+				// All users have profile-write so no need for specific render
 
 			case string(User):
-				if s[0] == string(List) {
-					render.UserList = setRenderFlag(true)
-					continue
-				}
 				if s[0] == string(Read) {
 					render.UserRead = setRenderFlag(true)
 					continue
@@ -132,8 +120,13 @@ func BuildRender(scopes string) Render {
 					render.UserWrite = setRenderFlag(true)
 					continue
 				}
-				if s[0] == string(Delete) {
-					render.UserDelete = setRenderFlag(true)
+			case string(Scope):
+				if s[0] == string(Read) {
+					render.ScopeRead = setRenderFlag(true)
+					continue
+				}
+				if s[0] == string(Write) {
+					render.ScopeWrite = setRenderFlag(true)
 					continue
 				}
 			default:
@@ -157,10 +150,6 @@ func BuildRender(scopes string) Render {
 
 			switch s[2] {
 			case string(Task):
-				if s[0] == string(List) {
-					render.TaskList = setRenderFlag(true)
-					continue
-				}
 				if s[0] == string(Read) {
 					render.TaskRead = setRenderFlag(true)
 					continue
@@ -169,26 +158,14 @@ func BuildRender(scopes string) Render {
 					render.TaskWrite = setRenderFlag(true)
 					continue
 				}
-				if s[0] == string(Delete) {
-					render.TaskDelete = setRenderFlag(true)
-					continue
-				}
 
 			case string(Payroll):
-				if s[0] == string(List) {
-					render.PayRollList = setRenderFlag(true)
-					continue
-				}
 				if s[0] == string(Read) {
 					render.PayrollRead = setRenderFlag(true)
 					continue
 				}
 				if s[0] == string(Write) {
 					render.PayrollWrite = setRenderFlag(true)
-					continue
-				}
-				if s[0] == string(Delete) {
-					render.PayrollDelete = setRenderFlag(true)
 					continue
 				}
 			default:

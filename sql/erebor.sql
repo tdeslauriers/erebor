@@ -18,9 +18,9 @@ CREATE TABLE accesstoken (
     access_expires TIMESTAMP NOT NULL DEFAULT UTC_TIMESTAMP,
     access_revoked BOOLEAN NOT NULL,
     refresh_token CHAR(128) NOT NULL,
-    refresh_expires TIMESTAMP NOT NULL DEFAULT UTC_TIMESTAMP
+    refresh_expires TIMESTAMP NOT NULL DEFAULT UTC_TIMESTAMP,
     refresh_revoked BOOLEAN NOT NULL,
-    refresh_claimed BOOLEAN NOT NULL,
+    refresh_claimed BOOLEAN NOT NULL
 );
 
 -- ux session to access token xref
@@ -39,7 +39,7 @@ CREATE TABLE oauthflow (
     state_index VARCHAR(128) NOT NULL,
     response_type VARCHAR(128) NOT NULL,
     nonce VARCHAR(128) NOT NULL,
-    state VARCHAR(128) NOT NULL,
+    state VARCHAR(512) NOT NULL,
     client_id VARCHAR(128) NOT NULL,
     redirect_url VARCHAR(2048) NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT UTC_TIMESTAMP

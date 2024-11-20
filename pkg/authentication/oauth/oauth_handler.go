@@ -32,10 +32,6 @@ type handler struct {
 	logger *slog.Logger
 }
 
-type SessionCmd struct {
-	SessionToken string `json:"session_token"`
-}
-
 func (h *handler) HandleGetState(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
 		h.logger.Error("only POST requests are allowed to /oauth/state endpoint")
@@ -47,7 +43,7 @@ func (h *handler) HandleGetState(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var cmd SessionCmd
+	var cmd OauthCmd
 	err := json.NewDecoder(r.Body).Decode(&cmd)
 	if err != nil {
 		h.logger.Error("failed to decode session_token json in the request body", "err", err.Error())
@@ -59,18 +55,18 @@ func (h *handler) HandleGetState(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if len(cmd.SessionToken) < 16 || len(cmd.SessionToken) > 64 {
-		h.logger.Error(fmt.Sprintf("session token length is invalid: %d", len(cmd.SessionToken)))
+	if err := cmd.ValidateCmd(); err != nil {
+		h.logger.Error("failed to validate ouath request cmd in the request body", "err", err.Error())
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusBadRequest,
-			Message:    "not well-formed session token",
+			Message:    fmt.Sprintf("invalid oauth request: %s", err.Error()),
 		}
 		e.SendJsonErr(w)
 		return
 	}
 
 	// look up/create oauth state, nonce, client id, and callback url for the session
-	exchange, err := h.oauth.Obtain(cmd.SessionToken)
+	exchange, err := h.oauth.Obtain(cmd)
 	if err != nil {
 		h.oauth.HandleServiceErr(err, w)
 		return

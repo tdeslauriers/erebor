@@ -249,13 +249,13 @@ func (h *callbackHandler) HandleCallback(w http.ResponseWriter, r *http.Request)
 
 	// return authentication data
 	response := CallbackResponse{
-		Session: session.SessionToken,
-
+		Session:       session.SessionToken,
 		Authenticated: session.Authenticated,
-		Username:      idToken.Claims.Email,
-		Fullname:      idToken.Claims.Name,
-		GivenName:     idToken.Claims.GivenName,
-		FamilyName:    idToken.Claims.FamilyName,
+
+		Username:   idToken.Claims.Email,
+		Fullname:   idToken.Claims.Name,
+		GivenName:  idToken.Claims.GivenName,
+		FamilyName: idToken.Claims.FamilyName,
 		// Birthdate: idToken.Claims.Birthdate,
 
 		Ux: render,

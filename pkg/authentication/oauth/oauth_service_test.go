@@ -40,8 +40,10 @@ const (
 	TestNewOauthResponseType string = string(types.AuthCode)
 
 	TestValidResponseCode types.ResponseType = types.AuthCode
-	TestValidState        string             = "6b638422-3f25-4156-a6e3-56e4b0531f7a"
-	TestValidNonce        string             = "f3b6acb9-28b2-4130-a421-ed5b4d7cf222"
+
+	//{"state":"6b638422-3f25-4156-a6e3-56e4b0531f7a","nav_endpoint":"/profile"}
+	TestValidState string = "eyJzdGF0ZSI6IjZiNjM4NDIyLTNmMjUtNDE1Ni1hNmUzLTU2ZTRiMDUzMWY3YSIsIm5hdl9lbmRwb2ludCI6Ii9wcm9maWxlIn0K"
+	TestValidNonce string = "f3b6acb9-28b2-4130-a421-ed5b4d7cf222"
 )
 
 // mock default callback/redirect url and client
@@ -67,7 +69,7 @@ const (
 			o.state, 
 			o.client_id, 
 			o.redirect_url, 
-			o.created_at,
+			o.created_at
 		FROM oauthflow o 
 			LEFT OUTER JOIN uxsession_oauthflow uo ON o.uuid = uo.oauthflow_uuid
 			LEFT OUTER JOIN uxsession u ON uo.uxsession_uuid = u.uuid
@@ -80,21 +82,26 @@ const (
 // mocks the SelectRecord method of the SqlRepository interface used by Validate Credentials func
 func (dao *mockAuthSqlRepository) SelectRecord(query string, record interface{}, args ...interface{}) error {
 
+	thirtyMins := time.Now().UTC().Add(-30 * time.Minute) // set now to 30 minutes ago
+
 	switch {
 	case args[0] == "index-"+TestValidSessionXref:
-		// need to reflect record interface's type to mock sql query hydrating the record
-		exchange := reflect.ValueOf(record).Elem()
-		testResults := []string{
-			TestXrefOauthExchangeId,
-			"index-" + TestXrefOauthState,
-			"encrypted-" + TestXrefOauthResponseType,
-			"encrypted-" + TestXrefOauthNonce,
-			"encrypted-" + TestXrefOauthState,
-			"encrypted-" + mockOauthRedirect.CallbackClientId,
-			"encrypted-" + mockOauthRedirect.CallbackUrl} // created at not retuned by this service
+		oauth := reflect.ValueOf(record).Elem()
+		if oauth.Type() == reflect.TypeOf(OauthSession{}) {
+			if oauth.CanSet() {
+				oauth.Field(0).SetString(TestValidSessionXref)
+				oauth.Field(1).Set(reflect.ValueOf(data.CustomTime{Time: thirtyMins}))
+				oauth.Field(2).SetBool(false)
+				oauth.Field(3).SetBool(false)
+				oauth.Field(4).SetString(TestXrefOauthExchangeId)
+				oauth.Field(5).SetString("encrypted-" + TestXrefOauthResponseType)
+				oauth.Field(6).SetString("encrypted-" + TestXrefOauthNonce)
+				oauth.Field(7).SetString("encrypted-" + TestXrefOauthState)
+				oauth.Field(8).SetString("encrypted-" + mockOauthRedirect.CallbackClientId)
+				oauth.Field(9).SetString("encrypted-" + mockOauthRedirect.CallbackUrl)
+				oauth.Field(10).Set(reflect.ValueOf(data.CustomTime{Time: thirtyMins}))
+			}
 
-		for i := 0; i < len(testResults); i++ {
-			exchange.Field(i).SetString(testResults[i])
 		}
 		return nil
 
@@ -102,25 +109,16 @@ func (dao *mockAuthSqlRepository) SelectRecord(query string, record interface{},
 		if query == TestFirstQuery {
 			return sql.ErrNoRows
 		} else {
-			// need to reflect record interface's type to mock sql query hydrating the record
-			uxsession := reflect.ValueOf(record).Elem()
-			testResults := []string{
-				TestValidSessionId,
-				TestValidIndex,
-				"encrypted-" + TestValidSession,
-				"encrypted-" + TestValidCsrf}
-
-			for i := 0; i < uxsession.NumField(); i++ {
-				if i == 4 {
-					now := time.Now()
-					uxsession.Field(i).Set(reflect.ValueOf(data.CustomTime{Time: now}))
-				} else if i == 5 || i == 6 {
-					uxsession.Field(i).SetBool(false)
-				} else {
-					uxsession.Field(i).SetString(testResults[i])
+			oauth := reflect.ValueOf(record).Elem()
+			if oauth.Type() == reflect.TypeOf(OauthSession{}) {
+				if oauth.CanSet() {
+					oauth.Field(0).SetString(TestValidSessionNewOauth)
+					oauth.Field(1).Set(reflect.ValueOf(data.CustomTime{Time: thirtyMins}))
+					oauth.Field(2).SetBool(false)
+					oauth.Field(3).SetBool(false)
+					return nil
 				}
 			}
-			return nil
 		}
 	case args[0] == "index-"+TestSessionDoesNotExist:
 		return sql.ErrNoRows
@@ -129,60 +127,49 @@ func (dao *mockAuthSqlRepository) SelectRecord(query string, record interface{},
 			return sql.ErrNoRows
 		} else {
 
-			// need to refrect record interface's type to mock sql query hydrating the record
-			uxsession := reflect.ValueOf(record).Elem()
-
-			testResults := []string{TestSessionRevoked, TestValidIndex, "encrypted-" + TestSessionRevoked, "encrypted-" + TestValidCsrf}
-			for i := 0; i < uxsession.NumField(); i++ {
-				if i == 4 {
-					now := time.Now()
-					expired := now.Add(-30 * time.Minute)
-					uxsession.Field(i).Set(reflect.ValueOf(data.CustomTime{Time: expired}))
-				} else if i == 5 || i == 6 {
-					uxsession.Field(i).SetBool(true) // set revoked to true and authenticated to true, but authenticated is just a convenience field
-				} else {
-					uxsession.Field(i).SetString(testResults[i])
+			oauth := reflect.ValueOf(record).Elem()
+			if oauth.Type() == reflect.TypeOf(OauthSession{}) {
+				if oauth.CanSet() {
+					oauth.Field(0).SetString(TestValidSessionNewOauth)
+					oauth.Field(1).Set(reflect.ValueOf(data.CustomTime{Time: thirtyMins}))
+					oauth.Field(2).SetBool(false)
+					oauth.Field(3).SetBool(true)
+					return nil
 				}
 			}
-			return nil
 		}
 	case args[0] == "index-"+TestSessionExpired:
 		if query == TestFirstQuery {
 			return sql.ErrNoRows
 		} else {
 			// need to refrect record interface's type to mock sql query hydrating the record
-			uxsession := reflect.ValueOf(record).Elem()
-			testResults := []string{TestSessionRevoked, TestValidIndex, "encrypted-" + TestSessionExpired, "encrypted-" + TestValidCsrf}
-			for i := 0; i < uxsession.NumField(); i++ {
-				if i == 4 {
-					now := time.Now()
-					unexpired := now.Add(-90 * time.Minute) // sets created_at to 90 minutes ago
-
-					uxsession.Field(i).Set(reflect.ValueOf(data.CustomTime{Time: unexpired}))
-				} else if i == 5 || i == 6 {
-					uxsession.Field(i).SetBool(false)
-				} else {
-					uxsession.Field(i).SetString(testResults[i])
+			oauth := reflect.ValueOf(record).Elem()
+			if oauth.Type() == reflect.TypeOf(OauthSession{}) {
+				if oauth.CanSet() {
+					oauth.Field(0).SetString(TestValidSessionNewOauth)
+					oauth.Field(1).Set(reflect.ValueOf(data.CustomTime{Time: thirtyMins.Add(-2 * time.Hour)}))
+					oauth.Field(2).SetBool(false)
+					oauth.Field(3).SetBool(false)
+					return nil
 				}
 			}
-			return nil
 		}
 	case args[0] == "index-"+TestValidSession:
 		// need to reflect record interface's type to mock sql query hydrating the record
 		exchange := reflect.ValueOf(record).Elem()
-		testResults := []string{
-			TestXrefOauthExchangeId,
-			"index-" + TestXrefOauthState,
-			"encrypted-" + "code",
-			"encrypted-" + TestValidNonce,
-			"encrypted-" + TestValidState,
-			"encrypted-" + mockOauthRedirect.CallbackClientId,
-			"encrypted-" + mockOauthRedirect.CallbackUrl} // created at not retuned by this service
-
-		for i := 0; i < len(testResults); i++ {
-			exchange.Field(i).SetString(testResults[i])
+		if exchange.Type() == reflect.TypeOf(OauthExchange{}) {
+			if exchange.CanSet() {
+				exchange.Field(0).SetString(TestXrefOauthExchangeId)
+				exchange.Field(1).SetString("index-" + TestXrefOauthState)
+				exchange.Field(2).SetString("encrypted-" + "code")
+				exchange.Field(3).SetString("encrypted-" + TestValidNonce)
+				exchange.Field(4).SetString("encrypted-" + "6b638422-3f25-4156-a6e3-56e4b0531f7a")
+				exchange.Field(5).SetString("encrypted-" + mockOauthRedirect.CallbackClientId)
+				exchange.Field(6).SetString("encrypted-" + mockOauthRedirect.CallbackUrl)
+				return nil
+			}
 		}
-		return nil
+
 	}
 	return nil
 }
@@ -217,14 +204,17 @@ func (i *mockIndexer) ObtainBlindIndex(record string) (string, error) {
 func TestObtain(t *testing.T) {
 
 	testCases := []struct {
-		name         string
-		sessionToken string
-		*OauthExchange
-		err error
+		name          string
+		cmd           OauthCmd
+		OauthExchange *OauthExchange
+		err           error
 	}{
 		{
-			name:         "valid session has associated oauth exchange",
-			sessionToken: TestValidSessionXref,
+			name: "valid session has associated oauth exchange",
+			cmd: OauthCmd{
+				SessionToken: TestValidSessionXref,
+				NavEndpoint:  "/profile",
+			},
 			OauthExchange: &OauthExchange{
 				Id:           TestXrefOauthExchangeId,
 				ResponseType: TestXrefOauthResponseType,
@@ -236,8 +226,11 @@ func TestObtain(t *testing.T) {
 			err: nil,
 		},
 		{
-			name:         "valid session creates new oauth exchange",
-			sessionToken: TestValidSessionNewOauth,
+			name: "valid session creates new oauth exchange",
+			cmd: OauthCmd{
+				SessionToken: TestValidSessionNewOauth,
+				NavEndpoint:  "/profile",
+			},
 			OauthExchange: &OauthExchange{
 				// gernerated values/uuid's in function, only has to be non-nil
 				Id:           TestNewOauthExchangeId,
@@ -249,37 +242,46 @@ func TestObtain(t *testing.T) {
 		},
 		{
 			name:          "invalid session - empty session token",
-			sessionToken:  "",
+			cmd:           OauthCmd{SessionToken: "", NavEndpoint: "/profile"},
 			OauthExchange: nil,
-			err:           errors.New(uxsession.ErrInvalidSession),
+			err:           errors.New(ErrInvalidSession),
 		},
 		{
-			name:          "invalid session - session token too long",
-			sessionToken:  "invalid-session-token-too-long -- this should generate an error because it is too long",
+			name: "invalid session - session token too long",
+			cmd: OauthCmd{
+				SessionToken: "invalid-session-token-too-long -- this should generate an error because it is too long",
+				NavEndpoint:  "/profile",
+			},
 			OauthExchange: nil,
-			err:           errors.New(uxsession.ErrInvalidSession),
+			err:           errors.New(ErrInvalidSession),
 		},
 		{
-			name:          "invalid session - session does not exist",
-			sessionToken:  TestSessionDoesNotExist,
+			name: "invalid session - session does not exist",
+			cmd: OauthCmd{
+				SessionToken: TestSessionDoesNotExist,
+				NavEndpoint:  "/profile",
+			},
 			OauthExchange: nil,
-			err:           errors.New(uxsession.ErrSessionNotFound),
+			err:           errors.New(ErrSessionNotFound),
 		},
 		{
 			name:          "invalid session - session is revoked",
-			sessionToken:  TestSessionRevoked,
+			cmd:           OauthCmd{SessionToken: TestSessionRevoked, NavEndpoint: "/profile"},
 			OauthExchange: nil,
-			err:           errors.New(uxsession.ErrSessionRevoked),
+			err:           errors.New(ErrSessionRevoked),
 		},
 		{
 			name:          "invalid session - session is expired",
-			sessionToken:  TestSessionExpired,
+			cmd:           OauthCmd{SessionToken: TestSessionExpired, NavEndpoint: "/profile"},
 			OauthExchange: nil,
-			err:           errors.New(uxsession.ErrSessionExpired),
+			err:           errors.New(ErrSessionExpired),
 		},
 		{
-			name:          "valid session - failure to build new oauth exchange",
-			sessionToken:  TestBuildNewOauthExchangeFailure,
+			name: "valid session - failure to build new oauth exchange",
+			cmd: OauthCmd{
+				SessionToken: TestBuildNewOauthExchangeFailure,
+				NavEndpoint:  "/profile",
+			},
 			OauthExchange: nil,
 			err:           errors.New(uxsession.ErrGenIndex),
 		},
@@ -289,7 +291,7 @@ func TestObtain(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			exchange, err := oauthService.Obtain(tc.sessionToken)
+			exchange, err := oauthService.Obtain(tc.cmd)
 			if err != nil {
 				t.Logf("error: %s", err.Error())
 				if !strings.Contains(err.Error(), tc.err.Error()) {
@@ -306,9 +308,9 @@ func TestObtain(t *testing.T) {
 					t.Errorf("expected valid uuid, got %s", exchange.Nonce)
 				}
 
-				if !validate.IsValidUuid(exchange.State) {
-					t.Errorf("expected valid uuid, got %s", exchange.State)
-				}
+				// if !validate.IsValidUuid(exchange.State) {
+				// 	t.Errorf("expected valid uuid, got %s", exchange.State)
+				// }
 
 				if exchange.ClientId != tc.OauthExchange.ClientId {
 					t.Errorf("expected %s, got %s", tc.OauthExchange.ClientId, exchange.ClientId)
@@ -475,15 +477,16 @@ func TestValidate(t *testing.T) {
 			err: errors.New(ErrResponseTypeMismatch),
 		},
 		{
-			name: "invalide state",
+			name: "invalid state",
 			authCmd: &types.AuthCodeCmd{
 				Session:      TestValidSession,
 				AuthCode:     "authcode not tested/validated by this service",
 				ResponseType: TestValidResponseCode,
-				State:        "invalid-state-code",
-				Nonce:        TestValidNonce,
-				ClientId:     mockOauthRedirect.CallbackClientId,
-				Redirect:     mockOauthRedirect.CallbackUrl,
+				// {"state":"invalid-state-code","nav_endpoint":"/profile"}
+				State:    "eyJzdGF0ZSI6ImludmFsaWQtc3RhdGUtY29kZSIsIm5hdl9lbmRwb2ludCI6Ii9wcm9maWxlIn0K",
+				Nonce:    TestValidNonce,
+				ClientId: mockOauthRedirect.CallbackClientId,
+				Redirect: mockOauthRedirect.CallbackUrl,
 			},
 			err: errors.New(ErrStateCodeMismatch),
 		},
@@ -534,7 +537,7 @@ func TestValidate(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			err := oauthService.Validate(*tc.authCmd)
 			if err != nil {
-
+				t.Logf("error: %s", err.Error())
 				if !strings.Contains(err.Error(), tc.err.Error()) {
 					t.Errorf("expected error '%s' to contain '%s'", err.Error(), tc.err.Error())
 				}

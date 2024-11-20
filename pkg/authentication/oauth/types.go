@@ -1,14 +1,23 @@
 package oauth
 
-import "github.com/tdeslauriers/carapace/pkg/data"
+import (
+	"errors"
+
+	"github.com/tdeslauriers/carapace/pkg/data"
+)
 
 const (
 
 	// 400 Bad Request
 	ErrInvalidAuthCodeCmd = "invalid auth code request"
+	ErrInvalidSession     = "missing or not well-formed session token"
+	ErrInvalidNavEndpoint = "invalid nav endpoint"
+	ErrInvalidState       = "invalid oauth state variable"
 
 	// 401 Unauthorized
-	ErrInvalidSessionToken  = "revoked, expired, or missing session token"
+	ErrSessionNotFound      = "session not found"
+	ErrSessionRevoked       = "session revoked"
+	ErrSessionExpired       = "session expired"
 	ErrResponseTypeMismatch = "response type mismatch"
 	ErrStateCodeMismatch    = "state value mismatch"
 	ErrNonceMismatch        = "nonce value mismatch"
@@ -20,9 +29,11 @@ const (
 	ErrSessionAuthenticated = "session is authenticated"
 
 	// 500 Internal Server Error
-	ErrGenOauthUuid = "failed to generate oauth exchange uuid"
-	ErrGenNonce     = "failed to generate oauth exchange nonce"
-	ErrGenState     = "failed to generate oauth exchange state"
+	ErrGenOauthUuid      = "failed to generate oauth exchange uuid"
+	ErrGenNonce          = "failed to generate oauth exchange nonce"
+	ErrGenState          = "failed to generate oauth exchange state"
+	ErrMarshalOauthState = "failed to marshal oauth state to json bytes"
+	ErrBase64OauthState  = "failed to base64 encode oauth state"
 
 	ErrGenSessionIndex = "failed to generate session lookup index"
 
@@ -45,6 +56,48 @@ const (
 	ErrPersistOauthExchange = "failed to build/persist oauth exchange record"
 	ErrPersistXref          = "failed to persist uxsession_oauthflow xref record"
 )
+
+// OauthCmd is a model for an oauth command as it is expected to be received from the client.
+type OauthCmd struct {
+	SessionToken string `json:"session_token"`
+	NavEndpoint  string `json:"nav_endpoint"`
+}
+
+// ValidateCmd validates the oauth command.
+// SessionTokon will be a uuid or similar
+// NavEndpoint will be a url from the client site
+func (c *OauthCmd) ValidateCmd() error {
+	if len(c.SessionToken) < 16 || len(c.SessionToken) > 64 {
+		return errors.New(ErrInvalidSession)
+	}
+
+	if len(c.NavEndpoint) < 1 || len(c.NavEndpoint) > 256 {
+		return errors.New(ErrInvalidNavEndpoint)
+	}
+
+	return nil
+}
+
+// OauthState is a struct containing the state (a random string), and the endpoint to redirect the user to after the oauth flow.
+// NOTE: the database does not store the endpoint, only the state variable.
+type OauthState struct {
+	State       string `json:"state"`
+	NavEndpoint string `json:"nav_endpoint"`
+}
+
+// ValidateState performs light weight validation on the oauth state.
+func (s *OauthState) ValidateState() error {
+
+	if len(s.State) < 16 || len(s.State) > 64 {
+		return errors.New(ErrInvalidState)
+	}
+
+	if len(s.NavEndpoint) < 1 || len(s.NavEndpoint) > 256 {
+		return errors.New(ErrInvalidNavEndpoint)
+	}
+
+	return nil
+}
 
 // OauthExchange is a model for an oauth exchange in the database.
 type OauthExchange struct {

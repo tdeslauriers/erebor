@@ -2,6 +2,8 @@ package oauth
 
 import (
 	"database/sql"
+	"encoding/base64"
+	"encoding/json"
 	"erebor/internal/util"
 	"erebor/pkg/authentication/uxsession"
 
@@ -41,7 +43,7 @@ type OauthService interface {
 
 	// Obtain returns the oauth exchange record associated with the uxsession from the database if it exists.
 	// If one does not exist, it will build one, persist it, and return the newly created record.
-	Obtain(uxsession string) (*OauthExchange, error)
+	Obtain(cmd OauthCmd) (*OauthExchange, error)
 
 	// Valiadate validates the oauth exchange variables returned from the client to the callback url
 	// against the values stored in the database to ensure the exchange is valid/untampered
@@ -65,16 +67,17 @@ type service struct {
 }
 
 // Obtain implementation of the OauthService interface
-func (s *service) Obtain(sessionToken string) (*OauthExchange, error) {
+func (s *service) Obtain(cmd OauthCmd) (*OauthExchange, error) {
 
-	if len(sessionToken) < 16 || len(sessionToken) > 64 {
-		return nil, errors.New(uxsession.ErrInvalidSession)
+	// input validation -> redundant because also performed by handler, but good practice
+	if err := cmd.ValidateCmd(); err != nil {
+		return nil, fmt.Errorf("%s: %v", "invalid oauth request", err)
 	}
 
 	// recreate session token index
-	index, err := s.indexer.ObtainBlindIndex(sessionToken)
+	index, err := s.indexer.ObtainBlindIndex(cmd.SessionToken)
 	if err != nil {
-		return nil, fmt.Errorf("%s for session lookup: %v", uxsession.ErrGenIndex, err)
+		return nil, fmt.Errorf("%s for session lookup: %v", ErrGenSessionIndex, err)
 	}
 
 	// check if the oauth exchange record already exists
@@ -99,27 +102,29 @@ func (s *service) Obtain(sessionToken string) (*OauthExchange, error) {
 	var oauthSession OauthSession
 	if err := s.db.SelectRecord(qry, &oauthSession, index); err != nil {
 		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("session token xxxxxx-%s: %s", sessionToken[len(sessionToken)-6:], uxsession.ErrSessionNotFound)
+			return nil, fmt.Errorf("session token xxxxxx-%s: %s", cmd.SessionToken[len(cmd.SessionToken)-6:], ErrSessionNotFound)
 		}
-		return nil, fmt.Errorf("%s for session token xxxxxx-%s: %v", ErrLookupUxSession, sessionToken[len(sessionToken)-6:], err)
+		return nil, fmt.Errorf("%s for session token xxxxxx-%s: %v", ErrLookupUxSession, cmd.SessionToken[len(cmd.SessionToken)-6:], err)
 	}
 
 	// check if session has been revoked
 	if oauthSession.Revoked {
-		return nil, fmt.Errorf("session id %s - session token xxxxxx-%s: %s", oauthSession.UxsessionId, sessionToken[len(sessionToken)-6:], uxsession.ErrSessionRevoked)
+		return nil, fmt.Errorf("session id %s - session token xxxxxx-%s: %s", oauthSession.UxsessionId, cmd.SessionToken[len(cmd.SessionToken)-6:], ErrSessionRevoked)
 	}
 
 	// check if session is authenticated
 	// authenticated sessions should not have oauth exchange records associated with them
 	// there is no need since this is used for the authentication and the session is already authenticated
 	if oauthSession.Authenticated {
-		return nil, fmt.Errorf("session id %s - session token xxxxxx-%s: %s", oauthSession.UxsessionId, sessionToken[len(sessionToken)-6:], ErrSessionAuthenticated)
+		return nil, fmt.Errorf("session id %s - session token xxxxxx-%s: %s", oauthSession.UxsessionId, cmd.SessionToken[len(cmd.SessionToken)-6:], ErrSessionAuthenticated)
 	}
 
 	// check if session is expired
 	if oauthSession.UxsessionCreatedAt.UTC().Add(time.Hour).Before(time.Now().UTC()) {
-		return nil, fmt.Errorf("session id %s - session token xxxxxx-%s: %s", oauthSession.UxsessionId, sessionToken[len(sessionToken)-6:], uxsession.ErrSessionExpired)
+		return nil, fmt.Errorf("session id %s - session token xxxxxx-%s: %s", oauthSession.UxsessionId, cmd.SessionToken[len(cmd.SessionToken)-6:], ErrSessionExpired)
 	}
+
+	//
 
 	// oauthflow/oauth exchange uuid will be empty if there was no record attached by xref to the session
 	if oauthSession.OauthId != "" {
@@ -128,10 +133,10 @@ func (s *service) Obtain(sessionToken string) (*OauthExchange, error) {
 		// this should never happen since the session is checked for expiry and
 		// the oauth exchange record will be equal to or younger than the session expiry in age
 		if oauthSession.OauthCreatedAt.Add(time.Hour).Before(time.Now().UTC()) {
-			return nil, fmt.Errorf("session id %s - session token xxxxxx-%s: %s", oauthSession.OauthId, sessionToken[len(sessionToken)-6:], ErrOauthExchangeExpired)
+			return nil, fmt.Errorf("session id %s - session token xxxxxx-%s: %s", oauthSession.OauthId, cmd.SessionToken[len(cmd.SessionToken)-6:], ErrOauthExchangeExpired)
 		}
 
-		exhcange, err := s.decryptExchange(OauthExchange{
+		exchange, err := s.decryptExchange(OauthExchange{
 			Id:           oauthSession.OauthId,
 			ResponseType: oauthSession.ResponseType,
 			Nonce:        oauthSession.Nonce,
@@ -140,19 +145,35 @@ func (s *service) Obtain(sessionToken string) (*OauthExchange, error) {
 			RedirectUrl:  oauthSession.RedirectUrl,
 		})
 		if err != nil {
-			return nil, fmt.Errorf("%s id %s associated with session token xxxxxx-%s: %v", ErrDecryptOauthExchange, oauthSession.OauthId, sessionToken[len(sessionToken)-6:], err)
+			return nil, fmt.Errorf("%s id %s associated with session token xxxxxx-%s: %v", ErrDecryptOauthExchange, oauthSession.OauthId, cmd.SessionToken[len(cmd.SessionToken)-6:], err)
 		}
 
-		// set uuid to "" for the return object because unnecessary
-		exhcange.Id = ""
+		// prep oauth exachange record for return
+		// and the nav endpoint to the to the state variable -> marshal to json -> base64 string
+		st := OauthState{
+			State:       exchange.State,
+			NavEndpoint: cmd.NavEndpoint,
+		}
 
-		return exhcange, nil
+		// marshal to json []byte
+		stJson, err := json.Marshal(st)
+		if err != nil {
+			return nil, fmt.Errorf("%s for session token xxxxxx-%s: %v", ErrMarshalOauthState, cmd.SessionToken[len(cmd.SessionToken)-6:], err)
+		}
+
+		// encode json bytes to base64
+		exchange.State = base64.StdEncoding.EncodeToString(stJson)
+
+		// set uuid to "" for the return object because unnecessary
+		exchange.Id = ""
+
+		return exchange, nil
 	} else {
 
 		// no oauth exhcange record exists for the session: build and persist
 		exchange, err := s.build()
 		if err != nil {
-			return nil, fmt.Errorf("%s for session token xxxxxx-%s: %v", ErrPersistOauthExchange, sessionToken[len(sessionToken)-6:], err)
+			return nil, fmt.Errorf("%s for session token xxxxxx-%s: %v", ErrPersistOauthExchange, cmd.SessionToken[len(cmd.SessionToken)-6:], err)
 		}
 
 		// create xref between session and oauth exchange record
@@ -167,6 +188,25 @@ func (s *service) Obtain(sessionToken string) (*OauthExchange, error) {
 		if err := s.db.InsertRecord(qry, xref); err != nil {
 			return nil, fmt.Errorf("%s between uxsession %s and oathflow %s: %v", ErrPersistXref, oauthSession.UxsessionId, exchange.Id, err)
 		}
+
+		// prep oauth exachange record for return
+		// and the nav endpoint to the to the state variable -> marshal to json -> base64 string
+		st := OauthState{
+			State:       exchange.State,
+			NavEndpoint: cmd.NavEndpoint,
+		}
+
+		// marshal to json []byte
+		stJson, err := json.Marshal(st)
+		if err != nil {
+			return nil, fmt.Errorf("%s for session token xxxxxx-%s: %v", ErrMarshalOauthState, cmd.SessionToken[len(cmd.SessionToken)-6:], err)
+		}
+
+		// encode json bytes to base64
+		exchange.State = base64.StdEncoding.EncodeToString(stJson)
+
+		// set uuid to "" for the return object because unnecessary
+		exchange.Id = ""
 
 		// successfully persisted oauth exchange record and associated with the session
 		return exchange, nil
@@ -366,9 +406,9 @@ func (s *service) Validate(cmd types.AuthCodeCmd) error {
 	var check OauthExchange
 	if err := s.db.SelectRecord(query, &check, index); err != nil {
 		if err == sql.ErrNoRows {
-			return errors.New(uxsession.ErrSessionNotFound)
+			return errors.New(ErrSessionNotFound)
 		} else {
-			return fmt.Errorf("session xxxxxx-%s is %s: %v", cmd.Session[len(cmd.Session)-6:], ErrInvalidSessionToken, err)
+			return fmt.Errorf("session xxxxxx-%s is %s: %v", cmd.Session[len(cmd.Session)-6:], ErrInvalidSession, err)
 		}
 	}
 
@@ -383,8 +423,29 @@ func (s *service) Validate(cmd types.AuthCodeCmd) error {
 		return fmt.Errorf("session xxxxxx-%s - %s - client: %s vs db record: %s", cmd.Session[len(cmd.Session)-6:], ErrResponseTypeMismatch, cmd.ResponseType, exchange.ResponseType)
 	}
 
-	if exchange.State != cmd.State {
-		return fmt.Errorf("session xxxxxx-%s: %s - client: xxxxx-%s vs db record: xxxxxx-%s", cmd.Session[len(cmd.Session)-6:], ErrStateCodeMismatch, cmd.State[len(cmd.State)-6:], exchange.State[len(exchange.State)-6:])
+	// need to pull decode -> unmarshal the oauthState struct from the state string field
+	// base64 decode the state string
+	decoded := make([]byte, base64.StdEncoding.DecodedLen(len(cmd.State)))
+	n, err := base64.StdEncoding.Decode(decoded, []byte(cmd.State))
+	if err != nil {
+		return fmt.Errorf("session xxxxxx-%s: %s - %v", cmd.Session[len(cmd.Session)-6:], ErrInvalidState, err)
+	}
+
+	// unmarshal state bytes to json
+	var state OauthState
+	if err := json.Unmarshal(decoded[:n], &state); err != nil {
+		return fmt.Errorf("session xxxxxx-%s: %s - %v", cmd.Session[len(cmd.Session)-6:], ErrInvalidState, err)
+	}
+
+	// validate the state
+	if err := state.ValidateState(); err != nil {
+		return fmt.Errorf("session xxxxxx-%s: %s - %v", cmd.Session[len(cmd.Session)-6:], ErrInvalidState, err)
+	}
+
+	if exchange.State != state.State {
+		fmt.Printf("exchange state: %s\n", exchange.State)
+		fmt.Printf("state state: %s\n", state.State)
+		return fmt.Errorf("session xxxxxx-%s: %s - cmd state: xxxxx-%s vs db record: xxxxxx-%s", cmd.Session[len(cmd.Session)-6:], ErrStateCodeMismatch, state.State[len(state.State)-6:], exchange.State[len(exchange.State)-6:])
 	}
 
 	if exchange.Nonce != cmd.Nonce {
@@ -481,43 +542,51 @@ func (s *service) decrypt(encrypted, errDecrypt string, decrypted *string, errCh
 func (s *service) HandleServiceErr(err error, w http.ResponseWriter) {
 
 	switch {
-	case strings.Contains(err.Error(), uxsession.ErrInvalidSession):
+	case strings.Contains(err.Error(), ErrInvalidNavEndpoint):
 		s.logger.Error(err.Error())
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusBadRequest,
-			Message:    uxsession.ErrInvalidSession,
+			Message:    ErrInvalidNavEndpoint,
 		}
 		e.SendJsonErr(w)
 		return
-	case strings.Contains(err.Error(), ErrInvalidSessionToken):
+	case strings.Contains(err.Error(), ErrInvalidAuthCodeCmd):
 		s.logger.Error(err.Error())
 		e := connect.ErrorHttp{
-			StatusCode: http.StatusUnauthorized,
-			Message:    ErrInvalidSessionToken,
+			StatusCode: http.StatusBadRequest,
+			Message:    ErrInvalidAuthCodeCmd,
 		}
 		e.SendJsonErr(w)
 		return
-	case strings.Contains(err.Error(), uxsession.ErrSessionNotFound):
+	case strings.Contains(err.Error(), ErrInvalidState):
 		s.logger.Error(err.Error())
 		e := connect.ErrorHttp{
-			StatusCode: http.StatusUnauthorized,
-			Message:    uxsession.ErrSessionNotFound,
+			StatusCode: http.StatusBadRequest,
+			Message:    ErrInvalidState,
 		}
 		e.SendJsonErr(w)
 		return
-	case strings.Contains(err.Error(), uxsession.ErrSessionRevoked):
+	case strings.Contains(err.Error(), ErrInvalidSession):
 		s.logger.Error(err.Error())
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusUnauthorized,
-			Message:    uxsession.ErrSessionRevoked,
+			Message:    ErrInvalidSession,
 		}
 		e.SendJsonErr(w)
 		return
-	case strings.Contains(err.Error(), uxsession.ErrSessionExpired):
+	case strings.Contains(err.Error(), ErrSessionRevoked):
 		s.logger.Error(err.Error())
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusUnauthorized,
-			Message:    uxsession.ErrSessionExpired,
+			Message:    ErrSessionRevoked,
+		}
+		e.SendJsonErr(w)
+		return
+	case strings.Contains(err.Error(), ErrSessionExpired):
+		s.logger.Error(err.Error())
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusUnauthorized,
+			Message:    ErrSessionExpired,
 		}
 		e.SendJsonErr(w)
 		return
