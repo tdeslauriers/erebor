@@ -41,8 +41,8 @@ const (
 
 	TestValidResponseCode types.ResponseType = types.AuthCode
 
-	//{"state":"6b638422-3f25-4156-a6e3-56e4b0531f7a","nav_endpoint":"/profile"}
-	TestValidState string = "eyJzdGF0ZSI6IjZiNjM4NDIyLTNmMjUtNDE1Ni1hNmUzLTU2ZTRiMDUzMWY3YSIsIm5hdl9lbmRwb2ludCI6Ii9wcm9maWxlIn0K"
+	//{"state_csrf":"6b638422-3f25-4156-a6e3-56e4b0531f7a","nav_endpoint":"/profile"}
+	TestValidState string = "eyJzdGF0ZV9jc3JmIjoiNmI2Mzg0MjItM2YyNS00MTU2LWE2ZTMtNTZlNGIwNTMxZjdhIiwibmF2X2VuZHBvaW50IjoiL3Byb2ZpbGUifQo="
 	TestValidNonce string = "f3b6acb9-28b2-4130-a421-ed5b4d7cf222"
 )
 
@@ -482,8 +482,8 @@ func TestValidate(t *testing.T) {
 				Session:      TestValidSession,
 				AuthCode:     "authcode not tested/validated by this service",
 				ResponseType: TestValidResponseCode,
-				// {"state":"invalid-state-code","nav_endpoint":"/profile"}
-				State:    "eyJzdGF0ZSI6ImludmFsaWQtc3RhdGUtY29kZSIsIm5hdl9lbmRwb2ludCI6Ii9wcm9maWxlIn0K",
+				// {"state_csrf":"invalid-state-code","nav_endpoint":"/profile"}
+				State:    "eyJzdGF0ZV9jc3JmIjoiaW52YWxpZC1zdGF0ZS1jb2RlIiwibmF2X2VuZHBvaW50IjoiL3Byb2ZpbGUifQo=",
 				Nonce:    TestValidNonce,
 				ClientId: mockOauthRedirect.CallbackClientId,
 				Redirect: mockOauthRedirect.CallbackUrl,

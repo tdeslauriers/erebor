@@ -151,7 +151,7 @@ func (s *service) Obtain(cmd OauthCmd) (*OauthExchange, error) {
 		// prep oauth exachange record for return
 		// and the nav endpoint to the to the state variable -> marshal to json -> base64 string
 		st := OauthState{
-			State:       exchange.State,
+			Csrf:        exchange.State,
 			NavEndpoint: cmd.NavEndpoint,
 		}
 
@@ -192,7 +192,7 @@ func (s *service) Obtain(cmd OauthCmd) (*OauthExchange, error) {
 		// prep oauth exachange record for return
 		// and the nav endpoint to the to the state variable -> marshal to json -> base64 string
 		st := OauthState{
-			State:       exchange.State,
+			Csrf:        exchange.State,
 			NavEndpoint: cmd.NavEndpoint,
 		}
 
@@ -439,13 +439,11 @@ func (s *service) Validate(cmd types.AuthCodeCmd) error {
 
 	// validate the state
 	if err := state.ValidateState(); err != nil {
-		return fmt.Errorf("session xxxxxx-%s: %s - %v", cmd.Session[len(cmd.Session)-6:], ErrInvalidState, err)
+		return fmt.Errorf("session xxxxxx-%s: %v", cmd.Session[len(cmd.Session)-6:], err)
 	}
 
-	if exchange.State != state.State {
-		fmt.Printf("exchange state: %s\n", exchange.State)
-		fmt.Printf("state state: %s\n", state.State)
-		return fmt.Errorf("session xxxxxx-%s: %s - cmd state: xxxxx-%s vs db record: xxxxxx-%s", cmd.Session[len(cmd.Session)-6:], ErrStateCodeMismatch, state.State[len(state.State)-6:], exchange.State[len(exchange.State)-6:])
+	if exchange.State != state.Csrf {
+		return fmt.Errorf("session xxxxxx-%s: %s - cmd state: xxxxx-%s vs db record: xxxxxx-%s", cmd.Session[len(cmd.Session)-6:], ErrStateCodeMismatch, state.Csrf[len(state.Csrf)-6:], exchange.State[len(exchange.State)-6:])
 	}
 
 	if exchange.Nonce != cmd.Nonce {

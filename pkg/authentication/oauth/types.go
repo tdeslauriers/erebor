@@ -81,14 +81,14 @@ func (c *OauthCmd) ValidateCmd() error {
 // OauthState is a struct containing the state (a random string), and the endpoint to redirect the user to after the oauth flow.
 // NOTE: the database does not store the endpoint, only the state variable.
 type OauthState struct {
-	State       string `json:"state"`
+	Csrf        string `json:"state_csrf"`
 	NavEndpoint string `json:"nav_endpoint"`
 }
 
 // ValidateState performs light weight validation on the oauth state.
 func (s *OauthState) ValidateState() error {
 
-	if len(s.State) < 16 || len(s.State) > 64 {
+	if len(s.Csrf) < 16 || len(s.Csrf) > 64 {
 		return errors.New(ErrInvalidState)
 	}
 
