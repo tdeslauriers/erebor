@@ -31,7 +31,9 @@ func NewCallbackHandler(p provider.S2sTokenProvider, c connect.S2sCaller, o oaut
 		uxSession: ux,
 		verifier:  v,
 
-		logger: slog.Default().With(slog.String(util.PackageKey, util.PackageAuth)).With(slog.String(util.ComponentKey, util.ComponentCallback)),
+		logger: slog.Default().
+			With(slog.String(util.PackageKey, util.PackageAuth)).
+			With(slog.String(util.ComponentKey, util.ComponentCallback)),
 	}
 }
 
@@ -84,6 +86,7 @@ func (h *callbackHandler) HandleCallback(w http.ResponseWriter, r *http.Request)
 
 	// validate oauth variables (state, nonce, client id, redirect) against the session token
 	if err := h.oAuth.Validate(cmd); err != nil {
+		fmt.Printf("FAIL: %v\n", err)
 		h.oAuth.HandleServiceErr(err, w)
 	}
 

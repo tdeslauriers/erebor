@@ -35,7 +35,9 @@ func NewService(o config.OauthRedirect, db data.SqlRepository, c data.Cryptor, i
 		cryptor: c,
 		indexer: i,
 
-		logger: slog.Default().With(slog.String(util.PackageKey, util.PackageAuth)).With(slog.String(util.ComponentKey, util.ComponentOauth)),
+		logger: slog.Default().
+			With(slog.String(util.PackageKey, util.PackageAuth)).
+			With(slog.String(util.ComponentKey, util.ComponentOauth)),
 	}
 }
 
@@ -406,7 +408,8 @@ func (s *service) Validate(cmd types.AuthCodeCmd) error {
 	var check OauthExchange
 	if err := s.db.SelectRecord(query, &check, index); err != nil {
 		if err == sql.ErrNoRows {
-			return errors.New(ErrSessionNotFound)
+
+			return fmt.Errorf("session xxxxxx-%s: %s", cmd.Session[len(cmd.Session)-6:], ErrSessionNotFound)
 		} else {
 			return fmt.Errorf("session xxxxxx-%s is %s: %v", cmd.Session[len(cmd.Session)-6:], ErrInvalidSession, err)
 		}
@@ -569,6 +572,14 @@ func (s *service) HandleServiceErr(err error, w http.ResponseWriter) {
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusUnauthorized,
 			Message:    ErrInvalidSession,
+		}
+		e.SendJsonErr(w)
+		return
+	case strings.Contains(err.Error(), ErrSessionNotFound):
+		s.logger.Error(err.Error())
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusUnauthorized,
+			Message:    ErrSessionNotFound,
 		}
 		e.SendJsonErr(w)
 		return

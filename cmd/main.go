@@ -13,6 +13,13 @@ import (
 
 func main() {
 
+	// set logging to json format for application
+	jsonHandler := slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+	})
+	slog.SetDefault(slog.New(jsonHandler))
+
+	// set up logger for main
 	logger := slog.Default().With(slog.String(util.PackageKey, util.PackageMain))
 
 	// service definition
@@ -20,13 +27,13 @@ func main() {
 		ServiceName: "erebor",
 		Tls:         config.StandardTls,
 		Requires: config.Requires{
-			Client:           true,
+			S2sClient:        true,
 			Db:               true,
 			IndexKey:         true,
 			AesKey:           true,
-			UserAuthUrl:      true,
 			S2sSigningKey:    false,
 			S2sVerifyingKey:  false,
+			Identity:         true,
 			UserSigningKey:   false,
 			UserVerifyingKey: true,
 			OauthRedirect:    true,

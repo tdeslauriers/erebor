@@ -230,7 +230,7 @@ func (g *gateway) Run() error {
 
 		g.logger.Info(fmt.Sprintf("starting %s gateway service on %s...", g.config.ServiceName, erebor.Addr[1:]))
 		if err := erebor.Initialize(); err != http.ErrServerClosed {
-			g.logger.Error(fmt.Sprintf("failed to start %s gateway service", g.config.ServiceName), "err", err.Error())
+			g.logger.Error(fmt.Sprintf("failed to start %s gateway service: %v", g.config.ServiceName, err.Error()))
 			os.Exit(1)
 		}
 	}()

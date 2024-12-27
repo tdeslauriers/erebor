@@ -23,4 +23,3 @@ go.work
 # dev + setup
 certs/
 .pem
-.sh
