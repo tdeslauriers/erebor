@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: erebor
+  namespace: world
+spec:
+  selector:
+    app: erebor
+  ports:
+    - protocol: TCP
+      port: 8443
+      targetPort: 8443
+  type: ClusterIP

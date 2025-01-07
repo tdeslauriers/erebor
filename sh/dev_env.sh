@@ -13,15 +13,16 @@ export EREBOR_SERVER_KEY=$(op document get "erebor_service_server_dev_key" --vau
 export EREBOR_CLIENT_CERT=$(op document get "erebor_service_client_dev_cert" --vault world_site | base64 -w 0)
 export EREBOR_CLIENT_KEY=$(op document get "erebor_service_client_dev_key" --vault world_site | base64 -w 0)
 
-export EREBOR_DB_CA_CERT=$(op document get "db_ca_dev_cert" --vault world_site | base64 -w 0)
-
-export EREBOR_DB_CLIENT_CERT=$(op document get "erebor_db_client_dev_cert" --vault world_site | base64 -w 0)
-export EREBOR_DB_CLIENT_KEY=$(op document get "erebor_db_client_dev_key" --vault world_site | base64 -w 0)
-
 # S2S Auth creds192.168.154.138
 export EREBOR_S2S_AUTH_URL=$(op read "op://world_site/ran_service_app_local/url"):$(op read "op://world_site/ran_service_app_local/port")
 export EREBOR_S2S_AUTH_CLIENT_ID=$(op read "op://world_site/erebor_s2s_login_dev/username")
 export EREBOR_S2S_AUTH_CLIENT_SECRET=$(op read "op://world_site/erebor_s2s_login_dev/password")
+
+# Database certs
+export EREBOR_DB_CA_CERT=$(op document get "db_ca_dev_cert" --vault world_site | base64 -w 0)
+
+export EREBOR_DB_CLIENT_CERT=$(op document get "erebor_db_client_dev_cert" --vault world_site | base64 -w 0)
+export EREBOR_DB_CLIENT_KEY=$(op document get "erebor_db_client_dev_key" --vault world_site | base64 -w 0)
 
 # Database connection details + creds
 export EREBOR_DATABASE_URL=$(op read "op://world_site/erebor_db_dev/server"):$(op read "op://world_site/erebor_db_dev/port")

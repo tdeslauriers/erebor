@@ -15,4 +15,5 @@
 certs/
 sql/
 sh/
+k8s/
 .env
