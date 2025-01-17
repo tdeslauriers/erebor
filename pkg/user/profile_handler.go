@@ -80,7 +80,7 @@ func (h *profileHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 		h.logger.Error("no session token found in authorization header")
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusUnauthorized,
-			Message:    "no session_id cookie found in request",
+			Message:    "no session token found in authorization header",
 		}
 		e.SendJsonErr(w)
 		return
@@ -90,7 +90,7 @@ func (h *profileHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 	// get user access token from session
 	accessToken, err := h.session.GetAccessToken(session)
 	if err != nil {
-		h.logger.Error("failed to get access token from session", "err", err.Error())
+		h.logger.Error(fmt.Sprintf("failed to get access token from session token: %s", err.Error()))
 		h.session.HandleSessionErr(err, w)
 		return
 	}
@@ -98,7 +98,7 @@ func (h *profileHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 	// get s2s token for identity service
 	s2sToken, err := h.provider.GetServiceToken(util.ServiceUserIdentity)
 	if err != nil {
-		h.logger.Error("failed to get s2s token for call to profile service", "err", err.Error())
+		h.logger.Error(fmt.Sprintf("failed to get s2s token for call to identity service: %s", err.Error()))
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusInternalServerError,
 			Message:    "internl service error",
@@ -110,7 +110,7 @@ func (h *profileHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 	// get user data from identity service
 	var user profile.User
 	if err := h.identity.GetServiceData("/profile", s2sToken, accessToken, &user); err != nil {
-		h.logger.Error("failed to get user profile", "err", err.Error())
+		h.logger.Error(fmt.Sprintf("failed to get user profile from identity service: %s", err.Error()))
 		h.identity.RespondUpstreamError(err, w)
 		return
 	}
@@ -169,7 +169,7 @@ func (h *profileHandler) handlePut(w http.ResponseWriter, r *http.Request) {
 		h.logger.Error("no session token found in authorization header")
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusUnauthorized,
-			Message:    "no session_id cookie found in request",
+			Message:    "no session token found in authorization header",
 		}
 		e.SendJsonErr(w)
 		return

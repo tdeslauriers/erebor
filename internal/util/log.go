@@ -21,4 +21,5 @@ const (
 	ComponentCallback  string = "oauth flow callback"
 	ComponentProfile   string = "profile"
 	ComponentReset     string = "password reset"
+	ComponentUser      string = "user"
 )

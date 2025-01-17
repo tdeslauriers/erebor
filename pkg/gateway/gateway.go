@@ -88,7 +88,7 @@ func New(config *config.Config) (Gateway, error) {
 	indexer := data.NewIndexer([]byte(config.Database.IndexSecret))
 
 	// set up field level encryption
-	aes, err := base64.StdEncoding.DecodeString(config.Database.FieldKey)
+	aes, err := base64.StdEncoding.DecodeString(config.Database.FieldSecret)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode field level encryption key Env var: %v", err)
 	}

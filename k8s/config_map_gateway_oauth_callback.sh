@@ -23,7 +23,7 @@ metadata:
   name: $CONFIG_MAP_NAME
   namespace: $NAMESPACE
 data:
-  oauth-callback-url: "$OAUTH_CALLBACK_URL:$OAUTH_CALLBACK_PORT"
+  oauth-callback-url: "$OAUTH_CALLBACK_URL"
   oauth-callback-port: ":$OAUTH_CALLBACK_PORT"
   oauth-callback-client-id: "$OAUTH_CALLBACK_CLIENT_ID"
 EOF

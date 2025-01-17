@@ -57,7 +57,7 @@ func (h *registrationHandler) HandleRegistration(w http.ResponseWriter, r *http.
 	var cmd types.UserRegisterCmd
 	err := json.NewDecoder(r.Body).Decode(&cmd)
 	if err != nil {
-		h.logger.Error("unable to decode json in user registration request body", "err", err.Error())
+		h.logger.Error("failed to decode json in user registration request body", "err", err.Error())
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusBadRequest,
 			Message:    "improperly formatted json",
@@ -74,7 +74,7 @@ func (h *registrationHandler) HandleRegistration(w http.ResponseWriter, r *http.
 
 	// input validation
 	if err := cmd.ValidateCmd(); err != nil {
-		h.logger.Error("unable to validate fields in registration request body", "err", err.Error())
+		h.logger.Error("failed to validate fields in registration request body", "err", err.Error())
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusUnprocessableEntity,
 			Message:    err.Error(),

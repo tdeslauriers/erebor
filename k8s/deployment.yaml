@@ -30,7 +30,7 @@ spec:
               valueFrom:
                 configMapKeyRef:
                   name: cm-gateway-service
-                  key: gateway-port
+                  key: gateway-k8-port
             - name: EREBOR_CA_CERT
               valueFrom:
                 secretKeyRef:
