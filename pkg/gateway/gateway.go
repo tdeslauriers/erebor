@@ -202,6 +202,7 @@ func (g *gateway) Run() error {
 	// profile
 	profile := user.NewProfileHandler(g.uxSession, g.s2sToken, g.userIdentity)
 	reset := user.NewResetHandler(g.uxSession, g.s2sToken, g.userIdentity)
+	user := user.NewUserHandler(g.uxSession, g.s2sToken, g.userIdentity)
 
 	// setup mux
 	mux := http.NewServeMux()
@@ -219,6 +220,7 @@ func (g *gateway) Run() error {
 
 	mux.HandleFunc("/profile", profile.HandleProfile)
 	mux.HandleFunc("/reset", reset.HandleReset)
+	mux.HandleFunc("/users", user.HandleUsers)
 
 	erebor := &connect.TlsServer{
 		Addr:      g.config.ServicePort,
