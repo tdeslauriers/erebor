@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/tdeslauriers/carapace/pkg/data"
+	"github.com/tdeslauriers/carapace/pkg/session/types"
 	"github.com/tdeslauriers/carapace/pkg/validate"
 )
 
@@ -25,6 +26,7 @@ type ProfileCmd struct {
 	Enabled        bool            `json:"enabled"`
 	AccountExpired bool            `json:"account_expired"`
 	AccountLocked  bool            `json:"account_locked"`
+	Scopes         []types.Scope   `json:"scopes,omitempty"` // will not always be returned: call specific
 }
 
 func (cmd *ProfileCmd) ValidateCmd() error {
