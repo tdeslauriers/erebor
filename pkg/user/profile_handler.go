@@ -14,6 +14,29 @@ import (
 	"github.com/tdeslauriers/carapace/pkg/session/provider"
 )
 
+// Handler is the interface for handling user requests from the client.
+type Handler interface {
+	ProfileHandler
+	ResetHandler
+	UserHandler
+}
+
+func NewHandler(ux uxsession.Service, p provider.S2sTokenProvider, c connect.S2sCaller) Handler {
+	return &handler{
+		ProfileHandler: NewProfileHandler(ux, p, c),
+		ResetHandler:   NewResetHandler(ux, p, c),
+		UserHandler:    NewUserHandler(ux, p, c),
+	}
+}
+
+var _ Handler = (*handler)(nil)
+
+type handler struct {
+	ProfileHandler
+	ResetHandler
+	UserHandler
+}
+
 // ProfileHandler is the interface for handling profile requests from the client.
 // Note: this is for a user's profile only, and is not meant handle admin-level (any)user requests.
 type ProfileHandler interface {
