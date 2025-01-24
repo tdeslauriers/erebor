@@ -149,7 +149,7 @@ func New(config *config.Config) (Gateway, error) {
 		repository:  repository,
 		tknProvider: s2sTokenProvider,
 		s2s:         s2s,
-		identity:    identity,
+		iam:         identity,
 		uxSession:   uxSession,
 		oAuth:       oAuth,
 		verifier:    identityVerifier, // for user Id token (jwt) verification
@@ -168,7 +168,7 @@ type gateway struct {
 	repository  data.SqlRepository
 	tknProvider provider.S2sTokenProvider
 	s2s         connect.S2sCaller
-	identity    connect.S2sCaller
+	iam         connect.S2sCaller
 	uxSession   uxsession.Service
 	oAuth       oauth.Service
 	verifier    jwt.Verifier
@@ -194,18 +194,18 @@ func (g *gateway) Run() error {
 	csrfHandler := uxsession.NewCsrfHandler(g.uxSession)
 
 	// authentication
-	register := authentication.NewRegistrationHandler(g.config.OauthRedirect, g.uxSession, g.tknProvider, g.identity)
+	register := authentication.NewRegistrationHandler(g.config.OauthRedirect, g.uxSession, g.tknProvider, g.iam)
 
 	oauth := oauth.NewHandler(g.oAuth)
-	login := authentication.NewLoginHandler(g.uxSession, g.tknProvider, g.identity)
+	login := authentication.NewLoginHandler(g.uxSession, g.tknProvider, g.iam)
 	logout := authentication.NewLogoutHandler(g.uxSession)
 
-	callback := authentication.NewCallbackHandler(g.tknProvider, g.identity, g.oAuth, g.uxSession, g.verifier)
+	callback := authentication.NewCallbackHandler(g.tknProvider, g.iam, g.oAuth, g.uxSession, g.verifier)
 
 	// profile/accounts
-	accounts := user.NewHandler(g.uxSession, g.tknProvider, g.identity)
+	accounts := user.NewHandler(g.uxSession, g.tknProvider, g.iam)
 
-	scope := scopes.NewHandler(g.uxSession, g.tknProvider, g.identity)
+	scope := scopes.NewHandler(g.uxSession, g.tknProvider, g.s2s)
 
 	// setup mux
 	mux := http.NewServeMux()
