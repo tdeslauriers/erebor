@@ -96,7 +96,7 @@ func (h *registrationHandler) HandleRegistration(w http.ResponseWriter, r *http.
 	cmd.Csrf = ""
 
 	// get shaw service token
-	s2sToken, err := h.s2sToken.GetServiceToken(util.ServiceUserIdentity)
+	s2sToken, err := h.s2sToken.GetServiceToken(util.ServiceIdentity)
 	if err != nil {
 		h.logger.Error(err.Error())
 		e := connect.ErrorHttp{

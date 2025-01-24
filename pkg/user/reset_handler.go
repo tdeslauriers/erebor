@@ -120,7 +120,7 @@ func (h *resetHandler) HandleReset(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// get s2s token for the identity service
-	s2sToken, err := h.provider.GetServiceToken(util.ServiceUserIdentity)
+	s2sToken, err := h.provider.GetServiceToken(util.ServiceIdentity)
 	if err != nil {
 		h.logger.Error("failed to retrieve s2s token", "err", err.Error())
 		e := connect.ErrorHttp{

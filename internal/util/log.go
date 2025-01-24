@@ -8,6 +8,7 @@ const (
 	PackageAuth    string = "authentication"
 	PackageSession string = "uxsession"
 	PackageUser    string = "user"
+	PackageScopes  string = "scopes"
 
 	ComponentKey string = "component"
 
@@ -22,4 +23,9 @@ const (
 	ComponentProfile   string = "profile"
 	ComponentReset     string = "password reset"
 	ComponentUser      string = "user"
+	ComponentScopes    string = "scopes"
+
+	SerivceKey = "service"
+
+	// service names in definitions.go
 )

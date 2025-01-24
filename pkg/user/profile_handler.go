@@ -119,7 +119,7 @@ func (h *profileHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// get s2s token for identity service
-	s2sToken, err := h.provider.GetServiceToken(util.ServiceUserIdentity)
+	s2sToken, err := h.provider.GetServiceToken(util.ServiceIdentity)
 	if err != nil {
 		h.logger.Error(fmt.Sprintf("failed to get s2s token for call to identity service: %s", err.Error()))
 		e := connect.ErrorHttp{
@@ -262,7 +262,7 @@ func (h *profileHandler) handlePut(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// get s2s token for identity service
-	s2sToken, err := h.provider.GetServiceToken(util.ServiceUserIdentity)
+	s2sToken, err := h.provider.GetServiceToken(util.ServiceIdentity)
 	if err != nil {
 		h.logger.Error("failed to get s2s token for call to profile service", "err", err.Error())
 		e := connect.ErrorHttp{

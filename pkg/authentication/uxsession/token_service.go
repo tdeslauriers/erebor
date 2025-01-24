@@ -177,7 +177,7 @@ func (s *service) GetAccessToken(session string) (string, error) {
 		}
 
 		// get s2s token for identity service
-		s2sToken, err := s.s2sProvider.GetServiceToken(util.ServiceUserIdentity)
+		s2sToken, err := s.s2sProvider.GetServiceToken(util.ServiceIdentity)
 		if err != nil {
 			s.logger.Error("failed to get s2s token for identity service refresh endpoint", "err", err.Error())
 			continue

@@ -364,7 +364,7 @@ func (s *service) removeAccessTokens(sessionId string, errChan chan error, wg *s
 	}
 
 	// get s2s token for calling identity service
-	s2sToken, err := s.s2sProvider.GetServiceToken(util.ServiceUserIdentity)
+	s2sToken, err := s.s2sProvider.GetServiceToken(util.ServiceIdentity)
 	if err != nil {
 		errChan <- fmt.Errorf("session id xxxxxx-%s - failed to retreive s2s token to call identity service: %v", sessionId[len(sessionId)-6:], err)
 		return

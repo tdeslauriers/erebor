@@ -10,6 +10,7 @@ import (
 	"erebor/pkg/authentication"
 	"erebor/pkg/authentication/oauth"
 	"erebor/pkg/authentication/uxsession"
+	"erebor/pkg/scopes"
 	"erebor/pkg/user"
 	"fmt"
 	"log/slog"
@@ -108,15 +109,15 @@ func New(config *config.Config) (Gateway, error) {
 		MaxBackoff:  10 * time.Second,
 	}
 
-	// s2s callers
-	s2sIdentity := connect.NewS2sCaller(config.ServiceAuth.Url, util.ServiceS2sIdentity, client, retry)
-	userIdentity := connect.NewS2sCaller(config.UserAuth.Url, util.ServiceUserIdentity, client, retry)
+	// callers
+	s2s := connect.NewS2sCaller(config.ServiceAuth.Url, util.ServiceS2s, client, retry)
+	identity := connect.NewS2sCaller(config.UserAuth.Url, util.ServiceIdentity, client, retry)
 
 	// s2s token provider
-	s2sToken := provider.NewS2sTokenProvider(s2sIdentity, creds, repository, cryptor)
+	s2sTokenProvider := provider.NewS2sTokenProvider(s2s, creds, repository, cryptor)
 
 	// ux session service
-	uxSession := uxsession.NewService(&config.OauthRedirect, repository, indexer, cryptor, s2sToken, userIdentity)
+	uxSession := uxsession.NewService(&config.OauthRedirect, repository, indexer, cryptor, s2sTokenProvider, identity)
 
 	// oauth service: state, nonce, redirect
 	oAuth := oauth.NewService(config.OauthRedirect, repository, cryptor, indexer)
@@ -143,16 +144,17 @@ func New(config *config.Config) (Gateway, error) {
 	cleanup := schedule.NewCleanup(repository)
 
 	return &gateway{
-		config:       *config,
-		serverTls:    serverTlsConfig,
-		repository:   repository,
-		s2sToken:     s2sToken,
-		userIdentity: userIdentity,
-		uxSession:    uxSession,
-		oAuth:        oAuth,
-		verifier:     identityVerifier,
-		cryptor:      cryptor,
-		cleanup:      cleanup,
+		config:      *config,
+		serverTls:   serverTlsConfig,
+		repository:  repository,
+		tknProvider: s2sTokenProvider,
+		s2s:         s2s,
+		identity:    identity,
+		uxSession:   uxSession,
+		oAuth:       oAuth,
+		verifier:    identityVerifier, // for user Id token (jwt) verification
+		cryptor:     cryptor,
+		cleanup:     cleanup,
 
 		logger: slog.Default().With(slog.String(util.PackageKey, util.PackageGateway)),
 	}, nil
@@ -161,16 +163,17 @@ func New(config *config.Config) (Gateway, error) {
 var _ Gateway = (*gateway)(nil)
 
 type gateway struct {
-	config       config.Config
-	serverTls    *tls.Config
-	repository   data.SqlRepository
-	s2sToken     provider.S2sTokenProvider
-	userIdentity connect.S2sCaller
-	uxSession    uxsession.Service
-	oAuth        oauth.Service
-	verifier     jwt.Verifier
-	cryptor      data.Cryptor
-	cleanup      schedule.Cleanup
+	config      config.Config
+	serverTls   *tls.Config
+	repository  data.SqlRepository
+	tknProvider provider.S2sTokenProvider
+	s2s         connect.S2sCaller
+	identity    connect.S2sCaller
+	uxSession   uxsession.Service
+	oAuth       oauth.Service
+	verifier    jwt.Verifier
+	cryptor     data.Cryptor
+	cleanup     schedule.Cleanup
 
 	logger *slog.Logger
 }
@@ -191,16 +194,18 @@ func (g *gateway) Run() error {
 	csrfHandler := uxsession.NewCsrfHandler(g.uxSession)
 
 	// authentication
-	register := authentication.NewRegistrationHandler(g.config.OauthRedirect, g.uxSession, g.s2sToken, g.userIdentity)
+	register := authentication.NewRegistrationHandler(g.config.OauthRedirect, g.uxSession, g.tknProvider, g.identity)
 
 	oauth := oauth.NewHandler(g.oAuth)
-	login := authentication.NewLoginHandler(g.uxSession, g.s2sToken, g.userIdentity)
+	login := authentication.NewLoginHandler(g.uxSession, g.tknProvider, g.identity)
 	logout := authentication.NewLogoutHandler(g.uxSession)
 
-	callback := authentication.NewCallbackHandler(g.s2sToken, g.userIdentity, g.oAuth, g.uxSession, g.verifier)
+	callback := authentication.NewCallbackHandler(g.tknProvider, g.identity, g.oAuth, g.uxSession, g.verifier)
 
 	// profile/accounts
-	accounts := user.NewHandler(g.uxSession, g.s2sToken, g.userIdentity)
+	accounts := user.NewHandler(g.uxSession, g.tknProvider, g.identity)
+
+	scope := scopes.NewHandler(g.uxSession, g.tknProvider, g.identity)
 
 	// setup mux
 	mux := http.NewServeMux()
@@ -219,6 +224,8 @@ func (g *gateway) Run() error {
 	mux.HandleFunc("/profile", accounts.HandleProfile)
 	mux.HandleFunc("/reset", accounts.HandleReset)
 	mux.HandleFunc("/users", accounts.HandleUsers)
+
+	mux.HandleFunc("/scopes", scope.HandleScopes)
 
 	erebor := &connect.TlsServer{
 		Addr:      g.config.ServicePort,

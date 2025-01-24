@@ -91,7 +91,7 @@ func (h *callbackHandler) HandleCallback(w http.ResponseWriter, r *http.Request)
 	}
 
 	// get service token
-	s2sToken, err := h.s2sToken.GetServiceToken(util.ServiceUserIdentity)
+	s2sToken, err := h.s2sToken.GetServiceToken(util.ServiceIdentity)
 	if err != nil {
 		h.logger.Error("failed to retreive s2s token")
 		e := connect.ErrorHttp{

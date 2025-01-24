@@ -98,7 +98,7 @@ func BuildRender(scopes string) Render {
 		}
 
 		switch s[1] {
-		case util.ServiceUserIdentity:
+		case util.ServiceIdentity:
 			if len(s) < 3 {
 				continue
 			}
