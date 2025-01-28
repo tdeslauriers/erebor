@@ -226,6 +226,7 @@ func (g *gateway) Run() error {
 	mux.HandleFunc("/users", accounts.HandleUsers)
 
 	mux.HandleFunc("/scopes", scope.HandleScopes)
+	mux.HandleFunc("/scopes/", scope.HandleScope) // trailing slash required for /scopes/{session}
 
 	erebor := &connect.TlsServer{
 		Addr:      g.config.ServicePort,

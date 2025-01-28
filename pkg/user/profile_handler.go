@@ -110,6 +110,17 @@ func (h *profileHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 
 	}
 
+	// light weight input validation (not checking if session id is valid or well-formed)
+	if len(session) < 16 || len(session) > 64 {
+		h.logger.Error("invalid session token")
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusBadRequest,
+			Message:    "invalid session token",
+		}
+		e.SendJsonErr(w)
+		return
+	}
+
 	// get user access token from session
 	accessToken, err := h.session.GetAccessToken(session)
 	if err != nil {
@@ -137,6 +148,8 @@ func (h *profileHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 		h.identity.RespondUpstreamError(err, w)
 		return
 	}
+
+	// TODO: place holder for getting silhoutte data from silhoutte service
 
 	// build profile model from user data + silhoutte data
 	profile := ProfileCmd{

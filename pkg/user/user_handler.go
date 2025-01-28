@@ -90,7 +90,7 @@ func (h *userHandler) HandleUsers(w http.ResponseWriter, r *http.Request) {
 	// get users from identity service
 	var users []profile.User
 	if err := h.identity.GetServiceData("/users", s2sToken, accessToken, &users); err != nil {
-		h.logger.Error(fmt.Sprintf("failed to get users from identity service: %s", err.Error()))
+		h.logger.Error(fmt.Sprintf("failed to get /users from identity service: %s", err.Error()))
 		h.identity.RespondUpstreamError(err, w)
 		return
 	}

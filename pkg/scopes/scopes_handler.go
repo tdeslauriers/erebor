@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 
 	"github.com/tdeslauriers/carapace/pkg/connect"
 	"github.com/tdeslauriers/carapace/pkg/session/provider"
@@ -18,6 +19,9 @@ type Handler interface {
 
 	// HandleScopes handles the request to get all scopes.
 	HandleScopes(w http.ResponseWriter, r *http.Request)
+
+	// HandleScope handles get, put, post, and delete requests for a single scope.
+	HandleScope(w http.ResponseWriter, r *http.Request)
 }
 
 // NewHandler creates a new Handler.
@@ -104,6 +108,115 @@ func (h *handler) HandleScopes(w http.ResponseWriter, r *http.Request) {
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusInternalServerError,
 			Message:    "failed to encode scopes",
+		}
+		e.SendJsonErr(w)
+		return
+	}
+}
+
+func (h *handler) HandleScope(w http.ResponseWriter, r *http.Request) {
+
+	switch r.Method {
+	case "GET":
+		h.handleGet(w, r)
+		return
+	case "PUT":
+		return
+	// case "POST":
+	// 	return
+	// case "DELETE":
+	// 	return
+	default:
+		h.logger.Error("only GET, PUT, POST, and DELETE requests are allowed to /scopes/{scope} endpoint")
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusMethodNotAllowed,
+			Message:    "only GET, PUT, POST, and DELETE requests are allowed",
+		}
+		e.SendJsonErr(w)
+		return
+	}
+}
+
+func (h *handler) handleGet(w http.ResponseWriter, r *http.Request) {
+
+	// get session token from request
+	session := r.Header.Get("Authorization")
+	if session == "" {
+		h.logger.Error("no session token provided")
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusUnauthorized,
+			Message:    "no session token provided",
+		}
+		e.SendJsonErr(w)
+		return
+	}
+
+	// light weight input validation (not checking if session id is valid or well-formed)
+	if len(session) < 16 || len(session) > 64 {
+		h.logger.Error("invalid session token")
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusBadRequest,
+			Message:    "invalid session token",
+		}
+		e.SendJsonErr(w)
+		return
+	}
+
+	// get the url slug from the request
+	segments := strings.Split(r.URL.Path, "/")
+
+	var slug string
+	if len(segments) > 1 {
+		slug = segments[len(segments)-1]
+	}
+
+	// light weight input validation (not checking if slug is valid or well-formed)
+	if len(slug) < 16 || len(slug) > 64 {
+		h.logger.Error("invalid slug")
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusBadRequest,
+			Message:    "invalid slug",
+		}
+		e.SendJsonErr(w)
+		return
+	}
+
+	// validate session token and get access token
+	accessToken, err := h.session.GetAccessToken(session)
+	if err != nil {
+		h.logger.Error(fmt.Sprintf("failed to get access token from session token for /scope/%s call to s2s service: %s", slug, err.Error()))
+		h.session.HandleSessionErr(err, w)
+		return
+	}
+
+	// get s2s token for s2s service
+	s2sToken, err := h.tknProvider.GetServiceToken(util.ServiceS2s)
+	if err != nil {
+		h.logger.Error(fmt.Sprintf("failed to get s2s token for /scope/%s call to s2s service: %s", slug, err.Error()))
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusInternalServerError,
+			Message:    "failed to get s2s token",
+		}
+		e.SendJsonErr(w)
+		return
+	}
+
+	// get scope from s2s service
+	var scope types.Scope
+	if err := h.s2s.GetServiceData(fmt.Sprintf("/scopes/%s", slug), s2sToken, accessToken, &scope); err != nil {
+		h.logger.Error(fmt.Sprintf("failed to get scope from s2s service: %s", err.Error()))
+		h.s2s.RespondUpstreamError(err, w)
+		return
+	}
+
+	// respond with scope to client
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(scope); err != nil {
+		h.logger.Error(fmt.Sprintf("failed to encode scope to json: %s", err.Error()))
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusInternalServerError,
+			Message:    "failed to encode scope to json",
 		}
 		e.SendJsonErr(w)
 		return
