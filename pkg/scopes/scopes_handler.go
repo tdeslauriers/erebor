@@ -121,6 +121,7 @@ func (h *handler) HandleScope(w http.ResponseWriter, r *http.Request) {
 		h.handleGet(w, r)
 		return
 	case "PUT":
+		h.handlePut(w, r)
 		return
 	// case "POST":
 	// 	return
@@ -168,14 +169,22 @@ func (h *handler) handleGet(w http.ResponseWriter, r *http.Request) {
 	var slug string
 	if len(segments) > 1 {
 		slug = segments[len(segments)-1]
+	} else {
+		h.logger.Error("no scope slug provided in request")
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusBadRequest,
+			Message:    "no scope slug provided in request",
+		}
+		e.SendJsonErr(w)
+		return
 	}
 
 	// light weight input validation (not checking if slug is valid or well-formed)
 	if len(slug) < 16 || len(slug) > 64 {
-		h.logger.Error("invalid slug")
+		h.logger.Error("invalid scope slug")
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusBadRequest,
-			Message:    "invalid slug",
+			Message:    "invalid scope slug",
 		}
 		e.SendJsonErr(w)
 		return
@@ -214,6 +223,133 @@ func (h *handler) handleGet(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(scope); err != nil {
 		h.logger.Error(fmt.Sprintf("failed to encode scope to json: %s", err.Error()))
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusInternalServerError,
+			Message:    "failed to encode scope to json",
+		}
+		e.SendJsonErr(w)
+		return
+	}
+}
+
+func (h *handler) handlePut(w http.ResponseWriter, r *http.Request) {
+
+	// get the url slug from the request
+	segments := strings.Split(r.URL.Path, "/")
+
+	var slug string
+	if len(segments) > 1 {
+		slug = segments[len(segments)-1]
+	} else {
+		h.logger.Error("no scope slug provided in request")
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusBadRequest,
+			Message:    "no scope slug provided in request",
+		}
+		e.SendJsonErr(w)
+		return
+	}
+
+	// light weight input validation (not checking if slug is valid or well-formed)
+	if len(slug) < 16 || len(slug) > 64 {
+		h.logger.Error("invalid scope slug")
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusBadRequest,
+			Message:    "invalid scope slug",
+		}
+		e.SendJsonErr(w)
+		return
+	}
+
+	// get session token from request
+	session := r.Header.Get("Authorization")
+	if session == "" {
+		h.logger.Error("no session token provided")
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusUnauthorized,
+			Message:    "no session token provided",
+		}
+		e.SendJsonErr(w)
+		return
+	}
+
+	// light weight input validation (not checking if session id is valid or well-formed)
+	if len(session) < 16 || len(session) > 64 {
+		h.logger.Error("invalid session token")
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusBadRequest,
+			Message:    "invalid session token",
+		}
+		e.SendJsonErr(w)
+		return
+	}
+
+	// get request body
+	var cmd types.Scope
+	if err := json.NewDecoder(r.Body).Decode(&cmd); err != nil {
+		errMsg := fmt.Sprintf("failed to decode scope request cmd for slug %s: %s", slug, err.Error())
+		h.logger.Error(errMsg)
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusBadRequest,
+			Message:    errMsg,
+		}
+		e.SendJsonErr(w)
+		return
+	}
+
+	// input validation of scope request body scope cmd
+	if err := cmd.ValidateCmd(); err != nil {
+		h.logger.Error(fmt.Sprintf("invalid scope request cmd for slug %s: %s", slug, err.Error()))
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusBadRequest,
+			Message:    err.Error(),
+		}
+		e.SendJsonErr(w)
+		return
+	}
+
+	// validate csrf token
+	if valid, err := h.session.IsValidCsrf(session, cmd.Csrf); !valid {
+		h.logger.Error("invalid csrf token", "err", err.Error())
+		h.session.HandleSessionErr(err, w)
+		return
+	}
+
+	// validate session token and get access token
+	accessToken, err := h.session.GetAccessToken(session)
+	if err != nil {
+		h.logger.Error(fmt.Sprintf("failed to get access token from session token for /scope/%s call to s2s service: %s", slug, err.Error()))
+		h.session.HandleSessionErr(err, w)
+		return
+	}
+
+	// get s2s token for s2s service
+	s2sToken, err := h.tknProvider.GetServiceToken(util.ServiceS2s)
+	if err != nil {
+		h.logger.Error(fmt.Sprintf("failed to get s2s token for /scope/%s call to s2s service: %s", slug, err.Error()))
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusInternalServerError,
+			Message:    "failed to get s2s token",
+		}
+		e.SendJsonErr(w)
+		return
+	}
+
+	// prepare cmd: remove csrf token
+	cmd.Csrf = ""
+
+	// update scope in s2s service
+	var response types.Scope
+	if err := h.s2s.PostToService(fmt.Sprintf("/scopes/%s", slug), s2sToken, accessToken, cmd, &response); err != nil {
+		h.logger.Error(fmt.Sprintf("failed to update scope in s2s service for scope/slug %s: %s", slug, err.Error()))
+		h.s2s.RespondUpstreamError(err, w)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		h.logger.Error(fmt.Sprintf("failed to encode response scope to json for scope/slug: %s", err.Error()))
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusInternalServerError,
 			Message:    "failed to encode scope to json",

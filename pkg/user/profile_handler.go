@@ -211,9 +211,14 @@ func (h *profileHandler) handlePut(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if valid, err := h.session.IsValid(session); !valid {
-		h.logger.Error("invalid session token", "err", err.Error())
-		h.session.HandleSessionErr(err, w)
+	// light weight input validation (not checking if session id is valid or well-formed)
+	if len(session) < 16 || len(session) > 64 {
+		h.logger.Error("invalid session token")
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusBadRequest,
+			Message:    "invalid session token",
+		}
+		e.SendJsonErr(w)
 		return
 	}
 
