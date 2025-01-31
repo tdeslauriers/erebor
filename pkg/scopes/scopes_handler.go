@@ -285,7 +285,7 @@ func (h *handler) handlePut(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// get request body
-	var cmd types.Scope
+	var cmd ScopeCmd
 	if err := json.NewDecoder(r.Body).Decode(&cmd); err != nil {
 		errMsg := fmt.Sprintf("failed to decode scope request cmd for slug %s: %s", slug, err.Error())
 		h.logger.Error(errMsg)
@@ -298,7 +298,7 @@ func (h *handler) handlePut(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// input validation of scope request body scope cmd
-	if err := cmd.ValidateCmd(); err != nil {
+	if err := cmd.Validate(); err != nil {
 		h.logger.Error(fmt.Sprintf("invalid scope request cmd for slug %s: %s", slug, err.Error()))
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusBadRequest,
@@ -335,12 +335,19 @@ func (h *handler) handlePut(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// prepare cmd: remove csrf token
-	cmd.Csrf = ""
+	// prepare data
+	updated := types.Scope{
+		ServiceName: cmd.ServiceName,
+		Scope:       cmd.Scope,
+		Name:        cmd.Name,
+		Description: cmd.Description,
+		Active:      cmd.Active,
+		Slug:        cmd.Slug,
+	}
 
 	// update scope in s2s service
 	var response types.Scope
-	if err := h.s2s.PostToService(fmt.Sprintf("/scopes/%s", slug), s2sToken, accessToken, cmd, &response); err != nil {
+	if err := h.s2s.PostToService(fmt.Sprintf("/scopes/%s", slug), s2sToken, accessToken, updated, &response); err != nil {
 		h.logger.Error(fmt.Sprintf("failed to update scope in s2s service for scope/slug %s: %s", slug, err.Error()))
 		h.s2s.RespondUpstreamError(err, w)
 		return
