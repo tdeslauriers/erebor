@@ -9,6 +9,7 @@ const (
 	PackageSession string = "uxsession"
 	PackageUser    string = "user"
 	PackageScopes  string = "scopes"
+	PackageClients string = "clients"
 
 	ComponentKey string = "component"
 
@@ -24,6 +25,7 @@ const (
 	ComponentReset     string = "password reset"
 	ComponentUser      string = "user"
 	ComponentScopes    string = "scopes"
+	ComponentClients   string = "s2s service clients"
 
 	SerivceKey = "service"
 

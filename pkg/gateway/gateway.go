@@ -10,6 +10,7 @@ import (
 	"erebor/pkg/authentication"
 	"erebor/pkg/authentication/oauth"
 	"erebor/pkg/authentication/uxsession"
+	"erebor/pkg/clients"
 	"erebor/pkg/scopes"
 	"erebor/pkg/user"
 	"fmt"
@@ -207,6 +208,8 @@ func (g *gateway) Run() error {
 
 	scope := scopes.NewHandler(g.uxSession, g.tknProvider, g.s2s)
 
+	client := clients.NewHandler(g.uxSession, g.tknProvider, g.s2s)
+
 	// setup mux
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", diagnostics.HealthCheckHandler)
@@ -226,7 +229,11 @@ func (g *gateway) Run() error {
 	mux.HandleFunc("/users", accounts.HandleUsers)
 
 	mux.HandleFunc("/scopes", scope.HandleScopes)
-	mux.HandleFunc("/scopes/", scope.HandleScope) // trailing slash required for /scopes/{session}
+	mux.HandleFunc("/scopes/add", scope.HandleAdd)
+	mux.HandleFunc("/scopes/", scope.HandleScope) // trailing slash required for /scopes/{slug}
+
+	mux.HandleFunc("/clients", client.HandleClients)
+	mux.HandleFunc("/clients/", client.HandleClient) // trailing slash required for /clients/{slug}
 
 	erebor := &connect.TlsServer{
 		Addr:      g.config.ServicePort,

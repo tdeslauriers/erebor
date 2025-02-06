@@ -20,6 +20,9 @@ type Handler interface {
 	// HandleScopes handles the request to get all scopes.
 	HandleScopes(w http.ResponseWriter, r *http.Request)
 
+	// HandleAdd handles the request to add a new scope.
+	HandleAdd(w http.ResponseWriter, r *http.Request)
+
 	// HandleScope handles get, put, post, and delete requests for a single scope.
 	HandleScope(w http.ResponseWriter, r *http.Request)
 }
@@ -75,7 +78,7 @@ func (h *handler) HandleScopes(w http.ResponseWriter, r *http.Request) {
 	// get user access token
 	accessTkn, err := h.session.GetAccessToken(session)
 	if err != nil {
-		h.logger.Error("failed to get access token from session token")
+		h.logger.Error("failed to get access token from session token provided")
 		h.session.HandleSessionErr(err, w)
 		return
 	}
@@ -100,9 +103,8 @@ func (h *handler) HandleScopes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// respond with scopes to client
+	// respond with scopes to client ui
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(scopes); err != nil {
 		h.logger.Error(fmt.Sprintf("failed to encode scopes: %s", err.Error()))
 		e := connect.ErrorHttp{
@@ -114,6 +116,127 @@ func (h *handler) HandleScopes(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// HandleAdd handles the request to add a new scope.
+// concrete implementation of the Handler interface.
+func (h *handler) HandleAdd(w http.ResponseWriter, r *http.Request) {
+
+	// only POST requests are allowed
+	if r.Method != "POST" {
+		h.logger.Error("only POST requests are allowed to /scopes/add endpoint")
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusMethodNotAllowed,
+			Message:    "only POST requests are allowed",
+		}
+		e.SendJsonErr(w)
+		return
+	}
+
+	// get session token from request
+	session := r.Header.Get("Authorization")
+	if session == "" {
+		h.logger.Error("no session token provided")
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusUnauthorized,
+			Message:    "no session token provided",
+		}
+		e.SendJsonErr(w)
+		return
+	}
+
+	// light weight input validation (not checking if session id is valid or well-formed)
+	if len(session) < 16 || len(session) > 64 {
+		h.logger.Error("invalid session token")
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusBadRequest,
+			Message:    "invalid session token",
+		}
+		e.SendJsonErr(w)
+		return
+	}
+
+	// get request body
+	var cmd ScopeCmd
+	if err := json.NewDecoder(r.Body).Decode(&cmd); err != nil {
+		errMsg := fmt.Sprintf("failed to decode scope request cmd for new scope : %s", err.Error())
+		h.logger.Error(errMsg)
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusBadRequest,
+			Message:    errMsg,
+		}
+		e.SendJsonErr(w)
+		return
+	}
+
+	// input validation of scope request body scope cmd
+	if err := cmd.Validate(); err != nil {
+		h.logger.Error(fmt.Sprintf("invalid scope request cmd for new scope: %s", err.Error()))
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusBadRequest,
+			Message:    err.Error(),
+		}
+		e.SendJsonErr(w)
+		return
+	}
+
+	// validate csrf token
+	if valid, err := h.session.IsValidCsrf(session, cmd.Csrf); !valid {
+		h.logger.Error("invalid csrf token", "err", err.Error())
+		h.session.HandleSessionErr(err, w)
+		return
+	}
+
+	// validate session token and get access token
+	accessToken, err := h.session.GetAccessToken(session)
+	if err != nil {
+		h.logger.Error(fmt.Sprintf("failed to get access token from session token for /scope/add call to s2s service: %s", err.Error()))
+		h.session.HandleSessionErr(err, w)
+		return
+	}
+
+	// get s2s token for s2s service
+	s2sToken, err := h.tknProvider.GetServiceToken(util.ServiceS2s)
+	if err != nil {
+		h.logger.Error(fmt.Sprintf("failed to get s2s token for /scope/add call to s2s service: %s", err.Error()))
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusInternalServerError,
+			Message:    "failed to get s2s token",
+		}
+		e.SendJsonErr(w)
+		return
+	}
+
+	// prepare data
+	add := types.Scope{
+		ServiceName: cmd.ServiceName,
+		Scope:       cmd.Scope,
+		Name:        cmd.Name,
+		Description: cmd.Description,
+		Active:      cmd.Active,
+	}
+
+	// update scope in s2s service
+	var response types.Scope
+	if err := h.s2s.PostToService("/scopes/add", s2sToken, accessToken, add, &response); err != nil {
+		h.logger.Error(fmt.Sprintf("failed to update scope in s2s service for scopes/add: %s", err.Error()))
+		h.s2s.RespondUpstreamError(err, w)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		h.logger.Error(fmt.Sprintf("failed to encode response scope to json for scopes/add: %s", err.Error()))
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusInternalServerError,
+			Message:    "failed to encode scope to json",
+		}
+		e.SendJsonErr(w)
+		return
+	}
+}
+
+// HandleScope handles get, put, post, and delete requests for a single scope.
+// concrete implementation of the Handler interface's HandleScope method.
 func (h *handler) HandleScope(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
@@ -140,7 +263,7 @@ func (h *handler) HandleScope(w http.ResponseWriter, r *http.Request) {
 
 func (h *handler) handleGet(w http.ResponseWriter, r *http.Request) {
 
-	// get session token from request
+	// get user's session token from request
 	session := r.Header.Get("Authorization")
 	if session == "" {
 		h.logger.Error("no session token provided")
