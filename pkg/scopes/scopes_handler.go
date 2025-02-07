@@ -407,6 +407,26 @@ func (h *handler) handlePut(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// validate session token and get access token
+	accessToken, err := h.session.GetAccessToken(session)
+	if err != nil {
+		h.logger.Error(fmt.Sprintf("failed to get access token from session token for /scope/%s call to s2s service: %s", slug, err.Error()))
+		h.session.HandleSessionErr(err, w)
+		return
+	}
+
+	// get s2s token for s2s service
+	s2sToken, err := h.tknProvider.GetServiceToken(util.ServiceS2s)
+	if err != nil {
+		h.logger.Error(fmt.Sprintf("failed to get s2s token for /scope/%s call to s2s service: %s", slug, err.Error()))
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusInternalServerError,
+			Message:    "failed to get s2s token",
+		}
+		e.SendJsonErr(w)
+		return
+	}
+
 	// get request body
 	var cmd ScopeCmd
 	if err := json.NewDecoder(r.Body).Decode(&cmd); err != nil {
@@ -435,26 +455,6 @@ func (h *handler) handlePut(w http.ResponseWriter, r *http.Request) {
 	if valid, err := h.session.IsValidCsrf(session, cmd.Csrf); !valid {
 		h.logger.Error("invalid csrf token", "err", err.Error())
 		h.session.HandleSessionErr(err, w)
-		return
-	}
-
-	// validate session token and get access token
-	accessToken, err := h.session.GetAccessToken(session)
-	if err != nil {
-		h.logger.Error(fmt.Sprintf("failed to get access token from session token for /scope/%s call to s2s service: %s", slug, err.Error()))
-		h.session.HandleSessionErr(err, w)
-		return
-	}
-
-	// get s2s token for s2s service
-	s2sToken, err := h.tknProvider.GetServiceToken(util.ServiceS2s)
-	if err != nil {
-		h.logger.Error(fmt.Sprintf("failed to get s2s token for /scope/%s call to s2s service: %s", slug, err.Error()))
-		e := connect.ErrorHttp{
-			StatusCode: http.StatusInternalServerError,
-			Message:    "failed to get s2s token",
-		}
-		e.SendJsonErr(w)
 		return
 	}
 

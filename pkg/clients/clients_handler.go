@@ -127,6 +127,8 @@ func (h *handler) HandleClient(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		h.handleGetClient(w, r)
 		return
+	case http.MethodPut:
+		h.handlePutClient(w, r)
 	default:
 		h.logger.Error("only GET, POST, PUT, and DELETE requests are allowed to /clients/{slug} endpoint")
 		e := connect.ErrorHttp{
@@ -141,13 +143,40 @@ func (h *handler) HandleClient(w http.ResponseWriter, r *http.Request) {
 // handleGetClient handles a GET request from the client by submitting it against the s2s service clients/{slug} endpoint.
 func (h *handler) handleGetClient(w http.ResponseWriter, r *http.Request) {
 
+	// get the url slug from the request
+	segments := strings.Split(r.URL.Path, "/")
+
+	var slug string
+	if len(segments) > 1 {
+		slug = segments[len(segments)-1]
+	} else {
+		h.logger.Error("no service client slug provided in get /clients/{slug} request")
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusBadRequest,
+			Message:    "no service client slug provided in get /clients/{slug} request",
+		}
+		e.SendJsonErr(w)
+		return
+	}
+
+	// light weight input validation (not checking if slug is valid or well-formed)
+	if len(slug) < 16 || len(slug) > 64 {
+		h.logger.Error("invalid scope slug")
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusBadRequest,
+			Message:    "invalid scope slug",
+		}
+		e.SendJsonErr(w)
+		return
+	}
+
 	// get the user's session token from the request
 	session := r.Header.Get("Authorization")
 	if session == "" {
-		h.logger.Error("no session token found in /clients/{slug} request")
+		h.logger.Error("no session token found in get /clients/{slug} request")
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusUnauthorized,
-			Message:    "no session token found in /clients/{slug} request",
+			Message:    "no session token found in get /clients/{slug} request",
 		}
 		e.SendJsonErr(w)
 		return
@@ -163,6 +192,50 @@ func (h *handler) handleGetClient(w http.ResponseWriter, r *http.Request) {
 		e.SendJsonErr(w)
 		return
 	}
+
+	// validate session token and get access token
+	accessToken, err := h.session.GetAccessToken(session)
+	if err != nil {
+		h.logger.Error(fmt.Sprintf("failed to get access token from session token for get /client/%s call to s2s service: %s", slug, err.Error()))
+		h.session.HandleSessionErr(err, w)
+		return
+	}
+
+	// get s2s token for s2s service
+	s2sToken, err := h.provider.GetServiceToken(util.ServiceS2s)
+	if err != nil {
+		h.logger.Error(fmt.Sprintf("failed to get s2s token for get /client/%s call to s2s service: %s", slug, err.Error()))
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusInternalServerError,
+			Message:    "failed to get s2s token",
+		}
+		e.SendJsonErr(w)
+		return
+	}
+
+	var client profile.Client
+	if err := h.s2s.GetServiceData(fmt.Sprintf("/clients/%s", slug), s2sToken, accessToken, &client); err != nil {
+		h.logger.Error(fmt.Sprintf("failed to get service client %s: %s", slug, err.Error()))
+		h.s2s.RespondUpstreamError(err, w)
+		return
+	}
+
+	// respond with service client to ui
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(client); err != nil {
+		h.logger.Error(fmt.Sprintf("failed to encode service client %s: %s", slug, err.Error()))
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusInternalServerError,
+			Message:    "failed to encode service client",
+		}
+		e.SendJsonErr(w)
+		return
+	}
+}
+
+// handlePutClient handles a PUT request from the client by submitting it against the s2s service clients/{slug} endpoint.\
+func (h *handler) handlePutClient(w http.ResponseWriter, r *http.Request) {
 
 	// get the url slug from the request
 	segments := strings.Split(r.URL.Path, "/")
@@ -191,10 +264,33 @@ func (h *handler) handleGetClient(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// get the user's session token from the request
+	session := r.Header.Get("Authorization")
+	if session == "" {
+		h.logger.Error("no session token found in put /clients/{slug} request")
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusUnauthorized,
+			Message:    "no session token found in put /clients/{slug} request",
+		}
+		e.SendJsonErr(w)
+		return
+	}
+
+	// light weight input validation (not checking if session id is valid or well-formed)
+	if len(session) < 16 || len(session) > 64 {
+		h.logger.Error("invalid session token")
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusBadRequest,
+			Message:    "invalid session token",
+		}
+		e.SendJsonErr(w)
+		return
+	}
+
 	// validate session token and get access token
 	accessToken, err := h.session.GetAccessToken(session)
 	if err != nil {
-		h.logger.Error(fmt.Sprintf("failed to get access token from session token for /client/%s call to s2s service: %s", slug, err.Error()))
+		h.logger.Error(fmt.Sprintf("failed to get access token from session token for put /client/%s call to s2s service: %s", slug, err.Error()))
 		h.session.HandleSessionErr(err, w)
 		return
 	}
@@ -202,7 +298,7 @@ func (h *handler) handleGetClient(w http.ResponseWriter, r *http.Request) {
 	// get s2s token for s2s service
 	s2sToken, err := h.provider.GetServiceToken(util.ServiceS2s)
 	if err != nil {
-		h.logger.Error(fmt.Sprintf("failed to get s2s token for /client-/%s call to s2s service: %s", slug, err.Error()))
+		h.logger.Error(fmt.Sprintf("failed to get s2s token for put /client/%s call to s2s service: %s", slug, err.Error()))
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusInternalServerError,
 			Message:    "failed to get s2s token",
@@ -211,21 +307,65 @@ func (h *handler) handleGetClient(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var client profile.Client
-	if err := h.s2s.GetServiceData(fmt.Sprintf("/clients/%s", slug), s2sToken, accessToken, &client); err != nil {
-		h.logger.Error(fmt.Sprintf("failed to get service client %s: %s", slug, err.Error()))
+	// get request body
+	var cmd ServiceClientCmd
+	if err := json.NewDecoder(r.Body).Decode(&cmd); err != nil {
+		h.logger.Error(fmt.Sprintf("failed to decode json in put /client/%s request body: %s", slug, err.Error()))
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusBadRequest,
+			Message:    "improperly formatted json",
+		}
+		e.SendJsonErr(w)
+		return
+	}
+
+	// validate client request
+	if err := cmd.ValidateCmd(); err != nil {
+		h.logger.Error(fmt.Sprintf("invalid client request: %s", err.Error()))
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusBadRequest,
+			Message:    err.Error(),
+		}
+		e.SendJsonErr(w)
+		return
+	}
+
+	// validate csrf token
+	if valid, err := h.session.IsValidCsrf(session, cmd.Csrf); !valid {
+		h.logger.Error("invalid csrf token", "err", err.Error())
+		h.session.HandleSessionErr(err, w)
+		return
+	}
+
+	// prepare data
+	updated := profile.Client{
+		// Id is dropped
+		Name:  cmd.Name,
+		Owner: cmd.Owner,
+		// CreatedAt is dropped
+		Enabled:        cmd.Enabled,
+		AccountExpired: cmd.AccountExpired,
+		AccountLocked:  cmd.AccountLocked,
+		// Slug is dropped
+		//Scopes is dropped
+	}
+
+	// send request to s2s service to update client
+	var response profile.Client
+	if err := h.s2s.PostToService(fmt.Sprintf("/clients/%s", slug), s2sToken, accessToken, updated, &response); err != nil {
+		h.logger.Error(fmt.Sprintf("failed to update client %s: %s", slug, err.Error()))
 		h.s2s.RespondUpstreamError(err, w)
 		return
 	}
 
-	// respond with service client to ui
+	// respond with updated client to ui
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	if err := json.NewEncoder(w).Encode(client); err != nil {
-		h.logger.Error(fmt.Sprintf("failed to encode service client %s: %s", slug, err.Error()))
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		h.logger.Error(fmt.Sprintf("failed to encode updated client %s: %s", slug, err.Error()))
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusInternalServerError,
-			Message:    "failed to encode service client",
+			Message:    "failed to encode updated client",
 		}
 		e.SendJsonErr(w)
 		return
