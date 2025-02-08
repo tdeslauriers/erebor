@@ -14,19 +14,29 @@ import (
 	"github.com/tdeslauriers/carapace/pkg/session/provider"
 )
 
-// Handler is an interface for handling calls to s2s service clients endpoints.
 type Handler interface {
-
-	// HandleClients handles a request from the client by submitting it against the s2s service clients endpoint.
-	HandleClients(w http.ResponseWriter, r *http.Request)
-
-	// HandleClient handles a request from the client by submitting it against the s2s service clients/{slug} endpoint.
-	HandleClient(w http.ResponseWriter, r *http.Request)
+	ClientHandler
+	ResetHandler
 }
 
 // NewHandler returns a new Handler.
 func NewHandler(ux uxsession.Service, p provider.S2sTokenProvider, c connect.S2sCaller) Handler {
 	return &handler{
+		ClientHandler: NewClientHandler(ux, p, c),
+		ResetHandler:  NewResetHandler(ux, p, c),
+	}
+}
+
+var _ Handler = (*handler)(nil)
+
+type handler struct {
+	ClientHandler
+	ResetHandler
+}
+
+// NewClientHandler returns a new Handler.
+func NewClientHandler(ux uxsession.Service, p provider.S2sTokenProvider, c connect.S2sCaller) ClientHandler {
+	return &clientHandler{
 		session:  ux,
 		provider: p,
 		s2s:      c,
@@ -38,9 +48,19 @@ func NewHandler(ux uxsession.Service, p provider.S2sTokenProvider, c connect.S2s
 	}
 }
 
-var _ Handler = (*handler)(nil)
+// ClientHandler is an interface for handling calls to s2s service clients endpoints.
+type ClientHandler interface {
 
-type handler struct {
+	// HandleClients handles a request from the client by submitting it against the s2s service clients endpoint.
+	HandleClients(w http.ResponseWriter, r *http.Request)
+
+	// HandleClient handles a request from the client by submitting it against the s2s service clients/{slug} endpoint.
+	HandleClient(w http.ResponseWriter, r *http.Request)
+}
+
+var _ ClientHandler = (*clientHandler)(nil)
+
+type clientHandler struct {
 	session  uxsession.Service
 	provider provider.S2sTokenProvider
 	s2s      connect.S2sCaller
@@ -50,7 +70,7 @@ type handler struct {
 
 // HandleClients handles a request from the client by submitting it against the s2s service clients endpoint.
 // concrete implementation of the Handler interface.
-func (h *handler) HandleClients(w http.ResponseWriter, r *http.Request) {
+func (h *clientHandler) HandleClients(w http.ResponseWriter, r *http.Request) {
 
 	if r.Method != "GET" {
 		h.logger.Error("only GET requests are allowed to /clients endpoint")
@@ -121,7 +141,7 @@ func (h *handler) HandleClients(w http.ResponseWriter, r *http.Request) {
 
 // HandleClient handles a request from the client by submitting it against the s2s service clients/{slug} endpoint.
 // concrete implementation of the Handler interface.
-func (h *handler) HandleClient(w http.ResponseWriter, r *http.Request) {
+func (h *clientHandler) HandleClient(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case http.MethodGet:
@@ -141,7 +161,7 @@ func (h *handler) HandleClient(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleGetClient handles a GET request from the client by submitting it against the s2s service clients/{slug} endpoint.
-func (h *handler) handleGetClient(w http.ResponseWriter, r *http.Request) {
+func (h *clientHandler) handleGetClient(w http.ResponseWriter, r *http.Request) {
 
 	// get the url slug from the request
 	segments := strings.Split(r.URL.Path, "/")
@@ -235,7 +255,7 @@ func (h *handler) handleGetClient(w http.ResponseWriter, r *http.Request) {
 }
 
 // handlePutClient handles a PUT request from the client by submitting it against the s2s service clients/{slug} endpoint.\
-func (h *handler) handlePutClient(w http.ResponseWriter, r *http.Request) {
+func (h *clientHandler) handlePutClient(w http.ResponseWriter, r *http.Request) {
 
 	// get the url slug from the request
 	segments := strings.Split(r.URL.Path, "/")

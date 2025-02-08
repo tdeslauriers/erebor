@@ -233,6 +233,7 @@ func (g *gateway) Run() error {
 	mux.HandleFunc("/scopes/", scope.HandleScope) // trailing slash required for /scopes/{slug}
 
 	mux.HandleFunc("/clients", client.HandleClients)
+	mux.HandleFunc("/clients/reset", client.HandleReset)
 	mux.HandleFunc("/clients/", client.HandleClient) // trailing slash required for /clients/{slug}
 
 	erebor := &connect.TlsServer{
