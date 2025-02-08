@@ -1,11 +1,34 @@
 package clients
 
 import (
+	"erebor/pkg/authentication/uxsession"
 	"fmt"
 
+	"github.com/tdeslauriers/carapace/pkg/connect"
 	"github.com/tdeslauriers/carapace/pkg/data"
+	"github.com/tdeslauriers/carapace/pkg/session/provider"
 	"github.com/tdeslauriers/carapace/pkg/validate"
 )
+
+type Handler interface {
+	ClientHandler
+	ResetHandler
+}
+
+// NewHandler returns a new Handler.
+func NewHandler(ux uxsession.Service, p provider.S2sTokenProvider, c connect.S2sCaller) Handler {
+	return &handler{
+		ClientHandler: NewClientHandler(ux, p, c),
+		ResetHandler:  NewResetHandler(ux, p, c),
+	}
+}
+
+var _ Handler = (*handler)(nil)
+
+type handler struct {
+	ClientHandler
+	ResetHandler
+}
 
 type ServiceClientCmd struct {
 	Csrf string `json:"csrf,omitempty"`

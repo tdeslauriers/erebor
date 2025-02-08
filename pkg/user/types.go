@@ -1,13 +1,39 @@
 package user
 
 import (
+	"erebor/pkg/authentication/uxsession"
 	"fmt"
 	"time"
 
+	"github.com/tdeslauriers/carapace/pkg/connect"
 	"github.com/tdeslauriers/carapace/pkg/data"
+	"github.com/tdeslauriers/carapace/pkg/session/provider"
 	"github.com/tdeslauriers/carapace/pkg/session/types"
 	"github.com/tdeslauriers/carapace/pkg/validate"
 )
+
+// Handler is the interface for handling user requests from the client.
+type Handler interface {
+	ProfileHandler
+	ResetHandler
+	UserHandler
+}
+
+func NewHandler(ux uxsession.Service, p provider.S2sTokenProvider, c connect.S2sCaller) Handler {
+	return &handler{
+		ProfileHandler: NewProfileHandler(ux, p, c),
+		ResetHandler:   NewResetHandler(ux, p, c),
+		UserHandler:    NewUserHandler(ux, p, c),
+	}
+}
+
+var _ Handler = (*handler)(nil)
+
+type handler struct {
+	ProfileHandler
+	ResetHandler
+	UserHandler
+}
 
 // Profile is a model for a user's profile as it is expected to be returned to the frontend ui.
 // It is also the model that will be submitted back to the gateway to update service data.

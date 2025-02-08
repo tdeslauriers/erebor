@@ -14,26 +14,6 @@ import (
 	"github.com/tdeslauriers/carapace/pkg/session/provider"
 )
 
-type Handler interface {
-	ClientHandler
-	ResetHandler
-}
-
-// NewHandler returns a new Handler.
-func NewHandler(ux uxsession.Service, p provider.S2sTokenProvider, c connect.S2sCaller) Handler {
-	return &handler{
-		ClientHandler: NewClientHandler(ux, p, c),
-		ResetHandler:  NewResetHandler(ux, p, c),
-	}
-}
-
-var _ Handler = (*handler)(nil)
-
-type handler struct {
-	ClientHandler
-	ResetHandler
-}
-
 // NewClientHandler returns a new Handler.
 func NewClientHandler(ux uxsession.Service, p provider.S2sTokenProvider, c connect.S2sCaller) ClientHandler {
 	return &clientHandler{
