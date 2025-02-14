@@ -13,6 +13,7 @@ import (
 type Handler interface {
 	ClientHandler
 	ResetHandler
+	ScopesHandler
 }
 
 // NewHandler returns a new Handler.
@@ -20,6 +21,7 @@ func NewHandler(ux uxsession.Service, p provider.S2sTokenProvider, c connect.S2s
 	return &handler{
 		ClientHandler: NewClientHandler(ux, p, c),
 		ResetHandler:  NewResetHandler(ux, p, c),
+		ScopesHandler: NewScopesHandler(ux, p, c),
 	}
 }
 
@@ -28,6 +30,7 @@ var _ Handler = (*handler)(nil)
 type handler struct {
 	ClientHandler
 	ResetHandler
+	ScopesHandler
 }
 
 type ServiceClientCmd struct {
@@ -73,6 +76,35 @@ func (c *ServiceClientCmd) ValidateCmd() error {
 
 	if c.Slug != "" && !validate.IsValidUuid(c.Slug) {
 		return fmt.Errorf("invalid or not well formatted slug")
+	}
+
+	return nil
+}
+
+// ClientScopesCmd is a model for updating the scopes of a client.
+type ClientScopesCmd struct {
+	Csrf       string   `json:"csrf,omitempty"`
+	ClientSlug string   `json:"slug"`
+	Scopes     []string `json:"scopes"`
+}
+
+// ValidateCmd performs input validation check on client scopes fields.
+func (c *ClientScopesCmd) ValidateCmd() error {
+
+	if !validate.IsValidUuid(c.Csrf) {
+		return fmt.Errorf("invalid csrf token")
+	}
+
+	if !validate.IsValidUuid(c.ClientSlug) {
+		return fmt.Errorf("invalid client slug")
+	}
+
+	if len(c.Scopes) > 0 {
+		for _, slug := range c.Scopes {
+			if !validate.IsValidUuid(slug) {
+				return fmt.Errorf("invalid scope slug submitted: all slugs must be valid uuids")
+			}
+		}
 	}
 
 	return nil

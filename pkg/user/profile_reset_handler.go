@@ -4,10 +4,12 @@ import (
 	"encoding/json"
 	"erebor/internal/util"
 	"erebor/pkg/authentication/uxsession"
+	"fmt"
 	"log/slog"
 	"net/http"
 
 	"github.com/tdeslauriers/carapace/pkg/connect"
+	"github.com/tdeslauriers/carapace/pkg/jwt"
 	"github.com/tdeslauriers/carapace/pkg/profile"
 	"github.com/tdeslauriers/carapace/pkg/session/provider"
 )
@@ -139,7 +141,12 @@ func (h *resetHandler) HandleReset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.logger.Info("password reset successful")
+	jot, err := jwt.BuildFromToken(accessToken)
+	if err != nil {
+		h.logger.Error(fmt.Sprintf("failed to build jwt from access token: %v", err))
+		// no error needed since this is a convenience function
+	}
 
+	h.logger.Info(fmt.Sprintf("user %s password reset successful", jot.Claims.Subject))
 	w.WriteHeader(http.StatusNoContent)
 }

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"erebor/internal/util"
 	"erebor/pkg/authentication/uxsession"
+	"fmt"
 	"log/slog"
 	"net/http"
 
@@ -69,7 +70,7 @@ func (h *resetHandler) HandleReset(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if valid, err := h.session.IsValid(session); !valid {
-		h.logger.Error("invalid session token", "err", err.Error())
+		h.logger.Error(fmt.Sprintf("invalid session token: %s", err.Error()))
 		h.session.HandleSessionErr(err, w)
 		return
 	}
@@ -77,10 +78,11 @@ func (h *resetHandler) HandleReset(w http.ResponseWriter, r *http.Request) {
 	// decode the request body
 	var cmd profile.ResetCmd
 	if err := json.NewDecoder(r.Body).Decode(&cmd); err != nil {
-		h.logger.Error("error decoding request body", "err", err.Error())
+		errMsg := fmt.Sprintf("failed to decode json in client scopes request body: %s", err.Error())
+		h.logger.Error(errMsg)
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusBadRequest,
-			Message:    "error decoding request body",
+			Message:    errMsg,
 		}
 		e.SendJsonErr(w)
 		return
@@ -88,10 +90,11 @@ func (h *resetHandler) HandleReset(w http.ResponseWriter, r *http.Request) {
 
 	// validate the request body
 	if err := cmd.ValidateCmd(); err != nil {
-		h.logger.Error("error validating request body", "err", err.Error())
+		errMsg := fmt.Sprintf("error validating request body: %s", err.Error())
+		h.logger.Error(errMsg)
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusBadRequest,
-			Message:    "error validating request body",
+			Message:    errMsg,
 		}
 		e.SendJsonErr(w)
 		return
@@ -99,7 +102,7 @@ func (h *resetHandler) HandleReset(w http.ResponseWriter, r *http.Request) {
 
 	// validate the csrf token
 	if valid, err := h.session.IsValidCsrf(session, cmd.Csrf); !valid {
-		h.logger.Error("invalid csrf token", "err", err.Error())
+		h.logger.Error(fmt.Sprintf("invalid csrf token: %s", err.Error()))
 		h.session.HandleSessionErr(err, w)
 		return
 	}
@@ -110,14 +113,14 @@ func (h *resetHandler) HandleReset(w http.ResponseWriter, r *http.Request) {
 	// get access token tied to the session
 	accessToken, err := h.session.GetAccessToken(session)
 	if err != nil {
-		h.logger.Error("error getting access token from session", "err", err.Error())
+		h.logger.Error(fmt.Sprintf("failed to get access token from session token: %s", err.Error()))
 		h.session.HandleSessionErr(err, w)
 		return
 	}
 
 	s2sToken, err := h.provider.GetServiceToken(util.ServiceS2s)
 	if err != nil {
-		h.logger.Error("failed to retrieve s2s token", "err", err.Error())
+		h.logger.Error(fmt.Sprintf("failed to get s2s token for s2s service: %s", err.Error()))
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusInternalServerError,
 			Message:    "service client password reset unsuccessful: internal server error",
@@ -129,11 +132,11 @@ func (h *resetHandler) HandleReset(w http.ResponseWriter, r *http.Request) {
 	// make the request to the s2s service
 	// there will be no response body, only a status code -> s2s will not return password data
 	if err := h.s2s.PostToService("/clients/reset", s2sToken, accessToken, cmd, nil); err != nil {
-		h.logger.Error("error calling service client reset endpoint on s2s service", "err", err.Error())
+		h.logger.Error(fmt.Sprintf("error calling service client reset endpoint on s2s service: %s", err.Error()))
 		h.s2s.RespondUpstreamError(err, w)
 		return
 	}
 
-	h.logger.Info("service client password reset successful")
+	h.logger.Info(fmt.Sprintf("service client %s password reset successful", cmd.ResourceId))
 	w.WriteHeader(http.StatusNoContent)
 }
