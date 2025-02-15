@@ -84,8 +84,8 @@ func (c *ServiceClientCmd) ValidateCmd() error {
 // ClientScopesCmd is a model for updating the scopes of a client.
 type ClientScopesCmd struct {
 	Csrf       string   `json:"csrf,omitempty"`
-	ClientSlug string   `json:"slug"`
-	Scopes     []string `json:"scopes"`
+	ClientSlug string   `json:"client_slug"`
+	ScopeSlugs []string `json:"scope_slugs"`
 }
 
 // ValidateCmd performs input validation check on client scopes fields.
@@ -99,8 +99,8 @@ func (c *ClientScopesCmd) ValidateCmd() error {
 		return fmt.Errorf("invalid client slug")
 	}
 
-	if len(c.Scopes) > 0 {
-		for _, slug := range c.Scopes {
+	if len(c.ScopeSlugs) > 0 {
+		for _, slug := range c.ScopeSlugs {
 			if !validate.IsValidUuid(slug) {
 				return fmt.Errorf("invalid scope slug submitted: all slugs must be valid uuids")
 			}

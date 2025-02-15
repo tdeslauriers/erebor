@@ -45,11 +45,11 @@ type scopesHandler struct {
 // HandleScopes is the concrete implementation of the interface function that handles the request to udpate a client's assigned scopes.
 func (h *scopesHandler) HandleScopes(w http.ResponseWriter, r *http.Request) {
 
-	if r.Method != "POST" {
-		h.logger.Error("only POST requests are allowed to /client/scopes endpoint")
+	if r.Method != "PUT" {
+		h.logger.Error("only PUT requests are allowed to /clients/scopes endpoint")
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusMethodNotAllowed,
-			Message:    "only POST requests are allowed to /client/scopes endpoint",
+			Message:    "only PUT requests are allowed to /clients/scopes endpoint",
 		}
 		e.SendJsonErr(w)
 		return
@@ -129,7 +129,7 @@ func (h *scopesHandler) HandleScopes(w http.ResponseWriter, r *http.Request) {
 
 	// make request to the s2s service
 	// no resopnse is expected from the s2s service --> 204 No Content
-	if err := h.s2s.PostToService("/client/scopes", s2sToken, accessToken, cmd, nil); err != nil {
+	if err := h.s2s.PostToService("/clients/scopes", s2sToken, accessToken, cmd, nil); err != nil {
 		h.logger.Error(fmt.Sprintf("failed to post to /client/scopes endpoint: %s", err.Error()))
 		h.s2s.RespondUpstreamError(err, w)
 		return
