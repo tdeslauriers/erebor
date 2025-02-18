@@ -10,6 +10,7 @@ import (
 	"github.com/tdeslauriers/carapace/pkg/validate"
 )
 
+// Handler is an aggregate interface for handling client services.
 type Handler interface {
 	ClientHandler
 	ResetHandler
@@ -27,10 +28,57 @@ func NewHandler(ux uxsession.Service, p provider.S2sTokenProvider, c connect.S2s
 
 var _ Handler = (*handler)(nil)
 
+// handler is the concrete implementation of the Handler interface.
 type handler struct {
 	ClientHandler
 	ResetHandler
 	ScopesHandler
+}
+
+// RegisterClientCmd is a model for registering a new client.
+type RegisterClientCmd struct {
+	Csrf string `json:"csrf,omitempty"`
+
+	Id              string `json:"id,omitempty"`
+	Name            string `json:"name"`
+	Owner           string `json:"owner"`
+	Password        string `json:"password,omitempty"`
+	ConfirmPassword string `json:"confirm_password,omitempty"`
+	Slug            string `json:"slug,omitempty"`
+	Enabled         bool   `json:"enabled"`
+	// AccountLocked is not in registration submission, or returned in registration response
+	// AccountExpired is not in registration submission, or returned in registration response
+	// CreatedAt is not in registration submission, or returned in registration response
+	// Scopes is not in registration submission, or returned in registration response
+}
+
+// ValidateCmd performs input validation check on client registration fields.
+func (c *RegisterClientCmd) ValidateCmd() error {
+
+	if !validate.IsValidUuid(c.Csrf) {
+		return fmt.Errorf("invalid csrf token")
+	}
+
+	// Id is generated at time of registration upstream, no validation needed
+
+	if valid, err := validate.IsValidServiceName(c.Name); !valid {
+		return fmt.Errorf("invalid client name: %v", err)
+	}
+
+	if err := validate.IsValidName(c.Owner); err != nil {
+		return fmt.Errorf("invalid client owner: %v", err)
+	}
+
+	if err := validate.IsValidPassword(c.Password); err != nil {
+		return fmt.Errorf("invalid password: %v", err)
+	}
+
+	if c.Password != c.ConfirmPassword {
+		return fmt.Errorf("passwords do not match")
+	}
+
+	// slug is generated at time of registration upstream, no validation needed
+	return nil
 }
 
 type ServiceClientCmd struct {

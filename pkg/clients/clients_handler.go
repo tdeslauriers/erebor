@@ -129,6 +129,11 @@ func (h *clientHandler) HandleClient(w http.ResponseWriter, r *http.Request) {
 		return
 	case http.MethodPut:
 		h.handlePutClient(w, r)
+		return
+	case http.MethodPost:
+		// this is used for the register service client use case/business logic, it will reject all other post requests
+		h.handlePostClient(w, r)
+		return
 	default:
 		h.logger.Error("only GET, POST, PUT, and DELETE requests are allowed to /clients/{slug} endpoint")
 		e := connect.ErrorHttp{
@@ -368,6 +373,137 @@ func (h *clientHandler) handlePutClient(w http.ResponseWriter, r *http.Request) 
 			Message:    "failed to encode updated client",
 		}
 		e.SendJsonErr(w)
+		return
+	}
+}
+
+// handlePostClient handles a POST request from the client by submitting it against the s2s service clients/{slug} endpoint.
+func (h *clientHandler) handlePostClient(w http.ResponseWriter, r *http.Request) {
+
+	// get the url slug from the request
+	segments := strings.Split(r.URL.Path, "/")
+
+	// validate the url path is /clients/register
+	var param string
+	if len(segments) > 1 {
+		param = segments[len(segments)-1]
+		if param != "register" {
+			h.logger.Error("invalid url path for post /clients/register request")
+			e := connect.ErrorHttp{
+				StatusCode: http.StatusBadRequest,
+				Message:    "invalid url path for post /clients/register request",
+			}
+			e.SendJsonErr(w)
+			return
+		}
+	} else {
+		h.logger.Error("no service client slug provided in /clients/{slug} request")
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusBadRequest,
+			Message:    "no service client slug provided in /clients/{slug} request",
+		}
+		e.SendJsonErr(w)
+		return
+	}
+
+	// get the user's session token from the request
+	session := r.Header.Get("Authorization")
+	if session == "" {
+		h.logger.Error("no session token found in put /clients/{slug} request")
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusUnauthorized,
+			Message:    "no session token found in put /clients/{slug} request",
+		}
+		e.SendJsonErr(w)
+		return
+	}
+
+	// light weight input validation (not checking if session id is valid or well-formed)
+	if len(session) < 16 || len(session) > 64 {
+		h.logger.Error("invalid session token")
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusBadRequest,
+			Message:    "invalid session token",
+		}
+		e.SendJsonErr(w)
+		return
+	}
+
+	// validate session token and get access token
+	accessToken, err := h.session.GetAccessToken(session)
+	if err != nil {
+		h.logger.Error(fmt.Sprintf("failed to get access token from session token for post to /clients/register on s2s service: %s", err.Error()))
+		h.session.HandleSessionErr(err, w)
+		return
+	}
+
+	// get s2s token for s2s service
+	s2sToken, err := h.provider.GetServiceToken(util.ServiceS2s)
+	if err != nil {
+		h.logger.Error(fmt.Sprintf("failed to get s2s token for post to /clients/register on s2s service: %s", err.Error()))
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusInternalServerError,
+			Message:    "failed to get s2s token",
+		}
+		e.SendJsonErr(w)
+		return
+	}
+
+	// decode the request body
+	var cmd RegisterClientCmd
+	if err := json.NewDecoder(r.Body).Decode(&cmd); err != nil {
+		errMsg := fmt.Sprintf("failed to decode json in post /clients/register request body: %s", err.Error())
+		h.logger.Error(errMsg)
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusBadRequest,
+			Message:    errMsg,
+		}
+		e.SendJsonErr(w)
+		return
+	}
+
+	// validate the request body
+	if err := cmd.ValidateCmd(); err != nil {
+		errMsg := fmt.Sprintf("error validating request body of service client registration request: %s", err.Error())
+		h.logger.Error(errMsg)
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusBadRequest,
+			Message:    errMsg,
+		}
+		e.SendJsonErr(w)
+		return
+	}
+
+	// validate csrf token
+	if valid, err := h.session.IsValidCsrf(session, cmd.Csrf); !valid {
+		h.logger.Error("invalid csrf token", "err", err.Error())
+		h.session.HandleSessionErr(err, w)
+		return
+	}
+
+	// prepare data: drop any fields that are not needed
+	cmd.Csrf = ""
+	cmd.Id = ""
+	cmd.Slug = ""
+
+	var registered RegisterClientCmd
+	if err := h.s2s.PostToService("/clients/register", s2sToken, accessToken, cmd, &registered); err != nil {
+		h.logger.Error(fmt.Sprintf("failed to register service client: %s", err.Error()))
+		h.s2s.RespondUpstreamError(err, w)
+		return
+	}
+
+	// password will be empty, set to empty string anyway, just in case
+	registered.Password = ""
+	registered.ConfirmPassword = ""
+
+	// respond 201 + registered client to ui
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+
+	if err := json.NewEncoder(w).Encode(registered); err != nil {
+		// returning successfully registered service client data is a convenience only, omit on error
+		h.logger.Error(fmt.Sprintf("failed to encode registered client: %s", err.Error()))
 		return
 	}
 }
