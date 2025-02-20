@@ -212,7 +212,7 @@ func (h *clientHandler) handleGetClient(w http.ResponseWriter, r *http.Request) 
 		h.logger.Error(fmt.Sprintf("failed to get s2s token for get /client/%s call to s2s service: %s", slug, err.Error()))
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusInternalServerError,
-			Message:    "failed to get s2s token",
+			Message:    "internal service error",
 		}
 		e.SendJsonErr(w)
 		return

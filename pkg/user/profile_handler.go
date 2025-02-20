@@ -126,11 +126,11 @@ func (h *profileHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO: place holder for getting silhoutte data from silhoutte service
+	// TODO: place holder for getting silhouette data from silhouette service
 
 	// build profile model from user data + silhoutte data
 	profile := ProfileCmd{
-		// NEVER RETURN SESSION TOKEN TO CLIENT: it is only used for server-side validation
+		// NEVER RETURN SESSION TOKEN/CRSF TO CLIENT: it is only used for server-side validation
 		// and will be dropped from the model before sending to the client anyway
 
 		Username:       user.Username,
@@ -199,6 +199,14 @@ func (h *profileHandler) handlePut(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// get user access token from session
+	accessToken, err := h.session.GetAccessToken(session)
+	if err != nil {
+		h.logger.Error("failed to get access token from session", "err", err.Error())
+		h.session.HandleSessionErr(err, w)
+		return
+	}
+
 	// get request body
 	var cmd ProfileCmd
 	if err := json.NewDecoder(r.Body).Decode(&cmd); err != nil {
@@ -248,13 +256,7 @@ func (h *profileHandler) handlePut(w http.ResponseWriter, r *http.Request) {
 		AccountLocked:  cmd.AccountLocked,  // passed, but dropped upstream because user not allowed to change account locked status
 	}
 
-	// get user access token from session
-	accessToken, err := h.session.GetAccessToken(session)
-	if err != nil {
-		h.logger.Error("failed to get access token from session", "err", err.Error())
-		h.session.HandleSessionErr(err, w)
-		return
-	}
+	// access token retrieved above to validate session
 
 	// get s2s token for identity service
 	s2sToken, err := h.provider.GetServiceToken(util.ServiceIdentity)
@@ -275,6 +277,8 @@ func (h *profileHandler) handlePut(w http.ResponseWriter, r *http.Request) {
 		h.identity.RespondUpstreamError(err, w)
 		return
 	}
+
+	// TODO: placeholder for updating silhouette data in silhouette service
 
 	// build profile model from user data + silhoutte data
 	profile := ProfileCmd{

@@ -29,6 +29,7 @@ func NewHandler(ux uxsession.Service, p provider.S2sTokenProvider, c connect.S2s
 
 var _ Handler = (*handler)(nil)
 
+// handler is the concrete implementation of the interface function that handles user requests from the client.
 type handler struct {
 	ProfileHandler
 	ResetHandler
