@@ -137,18 +137,18 @@ type ClientScopesCmd struct {
 }
 
 // ValidateCmd performs input validation check on client scopes fields.
-func (c *ClientScopesCmd) ValidateCmd() error {
+func (cmd *ClientScopesCmd) ValidateCmd() error {
 
-	if !validate.IsValidUuid(c.Csrf) {
+	if !validate.IsValidUuid(cmd.Csrf) {
 		return fmt.Errorf("invalid csrf token")
 	}
 
-	if !validate.IsValidUuid(c.ClientSlug) {
+	if !validate.IsValidUuid(cmd.ClientSlug) {
 		return fmt.Errorf("invalid client slug")
 	}
 
-	if len(c.ScopeSlugs) > 0 {
-		for _, slug := range c.ScopeSlugs {
+	if len(cmd.ScopeSlugs) > 0 {
+		for _, slug := range cmd.ScopeSlugs {
 			if !validate.IsValidUuid(slug) {
 				return fmt.Errorf("invalid scope slug submitted: all slugs must be valid uuids")
 			}

@@ -228,6 +228,7 @@ func (g *gateway) Run() error {
 	mux.HandleFunc("/reset", accounts.HandleReset)
 	mux.HandleFunc("/users", accounts.HandleUsers)
 	mux.HandleFunc("/users/", accounts.HandleUser) // trailing slash required for /users/{slug}
+	mux.HandleFunc("/users/scopes", accounts.HandleScopes)
 
 	mux.HandleFunc("/scopes", scope.HandleScopes)
 	mux.HandleFunc("/scopes/add", scope.HandleAdd)

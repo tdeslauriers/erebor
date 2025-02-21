@@ -12,10 +12,11 @@ import (
 	"github.com/tdeslauriers/carapace/pkg/validate"
 )
 
-// Handler is the interface for handling user requests from the client.
+// Handler is the interface for handling user requests from the client.  Aggregates all user handler interfaces.
 type Handler interface {
 	ProfileHandler
 	ResetHandler
+	ScopesHandler
 	UserHandler
 }
 
@@ -23,6 +24,7 @@ func NewHandler(ux uxsession.Service, p provider.S2sTokenProvider, c connect.S2s
 	return &handler{
 		ProfileHandler: NewProfileHandler(ux, p, c),
 		ResetHandler:   NewResetHandler(ux, p, c),
+		ScopesHandler:  NewScopesHandler(ux, p, c),
 		UserHandler:    NewUserHandler(ux, p, c),
 	}
 }
@@ -33,6 +35,7 @@ var _ Handler = (*handler)(nil)
 type handler struct {
 	ProfileHandler
 	ResetHandler
+	ScopesHandler
 	UserHandler
 }
 
@@ -127,6 +130,35 @@ func (cmd *ProfileCmd) ValidateCmd() error {
 	// AccountExpired is a boolean, no validation needed
 
 	// AccountLocked is a boolean, no validation needed
+
+	return nil
+}
+
+// UserScopesCmd is a model for a user's assigned scopes as it is expected to be returned to the frontend ui.
+type UserScopesCmd struct {
+	Csrf       string   `json:"csrf,omitempty"`
+	UserSlug   string   `json:"user_slug"`
+	ScopeSlugs []string `json:"scope_slugs"`
+}
+
+// ValidateCmd performs input validation check on user scopes fields.
+func (cmd *UserScopesCmd) ValidateCmd() error {
+
+	if !validate.IsValidUuid(cmd.Csrf) {
+		return fmt.Errorf("invalid csrf token")
+	}
+
+	if !validate.IsValidUuid(cmd.UserSlug) {
+		return fmt.Errorf("invalid user slug")
+	}
+
+	if len(cmd.ScopeSlugs) > 0 {
+		for _, slug := range cmd.ScopeSlugs {
+			if !validate.IsValidUuid(slug) {
+				return fmt.Errorf("invalid scope slug submitted: all slugs must be valid uuids")
+			}
+		}
+	}
 
 	return nil
 }
