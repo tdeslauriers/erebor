@@ -108,6 +108,9 @@ func (h *scopesHandler) HandleScopes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// csrf token no longer needed, set to empty string
+	cmd.Csrf = ""
+
 	// get service token
 	s2sToken, err := h.provider.GetServiceToken(util.ServiceIdentity)
 	if err != nil {
@@ -122,7 +125,7 @@ func (h *scopesHandler) HandleScopes(w http.ResponseWriter, r *http.Request) {
 
 	// make request to the identity service
 	// no response is expected from the identity service --> 204 No Content
-	if err := h.identity.PostToService("/user/scopes", s2sToken, accessToken, cmd, nil); err != nil {
+	if err := h.identity.PostToService("/users/scopes", s2sToken, accessToken, cmd, nil); err != nil {
 		h.logger.Error(fmt.Sprintf("failed to update user scopes: %s", err.Error()))
 		h.identity.RespondUpstreamError(err, w)
 		return
