@@ -136,6 +136,11 @@ spec:
                 configMapKeyRef:
                   name: cm-gateway-oauth-callback
                   key: oauth-callback-client-id
+            - name: EREBOR_TASKS_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: cm-allowance-service
+                  key: allowance-url
           resources:
             limits:
               memory: "128Mi"

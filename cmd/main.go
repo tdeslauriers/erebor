@@ -20,7 +20,10 @@ func main() {
 	slog.SetDefault(slog.New(jsonHandler))
 
 	// set up logger for main
-	logger := slog.Default().With(slog.String(util.PackageKey, util.PackageMain))
+	logger := slog.Default().
+		With(slog.String(util.SerivceKey, util.ServiceGateway)).
+		With(slog.String(util.PackageKey, util.PackageMain)).
+		With(slog.String(util.ComponentKey, util.ComponentMain))
 
 	// service definition
 	def := config.SvcDefinition{
@@ -37,6 +40,7 @@ func main() {
 			UserSigningKey:   false,
 			UserVerifyingKey: true,
 			OauthRedirect:    true,
+			Tasks:            true,
 		},
 	}
 

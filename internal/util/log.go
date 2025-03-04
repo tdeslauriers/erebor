@@ -10,10 +10,12 @@ const (
 	PackageUser    string = "user"
 	PackageScopes  string = "scopes"
 	PackageClients string = "clients"
+	PackageTasks   string = "tasks"
 
 	ComponentKey string = "component"
 
 	ComponentMain          string = "main"
+	ComponentGateway       string = "gateway"
 	ComponentCsrf          string = "csrf"
 	ComponentLogin         string = "login"
 	ComponentLogout        string = "logout"
@@ -28,6 +30,9 @@ const (
 	ComponentUser          string = "user"
 	ComponentUserScopes    string = "user scopes"
 	ComponentUxSession     string = "ux session"
+	ComponentTasks         string = "tasks"
+	ComponentTaskTypes     string = "task types"
+	ComponentAllowances    string = "allowances"
 
 	SerivceKey = "service"
 

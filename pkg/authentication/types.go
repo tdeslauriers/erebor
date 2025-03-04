@@ -37,10 +37,12 @@ type Render struct {
 	BlogWrite *bool `json:"blog_write,omitempty"`
 
 	// Allowance
-	TaskRead     *bool `json:"task_read,omitempty"`
-	TaskWrite    *bool `json:"task_write,omitempty"`
-	PayrollRead  *bool `json:"payroll_read,omitempty"`
-	PayrollWrite *bool `json:"payroll_write,omitempty"`
+	TaskRead        *bool `json:"task_read,omitempty"`
+	TaskWrite       *bool `json:"task_write,omitempty"`
+	AllowanceRead   *bool `json:"allowance_read,omitempty"`
+	AllowanceWrite  *bool `json:"allowance_write,omitempty"`
+	AllowancesRead  *bool `json:"allowances_read,omitempty"`
+	AllowancesWrite *bool `json:"allowances_write,omitempty"`
 
 	GalleryRead  *bool `json:"gallery_read,omitempty"`
 	GalleryWrite *bool `json:"gallery_write,omitempty"`
@@ -65,8 +67,9 @@ const (
 	User    ApiEndpoint = "user"
 	Scope   ApiEndpoint = "scope"
 
-	Task    ApiEndpoint = "task"
-	Payroll ApiEndpoint = "payroll"
+	Tasks      ApiEndpoint = "tasks"
+	Allowances ApiEndpoint = "allowances"
+	Allowance  ApiEndpoint = "allowance"
 )
 
 // SetRenderFlag is a function that is used to set the Render flag to the value that is passed in.
@@ -97,6 +100,7 @@ func BuildRender(scopes string) Render {
 			continue
 		}
 
+		// Identity
 		switch s[1] {
 		case util.ServiceIdentity:
 			if len(s) < 3 {
@@ -133,6 +137,7 @@ func BuildRender(scopes string) Render {
 				break
 			}
 
+		// Blog
 		case util.ServiceBlog:
 			if s[0] == string(Read) {
 				render.BlogRead = setRenderFlag(true)
@@ -143,13 +148,14 @@ func BuildRender(scopes string) Render {
 				continue
 			}
 
-		case util.ServiceAllowance:
+		// Tasks
+		case util.ServiceTasks:
 			if len(s) < 3 {
 				continue
 			}
 
 			switch s[2] {
-			case string(Task):
+			case string(Tasks):
 				if s[0] == string(Read) {
 					render.TaskRead = setRenderFlag(true)
 					continue
@@ -159,13 +165,23 @@ func BuildRender(scopes string) Render {
 					continue
 				}
 
-			case string(Payroll):
+			case string(Allowances):
 				if s[0] == string(Read) {
-					render.PayrollRead = setRenderFlag(true)
+					render.AllowancesRead = setRenderFlag(true)
 					continue
 				}
 				if s[0] == string(Write) {
-					render.PayrollWrite = setRenderFlag(true)
+					render.AllowancesWrite = setRenderFlag(true)
+					continue
+				}
+
+			case string(Allowance):
+				if s[0] == string(Read) {
+					render.AllowanceRead = setRenderFlag(true)
+					continue
+				}
+				if s[0] == string(Write) {
+					render.AllowanceWrite = setRenderFlag(true)
 					continue
 				}
 			default:

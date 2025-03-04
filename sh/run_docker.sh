@@ -26,4 +26,5 @@ docker run --rm -p $(op read "op://world_site/erebor_service_container_dev/port"
     -e EREBOR_USER_JWT_VERIFYING_KEY="$(op read "op://world_site/shaw_jwt_key_pair_dev/verifying_key")" \
     -e EREBOR_OAUTH_CALLBACK_URL=$(op read "op://world_site/erebor_oauth_callback_dev/url"):$(op read "op://world_site/erebor_oauth_callback_dev/port")/callback \
     -e EREBOR_OAUTH_CALLBACK_CLIENT_ID=$(op read "op://world_site/erebor_oauth_callback_dev/client_id") \
+    -e EREBOR_TASKS_URL=$(op read "op://world_site/apprentice_service_container_dev/url"):$(op read "op://world_site/apprentice_service_container_dev/port") \
     erebor:latest

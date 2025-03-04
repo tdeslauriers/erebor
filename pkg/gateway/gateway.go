@@ -12,6 +12,7 @@ import (
 	"erebor/pkg/authentication/uxsession"
 	"erebor/pkg/clients"
 	"erebor/pkg/scopes"
+	"erebor/pkg/tasks"
 	"erebor/pkg/user"
 	"fmt"
 	"log/slog"
@@ -113,6 +114,7 @@ func New(config *config.Config) (Gateway, error) {
 	// callers
 	s2s := connect.NewS2sCaller(config.ServiceAuth.Url, util.ServiceS2s, client, retry)
 	identity := connect.NewS2sCaller(config.UserAuth.Url, util.ServiceIdentity, client, retry)
+	task := connect.NewS2sCaller(config.Tasks.Url, util.ServiceTasks, client, retry)
 
 	// s2s token provider
 	s2sTokenProvider := provider.NewS2sTokenProvider(s2s, creds, repository, cryptor)
@@ -151,13 +153,16 @@ func New(config *config.Config) (Gateway, error) {
 		tknProvider: s2sTokenProvider,
 		s2s:         s2s,
 		iam:         identity,
+		task:        task,
 		uxSession:   uxSession,
 		oAuth:       oAuth,
 		verifier:    identityVerifier, // for user Id token (jwt) verification
 		cryptor:     cryptor,
 		cleanup:     cleanup,
 
-		logger: slog.Default().With(slog.String(util.PackageKey, util.PackageGateway)),
+		logger: slog.Default().
+			With(slog.String(util.PackageKey, util.PackageGateway)).
+			With(slog.String(util.ComponentKey, util.ComponentGateway)),
 	}, nil
 }
 
@@ -170,6 +175,7 @@ type gateway struct {
 	tknProvider provider.S2sTokenProvider
 	s2s         connect.S2sCaller
 	iam         connect.S2sCaller
+	task        connect.S2sCaller
 	uxSession   uxsession.Service
 	oAuth       oauth.Service
 	verifier    jwt.Verifier
@@ -210,6 +216,8 @@ func (g *gateway) Run() error {
 
 	client := clients.NewHandler(g.uxSession, g.tknProvider, g.s2s)
 
+	task := tasks.NewHandler(g.uxSession, g.tknProvider, g.iam, g.task)
+
 	// setup mux
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", diagnostics.HealthCheckHandler)
@@ -238,6 +246,8 @@ func (g *gateway) Run() error {
 	mux.HandleFunc("/clients/reset", client.HandleReset)
 	mux.HandleFunc("/clients/", client.HandleClient) // trailing slash required for /clients/{slug}; POST is /clients/register
 	mux.HandleFunc("/clients/scopes", client.HandleScopes)
+
+	mux.HandleFunc("/allowances", task.HandleAllowances) // POST is account creation
 
 	erebor := &connect.TlsServer{
 		Addr:      g.config.ServicePort,
