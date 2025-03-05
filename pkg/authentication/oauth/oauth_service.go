@@ -252,7 +252,7 @@ func (s *service) build() (*OauthExchange, error) {
 	wgExchange.Add(1)
 	go func(encrypted *string, errChan chan error, wg *sync.WaitGroup) {
 		defer wgExchange.Done()
-		cipher, err := s.cryptor.EncryptServiceData(string(types.AuthCode)) // responseType "enum" value TODO: rename to AuthCodeType
+		cipher, err := s.cryptor.EncryptServiceData([]byte(string(types.AuthCode))) // responseType "enum" value TODO: rename to AuthCodeType
 		if err != nil {
 			errChan <- fmt.Errorf("%s: %v", cipher, err)
 		}
@@ -270,7 +270,7 @@ func (s *service) build() (*OauthExchange, error) {
 		}
 		*nonce = n
 
-		cipher, err := s.cryptor.EncryptServiceData(nonce.String())
+		cipher, err := s.cryptor.EncryptServiceData([]byte(nonce.String()))
 		if err != nil {
 			errChan <- fmt.Errorf("%s: %v", ErrEncryptNonce, err)
 		}
@@ -295,7 +295,7 @@ func (s *service) build() (*OauthExchange, error) {
 		}
 		*index = i
 
-		cipher, err := s.cryptor.EncryptServiceData(state.String())
+		cipher, err := s.cryptor.EncryptServiceData([]byte(state.String()))
 		if err != nil {
 			errChan <- fmt.Errorf("%s: %v", ErrEncryptState, err)
 		}
@@ -306,7 +306,7 @@ func (s *service) build() (*OauthExchange, error) {
 	wgExchange.Add(1)
 	go func(encrypted *string, errChan chan error, wg *sync.WaitGroup) {
 		defer wgExchange.Done()
-		cipher, err := s.cryptor.EncryptServiceData(s.oauth.CallbackClientId)
+		cipher, err := s.cryptor.EncryptServiceData([]byte(s.oauth.CallbackClientId))
 		if err != nil {
 			errChan <- fmt.Errorf("%s: %v", ErrEncryptCallbackClientId, err)
 		}
@@ -317,7 +317,7 @@ func (s *service) build() (*OauthExchange, error) {
 	wgExchange.Add(1)
 	go func(encrypted *string, errChan chan error, wg *sync.WaitGroup) {
 		defer wgExchange.Done()
-		cipher, err := s.cryptor.EncryptServiceData(s.oauth.CallbackUrl)
+		cipher, err := s.cryptor.EncryptServiceData([]byte(s.oauth.CallbackUrl))
 		if err != nil {
 			errChan <- fmt.Errorf("%s: %v", ErrEncryptCallbackRedirectUrl, err)
 		}
@@ -536,7 +536,7 @@ func (s *service) decrypt(encrypted, errDecrypt string, decrypted *string, errCh
 
 		errChan <- fmt.Errorf("%s: %v", errDecrypt, err)
 	}
-	*decrypted = d
+	*decrypted = string(d)
 }
 
 // HandleSessionErr implementation of the OauthErrService interface

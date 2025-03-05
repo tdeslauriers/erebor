@@ -134,7 +134,7 @@ func (s *service) GetAccessToken(session string) (string, error) {
 			continue
 		}
 
-		return access, nil
+		return string(access), nil
 	}
 
 	s.logger.Info(fmt.Sprintf("session token xxxxxx-%s has no valid access tokens: attempting refresh", session[len(session)-6:]))
@@ -184,7 +184,7 @@ func (s *service) GetAccessToken(session string) (string, error) {
 		}
 
 		cmd := types.UserRefreshCmd{
-			RefreshToken: refresh,
+			RefreshToken: string(refresh),
 			ClientId:     s.cfg.CallbackClientId,
 		}
 
@@ -320,7 +320,7 @@ func (h *service) encrypt(plaintext, errMsg string, encrypted *string, ch chan e
 
 	defer wg.Done()
 
-	enc, err := h.cryptor.EncryptServiceData(plaintext)
+	enc, err := h.cryptor.EncryptServiceData([]byte(plaintext))
 	if err != nil {
 		ch <- fmt.Errorf("%s: %v", errMsg, err)
 		return

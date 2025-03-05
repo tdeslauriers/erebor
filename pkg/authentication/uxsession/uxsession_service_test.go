@@ -816,12 +816,12 @@ func (dao *mockSqlRepository) Close() error { return nil }
 
 type mockCryptor struct{}
 
-func (c *mockCryptor) EncryptServiceData(plaintext string) (string, error) {
-	return fmt.Sprintf("encrypted-%s", plaintext), nil
+func (c *mockCryptor) EncryptServiceData(data []byte) (string, error) {
+	return fmt.Sprintf("encrypted-%s", data), nil
 }
-func (c *mockCryptor) DecryptServiceData(encrypted string) (string, error) {
+func (c *mockCryptor) DecryptServiceData(encrypted string) ([]byte, error) {
 
-	return encrypted[10:], nil
+	return []byte(encrypted[10:]), nil
 }
 
 type mockIndexer struct{}

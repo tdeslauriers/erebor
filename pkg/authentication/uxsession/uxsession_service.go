@@ -134,7 +134,7 @@ func (s *service) Build(st UxSessionType) (*UxSession, error) {
 		*index = i
 
 		// encrypt session token
-		e, err := s.cryptor.EncryptServiceData(t.String())
+		e, err := s.cryptor.EncryptServiceData([]byte(t.String()))
 		if err != nil {
 			ch <- fmt.Errorf("%s: %v", ErrEncryptSession, err)
 			return
@@ -158,7 +158,7 @@ func (s *service) Build(st UxSessionType) (*UxSession, error) {
 		*csrf = c
 
 		// encrypt csrf token
-		e, err := s.cryptor.EncryptServiceData(c.String())
+		e, err := s.cryptor.EncryptServiceData([]byte(c.String()))
 		if err != nil {
 			ch <- fmt.Errorf("%s: %v", ErrEncryptCsrf, err)
 			return
@@ -419,7 +419,7 @@ func (s *service) removeAccessTokens(sessionId string, errChan chan error, wg *s
 				return
 			}
 
-			cmd := types.DestroyRefreshCmd{DestroyRefreshToken: refresh}
+			cmd := types.DestroyRefreshCmd{DestroyRefreshToken: string(refresh)}
 
 			if err := s.userIdentity.PostToService("/refresh/destroy", s2sBearer, "", cmd, nil); err != nil {
 				ch <- fmt.Errorf("call to identity service /refresh/destroy endpoint failed: %v", err)

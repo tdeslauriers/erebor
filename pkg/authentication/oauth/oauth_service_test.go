@@ -183,12 +183,12 @@ func (dao *mockAuthSqlRepository) Close() error                                 
 
 type mockRegisterCryptor struct{}
 
-func (c *mockRegisterCryptor) EncryptServiceData(plaintext string) (string, error) {
-	return fmt.Sprintf("encrypted-%s", plaintext), nil
+func (c *mockRegisterCryptor) EncryptServiceData(clear []byte) (string, error) {
+	return fmt.Sprintf("encrypted-%s", clear), nil
 }
-func (c *mockRegisterCryptor) DecryptServiceData(encrypted string) (string, error) {
+func (c *mockRegisterCryptor) DecryptServiceData(encrypted string) ([]byte, error) {
 
-	return strings.ReplaceAll(encrypted, "encrypted-", ""), nil
+	return []byte(strings.ReplaceAll(encrypted, "encrypted-", "")), nil
 }
 
 type mockIndexer struct{}

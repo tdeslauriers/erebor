@@ -531,17 +531,17 @@ func (dao *mockTokenSqlRepository) Close() error                                
 // mock cryptor for testing
 type mockTokenCryptor struct{}
 
-func (c *mockTokenCryptor) EncryptServiceData(plaintext string) (string, error) {
-	if plaintext == "fail-to-encrypt-access-token" {
+func (c *mockTokenCryptor) EncryptServiceData(data []byte) (string, error) {
+	if string(data) == "fail-to-encrypt-access-token" {
 		return "", errors.New(ErrGenPrimaryKey)
 	}
-	return fmt.Sprintf("encrypted-%s", plaintext), nil
+	return fmt.Sprintf("encrypted-%s", data), nil
 }
-func (c *mockTokenCryptor) DecryptServiceData(encrypted string) (string, error) {
+func (c *mockTokenCryptor) DecryptServiceData(encrypted string) ([]byte, error) {
 	if encrypted == "failed-to-decrypt-access-token" {
-		return "", errors.New(ErrDecryptAccessToken)
+		return nil, errors.New(ErrDecryptAccessToken)
 	}
-	return encrypted[10:], nil
+	return []byte(encrypted[10:]), nil
 }
 
 // mock token indexer for testing

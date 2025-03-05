@@ -136,7 +136,7 @@ func (s *service) IsValidCsrf(session, csrf string) (bool, error) {
 
 	// check if csrf token matches
 	// return error if not
-	if decrypted != csrf {
+	if string(decrypted) != csrf {
 		return false, fmt.Errorf("session id %s - xxxxxx-%s vs xxxxxx-%s: %s", uxSession.Id, decrypted[len(decrypted)-6:], csrf[len(csrf)-6:], ErrCsrfMismatch)
 	}
 
@@ -153,5 +153,5 @@ func (s *service) decrypt(encrypted string, decrypted *string, ch chan error, wg
 		return
 	}
 
-	*decrypted = d
+	*decrypted = string(d)
 }
