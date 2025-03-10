@@ -265,7 +265,6 @@ func (h *callbackHandler) HandleCallback(w http.ResponseWriter, r *http.Request)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-
 	if err := json.NewEncoder(w).Encode(response); err != nil {
 		h.logger.Error("failed to encode callback response to json", "err", err.Error())
 		e := connect.ErrorHttp{

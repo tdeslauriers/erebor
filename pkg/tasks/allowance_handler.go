@@ -51,9 +51,9 @@ type allowanceHandler struct {
 func (h *allowanceHandler) HandleAllowances(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
-	// case http:MethodGet:
-	// 	h.handleGet(w, r)
-	// return
+	case http.MethodGet:
+		h.handleGet(w, r)
+	return
 	case http.MethodPost:
 		h.handlePost(w, r)
 		return
@@ -62,6 +62,76 @@ func (h *allowanceHandler) HandleAllowances(w http.ResponseWriter, r *http.Reque
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusMethodNotAllowed,
 			Message:    "only GET and POST requests are allowed to /allowances endpoint",
+		}
+		e.SendJsonErr(w)
+		return
+	}
+}
+
+// handleGet handles the GET request to get all allowance accounts when requested from /allowances endpoint.
+func (h *allowanceHandler) handleGet(w http.ResponseWriter, r *http.Request) {
+
+	// get session token from the request header
+	session := r.Header.Get("Authorization")
+	if session == "" {
+		h.logger.Error("no session token found in get /allowances authorization header")
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusUnauthorized,
+			Message:    "no session cookie found in request",
+		}
+		e.SendJsonErr(w)
+		return
+	}
+
+	// light weight validation of session token
+	if len(session) < 16 || len(session) > 64 {
+		h.logger.Error("invalid session token provided in get /allowances request")
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusBadRequest,
+			Message:    "invalid session token provided",
+		}
+		e.SendJsonErr(w)
+		return
+	}
+
+	// get access token tied to the session
+	// validates the session is active and authenticated
+	accessToken, err := h.session.GetAccessToken(session)
+	if err != nil {
+		h.logger.Error(err.Error())
+		h.session.HandleSessionErr(err, w)
+		return
+	}
+
+	// forward request to allowance account service
+	// allowance service will validate user is real, authorized, and not already have an allowance account
+	svcToken, err := h.provider.GetServiceToken(util.ServiceTasks)
+	if err != nil {
+		h.logger.Error(fmt.Sprintf("failed to get service token for tasks service: %s", err.Error()))
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusInternalServerError,
+			Message:    "failed to get all allowance accounts due to internal server error",
+		}
+		e.SendJsonErr(w)
+		return
+	}
+
+	// forward request to allowance account service
+	var allowances []tasks.Allowance
+	if err := h.task.GetServiceData("/allowances", svcToken, accessToken, &allowances); err != nil {
+		h.logger.Error(fmt.Sprintf("failed to get all allowance accounts: %s", err.Error()))
+		h.task.RespondUpstreamError(err, w)
+		return
+	}
+
+	// respond to client
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(allowances); err != nil {
+		h.logger.Error(fmt.Sprintf("failed to encode json response for all allowance accounts: %s", err.Error()))
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusInternalServerError,
+			Message:    "failed to json encode all allowance accounts",
 		}
 		e.SendJsonErr(w)
 		return
@@ -152,7 +222,7 @@ func (h *allowanceHandler) handlePost(w http.ResponseWriter, r *http.Request) {
 	cmd.Csrf = ""
 
 	var allowance tasks.Allowance
-	if err := h.task.PostToService("/allowances", taskToken, accessToken, cmd, allowance); err != nil {
+	if err := h.task.PostToService("/allowances", taskToken, accessToken, cmd, &allowance); err != nil {
 		h.logger.Error(fmt.Sprintf("failed to create %s's allowance account: %s", cmd.Username, err.Error()))
 		h.task.RespondUpstreamError(err, w)
 		return
