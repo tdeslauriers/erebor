@@ -355,6 +355,9 @@ func (h *allowanceHandler) handleUpdateAllowance(w http.ResponseWriter, r *http.
 		return
 	}
 
+	// prepare for upstream submission
+	cmd.Csrf = ""
+
 	// forward request to allowance account service
 	var allowance tasks.Allowance
 	if err := h.task.PostToService(fmt.Sprintf("/allowances/%s", slug), svcToken, accessToken, cmd, &allowance); err != nil {
