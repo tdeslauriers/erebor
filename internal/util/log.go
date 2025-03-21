@@ -31,8 +31,8 @@ const (
 	ComponentUserScopes    string = "user scopes"
 	ComponentUxSession     string = "ux session"
 	ComponentTasks         string = "tasks"
-	ComponentTaskTypes     string = "task types"
 	ComponentAllowances    string = "allowances"
+	ComponentTemplate      string = "task templates"
 
 	SerivceKey = "service"
 

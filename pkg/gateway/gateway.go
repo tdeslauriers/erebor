@@ -249,6 +249,7 @@ func (g *gateway) Run() error {
 
 	mux.HandleFunc("/allowances", task.HandleAllowances) // POST is account creation
 	mux.HandleFunc("/allowances/", task.HandleAllowance) // trailing slash required for /allowances/{slug}
+	mux.HandleFunc("/templates/asignees", task.HandleGetAssignees)
 
 	erebor := &connect.TlsServer{
 		Addr:      g.config.ServicePort,

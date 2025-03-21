@@ -14,7 +14,7 @@ import (
 
 // ScopesHandler is an interface for handling user scope requests.
 type ScopesHandler interface {
-	// HandleScopes handles the request to udpate a user's assigned scopes.
+	// HandleScopes handles the request to update a user's assigned scopes.
 	HandleScopes(w http.ResponseWriter, r *http.Request)
 }
 
@@ -43,7 +43,7 @@ type scopesHandler struct {
 	logger *slog.Logger
 }
 
-// HandleScopes is the concrete implementation of the interface function that handles the request to udpate a user's assigned scopes.
+// HandleScopes is the concrete implementation of the interface function that handles the request to update a user's assigned scopes.
 func (h *scopesHandler) HandleScopes(w http.ResponseWriter, r *http.Request) {
 
 	if r.Method != "PUT" {

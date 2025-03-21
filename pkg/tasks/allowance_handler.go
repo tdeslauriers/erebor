@@ -336,6 +336,8 @@ func (h *allowanceHandler) handleUpdateAllowance(w http.ResponseWriter, r *http.
 		return
 	}
 
+	fmt.Printf("cmd: %+v\n", cmd)
+
 	// validate the request body
 	if err := cmd.ValidateCmd(); err != nil {
 		errMsg := fmt.Sprintf("error validating request body: %s", err.Error())
