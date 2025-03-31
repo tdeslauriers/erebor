@@ -63,14 +63,10 @@ func (h *clientHandler) HandleClients(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// get the user token from the request
-	session := r.Header.Get("Authorization")
-	if session == "" {
-		h.logger.Error("no session token found in /clients request")
-		e := connect.ErrorHttp{
-			StatusCode: http.StatusUnauthorized,
-			Message:    "no session token found in /clients request",
-		}
-		e.SendJsonErr(w)
+	session, err := connect.GetSessionToken(r)
+	if err != nil {
+		h.logger.Error(fmt.Sprintf("failed to get session from request: %s", err.Error()))
+		h.session.HandleSessionErr(err, w)
 		return
 	}
 
@@ -148,61 +144,31 @@ func (h *clientHandler) HandleClient(w http.ResponseWriter, r *http.Request) {
 // handleGetClient handles a GET request from the client by submitting it against the s2s service clients/{slug} endpoint.
 func (h *clientHandler) handleGetClient(w http.ResponseWriter, r *http.Request) {
 
-	// get the url slug from the request
-	segments := strings.Split(r.URL.Path, "/")
-
-	var slug string
-	if len(segments) > 1 {
-		slug = segments[len(segments)-1]
-	} else {
-		h.logger.Error("no service client slug provided in get /clients/{slug} request")
-		e := connect.ErrorHttp{
-			StatusCode: http.StatusBadRequest,
-			Message:    "no service client slug provided in get /clients/{slug} request",
-		}
-		e.SendJsonErr(w)
-		return
-	}
-
-	// light weight input validation (not checking if slug is valid or well-formed)
-	if len(slug) < 16 || len(slug) > 64 {
-		h.logger.Error("invalid scope slug")
-		e := connect.ErrorHttp{
-			StatusCode: http.StatusBadRequest,
-			Message:    "invalid scope slug",
-		}
-		e.SendJsonErr(w)
-		return
-	}
-
 	// get the user's session token from the request
-	session := r.Header.Get("Authorization")
-	if session == "" {
-		h.logger.Error("no session token found in get /clients/{slug} request")
-		e := connect.ErrorHttp{
-			StatusCode: http.StatusUnauthorized,
-			Message:    "no session token found in get /clients/{slug} request",
-		}
-		e.SendJsonErr(w)
-		return
-	}
-
-	// light weight input validation (not checking if session id is valid or well-formed)
-	if len(session) < 16 || len(session) > 64 {
-		h.logger.Error("invalid session token")
-		e := connect.ErrorHttp{
-			StatusCode: http.StatusBadRequest,
-			Message:    "invalid session token",
-		}
-		e.SendJsonErr(w)
+	session, err := connect.GetSessionToken(r)
+	if err != nil {
+		h.logger.Error(fmt.Sprintf("failed to get session from request: %s", err.Error()))
+		h.session.HandleSessionErr(err, w)
 		return
 	}
 
 	// validate session token and get access token
 	accessToken, err := h.session.GetAccessToken(session)
 	if err != nil {
-		h.logger.Error(fmt.Sprintf("failed to get access token from session token for get /client/%s call to s2s service: %s", slug, err.Error()))
+		h.logger.Error(fmt.Sprintf("failed to get access token from session token for get /client/slug call to s2s service: %s", err.Error()))
 		h.session.HandleSessionErr(err, w)
+		return
+	}
+
+	// get the url slug from the request
+	slug, err := connect.GetValidSlug(r)
+	if err != nil {
+		h.logger.Error(fmt.Sprintf("failed to get valid slug from request: %s", err.Error()))
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusBadRequest,
+			Message:    "invalid service client slug",
+		}
+		e.SendJsonErr(w)
 		return
 	}
 
@@ -242,61 +208,31 @@ func (h *clientHandler) handleGetClient(w http.ResponseWriter, r *http.Request) 
 // handlePutClient handles a PUT request from the client by submitting it against the s2s service clients/{slug} endpoint.\
 func (h *clientHandler) handlePutClient(w http.ResponseWriter, r *http.Request) {
 
-	// get the url slug from the request
-	segments := strings.Split(r.URL.Path, "/")
-
-	var slug string
-	if len(segments) > 1 {
-		slug = segments[len(segments)-1]
-	} else {
-		h.logger.Error("no service client slug provided in /clients/{slug} request")
-		e := connect.ErrorHttp{
-			StatusCode: http.StatusBadRequest,
-			Message:    "no service client slug provided in /clients/{slug} request",
-		}
-		e.SendJsonErr(w)
-		return
-	}
-
-	// light weight input validation (not checking if slug is valid or well-formed)
-	if len(slug) < 16 || len(slug) > 64 {
-		h.logger.Error("invalid scope slug")
-		e := connect.ErrorHttp{
-			StatusCode: http.StatusBadRequest,
-			Message:    "invalid scope slug",
-		}
-		e.SendJsonErr(w)
-		return
-	}
-
 	// get the user's session token from the request
-	session := r.Header.Get("Authorization")
-	if session == "" {
-		h.logger.Error("no session token found in put /clients/{slug} request")
-		e := connect.ErrorHttp{
-			StatusCode: http.StatusUnauthorized,
-			Message:    "no session token found in put /clients/{slug} request",
-		}
-		e.SendJsonErr(w)
-		return
-	}
-
-	// light weight input validation (not checking if session id is valid or well-formed)
-	if len(session) < 16 || len(session) > 64 {
-		h.logger.Error("invalid session token")
-		e := connect.ErrorHttp{
-			StatusCode: http.StatusBadRequest,
-			Message:    "invalid session token",
-		}
-		e.SendJsonErr(w)
+	session, err := connect.GetSessionToken(r)
+	if err != nil {
+		h.logger.Error(fmt.Sprintf("failed to get session from request: %s", err.Error()))
+		h.session.HandleSessionErr(err, w)
 		return
 	}
 
 	// validate session token and get access token
 	accessToken, err := h.session.GetAccessToken(session)
 	if err != nil {
-		h.logger.Error(fmt.Sprintf("failed to get access token from session token for put /client/%s call to s2s service: %s", slug, err.Error()))
+		h.logger.Error(fmt.Sprintf("failed to get access token from session token for put /client/slug call to s2s service: %s", err.Error()))
 		h.session.HandleSessionErr(err, w)
+		return
+	}
+
+	// get the url slug from the request
+	slug, err := connect.GetValidSlug(r)
+	if err != nil {
+		h.logger.Error(fmt.Sprintf("failed to get valid slug from request: %s", err.Error()))
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusBadRequest,
+			Message:    "invalid service client slug",
+		}
+		e.SendJsonErr(w)
 		return
 	}
 
@@ -407,25 +343,10 @@ func (h *clientHandler) handlePostClient(w http.ResponseWriter, r *http.Request)
 	}
 
 	// get the user's session token from the request
-	session := r.Header.Get("Authorization")
-	if session == "" {
-		h.logger.Error("no session token found in put /clients/{slug} request")
-		e := connect.ErrorHttp{
-			StatusCode: http.StatusUnauthorized,
-			Message:    "no session token found in put /clients/{slug} request",
-		}
-		e.SendJsonErr(w)
-		return
-	}
-
-	// light weight input validation (not checking if session id is valid or well-formed)
-	if len(session) < 16 || len(session) > 64 {
-		h.logger.Error("invalid session token")
-		e := connect.ErrorHttp{
-			StatusCode: http.StatusBadRequest,
-			Message:    "invalid session token",
-		}
-		e.SendJsonErr(w)
+	session, err := connect.GetSessionToken(r)
+	if err != nil {
+		h.logger.Error(fmt.Sprintf("failed to get session from request: %s", err.Error()))
+		h.session.HandleSessionErr(err, w)
 		return
 	}
 

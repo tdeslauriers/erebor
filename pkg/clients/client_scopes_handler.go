@@ -57,25 +57,10 @@ func (h *scopesHandler) HandleScopes(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// validate the user has an active, authenticated session
-	session := r.Header.Get("Authorization")
-	if session == "" {
-		h.logger.Error("no session token found in authorization header")
-		e := connect.ErrorHttp{
-			StatusCode: http.StatusUnauthorized,
-			Message:    "no session cookie found in request",
-		}
-		e.SendJsonErr(w)
-		return
-	}
-
-	// light weight validation of session token
-	if len(session) < 16 || len(session) > 64 {
-		h.logger.Error("invalid session token provided in get /users/{slug} request")
-		e := connect.ErrorHttp{
-			StatusCode: http.StatusBadRequest,
-			Message:    "invalid session token provided",
-		}
-		e.SendJsonErr(w)
+	session , err := connect.GetSessionToken(r)
+	if err != nil {
+		h.logger.Error(fmt.Sprintf("failed to get session from request: %s", err.Error()))
+		h.session.HandleSessionErr(err, w)
 		return
 	}
 

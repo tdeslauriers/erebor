@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/tdeslauriers/carapace/pkg/connect"
@@ -59,14 +58,10 @@ func (h *userHandler) HandleUsers(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// get the user token from the request
-	session := r.Header.Get("Authorization")
-	if session == "" {
-		h.logger.Error("no session token provided in request Authorization header")
-		e := connect.ErrorHttp{
-			StatusCode: http.StatusUnauthorized,
-			Message:    "no session token provided in request Authorization header",
-		}
-		e.SendJsonErr(w)
+	session, err := connect.GetSessionToken(r)
+	if err != nil {
+		h.logger.Error(fmt.Sprintf("failed to get session token from request: %s", err.Error()))
+		h.session.HandleSessionErr(err, w)
 		return
 	}
 
@@ -128,61 +123,18 @@ func (h *userHandler) HandleUser(w http.ResponseWriter, r *http.Request) {
 
 func (h *userHandler) handleGetUser(w http.ResponseWriter, r *http.Request) {
 
-	// get the url slug from the request
-	segments := strings.Split(r.URL.Path, "/")
-
-	var slug string
-	if len(segments) > 1 {
-		slug = segments[len(segments)-1]
-	} else {
-		errMsg := "no user slug provided in get /users/{slug} request"
-		h.logger.Error(errMsg)
-		e := connect.ErrorHttp{
-			StatusCode: http.StatusBadRequest,
-			Message:    errMsg,
-		}
-		e.SendJsonErr(w)
-		return
-	}
-
-	// light weight validation of slug
-	if len(slug) < 16 || len(slug) > 64 {
-		h.logger.Error("invalid user slug provided in get /users/{slug} request")
-		e := connect.ErrorHttp{
-			StatusCode: http.StatusBadRequest,
-			Message:    "invalid user slug provided",
-		}
-		e.SendJsonErr(w)
-		return
-	}
-
 	// get the user token from the request
-	session := r.Header.Get("Authorization")
-	if session == "" {
-		h.logger.Error("no session token provided in get /users/{slug} request Authorization header")
-		e := connect.ErrorHttp{
-			StatusCode: http.StatusUnauthorized,
-			Message:    "no session token provided in get /users/{slug} request Authorization header",
-		}
-		e.SendJsonErr(w)
-		return
-	}
-
-	// light weight validation of session token
-	if len(session) < 16 || len(session) > 64 {
-		h.logger.Error("invalid session token provided in get /users/{slug} request")
-		e := connect.ErrorHttp{
-			StatusCode: http.StatusBadRequest,
-			Message:    "invalid session token provided",
-		}
-		e.SendJsonErr(w)
+	session, err := connect.GetSessionToken(r)
+	if err != nil {
+		h.logger.Error("failed to retrieve session token from request", "err", err.Error())
+		h.session.HandleSessionErr(err, w)
 		return
 	}
 
 	// validate session token; get access token
 	accessToken, err := h.session.GetAccessToken(session)
 	if err != nil {
-		h.logger.Error(fmt.Sprintf("failed to get access token from session token for get /users/%s request: %s", slug, err.Error()))
+		h.logger.Error(fmt.Sprintf("failed to get access token from session token for get /users/slug request: %s", err.Error()))
 		h.session.HandleSessionErr(err, w)
 		return
 	}
@@ -190,10 +142,22 @@ func (h *userHandler) handleGetUser(w http.ResponseWriter, r *http.Request) {
 	// get s2s token for identity service
 	s2sToken, err := h.provider.GetServiceToken(util.ServiceIdentity)
 	if err != nil {
-		h.logger.Error(fmt.Sprintf("failed to get s2s token for identity service for get /users/%s request: %s", slug, err.Error()))
+		h.logger.Error(fmt.Sprintf("failed to get s2s token for identity service for get /users/slug request: %s", err.Error()))
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusInternalServerError,
 			Message:    "internal service error",
+		}
+		e.SendJsonErr(w)
+		return
+	}
+
+	// get the url slug from the request
+	slug, err := connect.GetValidSlug(r)
+	if err != nil {
+		h.logger.Error(fmt.Sprintf("failed to get valid slug from request: %s", err.Error()))
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusBadRequest,
+			Message:    "invalid service client slug",
 		}
 		e.SendJsonErr(w)
 		return
@@ -260,62 +224,31 @@ func (h *userHandler) handleGetUser(w http.ResponseWriter, r *http.Request) {
 
 func (h *userHandler) handlePutUser(w http.ResponseWriter, r *http.Request) {
 
-	// get the url slug from the request
-	segments := strings.Split(r.URL.Path, "/")
-
-	var slug string
-	if len(segments) > 1 {
-		slug = segments[len(segments)-1]
-	} else {
-		errMsg := "no user slug provided in put /users/{slug} request"
-		h.logger.Error(errMsg)
-		e := connect.ErrorHttp{
-			StatusCode: http.StatusBadRequest,
-			Message:    errMsg,
-		}
-		e.SendJsonErr(w)
-		return
-	}
-
-	// light weight validation of slug
-	if len(slug) < 16 || len(slug) > 64 {
-		h.logger.Error("invalid user slug provided in put /users/{slug} request")
-		e := connect.ErrorHttp{
-			StatusCode: http.StatusBadRequest,
-			Message:    "invalid user slug provided",
-		}
-		e.SendJsonErr(w)
-		return
-	}
-
 	// get the user token from the request
-	session := r.Header.Get("Authorization")
-	if session == "" {
-		h.logger.Error("no session token provided in put /users/{slug} request Authorization header")
-		e := connect.ErrorHttp{
-			StatusCode: http.StatusUnauthorized,
-			Message:    "no session token provided in put /users/{slug} request Authorization header",
-		}
-		e.SendJsonErr(w)
-		return
-	}
-
-	// light weight validation of session token
-	if len(session) < 16 || len(session) > 64 {
-		h.logger.Error("invalid session token provided in put /users/{slug} request")
-		e := connect.ErrorHttp{
-			StatusCode: http.StatusBadRequest,
-			Message:    "invalid session token provided",
-		}
-		e.SendJsonErr(w)
+	session, err := connect.GetSessionToken(r)
+	if err != nil {
+		h.logger.Error("failed to retrieve session token from request", "err", err.Error())
+		h.session.HandleSessionErr(err, w)
 		return
 	}
 
 	// validate session token; get access token
 	accessToken, err := h.session.GetAccessToken(session)
 	if err != nil {
-		h.logger.Error(fmt.Sprintf("failed to get access token from session token for put /users/%s request: %s", slug, err.Error()))
+		h.logger.Error(fmt.Sprintf("failed to get access token from session token for put /users/slug request: %s", err.Error()))
 		h.session.HandleSessionErr(err, w)
+		return
+	}
+
+	// get the url slug from the request
+	slug, err := connect.GetValidSlug(r)
+	if err != nil {
+		h.logger.Error(fmt.Sprintf("failed to get valid slug from request: %s", err.Error()))
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusBadRequest,
+			Message:    "invalid service client slug",
+		}
+		e.SendJsonErr(w)
 		return
 	}
 

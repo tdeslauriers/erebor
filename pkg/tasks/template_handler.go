@@ -24,6 +24,9 @@ type TemplateHandler interface {
 
 	// HandleTemplates is a method that handles requests to the templates endpoint.
 	HandleTemplates(w http.ResponseWriter, r *http.Request)
+
+	// HandleTemplate is a method that handles requests to the template/slug endpoint.
+	HandleTemplate(w http.ResponseWriter, r *http.Request)
 }
 
 // NewTemplateHandler is a function that returns a new TemplateHandler interface with underlying implementation.
@@ -54,26 +57,21 @@ type templateHandler struct {
 // HandleGetAssignees is a method that handles the request to get assignees.
 func (h *templateHandler) HandleGetAssignees(w http.ResponseWriter, r *http.Request) {
 
-	// get session token from the request header
-	session := r.Header.Get("Authorization")
-	if session == "" {
-		h.logger.Error("no session token found in authorization header")
+	if r.Method != "GET" {
+		h.logger.Error("only GET requests are allowed to /templates/assignees endpoint")
 		e := connect.ErrorHttp{
-			StatusCode: http.StatusUnauthorized,
-			Message:    "no session cookie found in request",
+			StatusCode: http.StatusMethodNotAllowed,
+			Message:    "only GET requests are allowed to /templates/assignees endpoint",
 		}
 		e.SendJsonErr(w)
 		return
 	}
 
-	// light weight validation of session token
-	if len(session) < 16 || len(session) > 64 {
-		h.logger.Error("invalid session token provided in get /users/{slug} request")
-		e := connect.ErrorHttp{
-			StatusCode: http.StatusBadRequest,
-			Message:    "invalid session token provided",
-		}
-		e.SendJsonErr(w)
+	// get session token from the request header
+	session, err := connect.GetSessionToken(r)
+	if err != nil {
+		h.logger.Error(fmt.Sprintf("session token for /templates/assignees request is invalid: %s", err.Error()))
+		h.ux.HandleSessionErr(err, w)
 		return
 	}
 
@@ -125,8 +123,8 @@ func (h *templateHandler) HandleTemplates(w http.ResponseWriter, r *http.Request
 
 	switch r.Method {
 	case "GET":
-	// h.getTemplates(w, r)
-	// return
+		h.getTemplates(w, r)
+		return
 	case "POST":
 		h.createTemplate(w, r)
 		return
@@ -140,31 +138,90 @@ func (h *templateHandler) HandleTemplates(w http.ResponseWriter, r *http.Request
 	}
 }
 
-// TODO: implement getTemplates
+// HandleTemplate is the concrete implementation of the interface method that handles requests to the template/slug endpoint.
+func (h *templateHandler) HandleTemplate(w http.ResponseWriter, r *http.Request) {
 
-// createTemplate is a method that handles the request to create a new template.
-func (h *templateHandler) createTemplate(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case "GET":
+		h.getTemplate(w, r)
+		return
+	case "PUT":
+		// h.updateTemplate(w, r)
+		// return
+	case "DELETE":
+		// h.deleteTemplate(w, r)
+		// return
+	default:
+		h.logger.Error("only GET, PUT, and DELETE requests are allowed to /templates/{slug} endpoint")
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusMethodNotAllowed,
+			Message:    "only GET, PUT, and DELETE requests are allowed to /templates/{slug} endpoint",
+		}
+		e.SendJsonErr(w)
+	}
+}
+
+// getTemplates is a concrete implementation of the interface method that handles the request to get templates.
+func (h *templateHandler) getTemplates(w http.ResponseWriter, r *http.Request) {
 
 	// get session token from the request header
-	session := r.Header.Get("Authorization")
-	if session == "" {
-		h.logger.Error("no session token found in authorization header")
+	session, err := connect.GetSessionToken(r)
+	if err != nil {
+		h.logger.Error(fmt.Sprintf("invalid session token on /templates get request: %s", err.Error()))
+		h.ux.HandleSessionErr(err, w)
+		return
+	}
+
+	// get access token tied to the session
+	// validates the session is active and authenticated
+	accessToken, err := h.ux.GetAccessToken(session)
+	if err != nil {
+		h.logger.Error(fmt.Sprintf("failed to get access token from session token: %s", err.Error()))
+		h.ux.HandleSessionErr(err, w)
+		return
+	}
+
+	// get service token
+	taskToken, err := h.tkn.GetServiceToken(util.ServiceTasks)
+	if err != nil {
+		h.logger.Error(fmt.Sprintf("failed to get service token for tasks service: %s", err.Error()))
 		e := connect.ErrorHttp{
-			StatusCode: http.StatusUnauthorized,
-			Message:    "no session cookie found in request",
+			StatusCode: http.StatusInternalServerError,
+			Message:    "internal server error",
 		}
 		e.SendJsonErr(w)
 		return
 	}
 
-	// light weight validation of session token
-	if len(session) < 16 || len(session) > 64 {
-		h.logger.Error("invalid session token provided in post /templates request")
+	// get templates from the tasks service
+	var templates []tasks.Template
+	if err := h.task.GetServiceData("/templates", taskToken, accessToken, &templates); err != nil {
+		h.logger.Error(fmt.Sprintf("failed to get templates: %s", err.Error()))
+		h.task.RespondUpstreamError(err, w)
+		return
+	}
+
+	// send response to client
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(templates); err != nil {
+		h.logger.Error(fmt.Sprintf("failed to json encode templates: %s", err.Error()))
 		e := connect.ErrorHttp{
-			StatusCode: http.StatusBadRequest,
-			Message:    "invalid session token provided",
+			StatusCode: http.StatusInternalServerError,
+			Message:    "internal server error: gateway failed to json encode templates",
 		}
 		e.SendJsonErr(w)
+		return
+	}
+}
+
+// createTemplate is a method that handles the request to create a new template.
+func (h *templateHandler) createTemplate(w http.ResponseWriter, r *http.Request) {
+
+	// get session token from the request header
+	session, err := connect.GetSessionToken(r)
+	if err != nil {
+		h.logger.Error(fmt.Sprintf("invalid session token on /templates post request: %s", err.Error()))
+		h.ux.HandleSessionErr(err, w)
 		return
 	}
 
@@ -226,7 +283,7 @@ func (h *templateHandler) createTemplate(w http.ResponseWriter, r *http.Request)
 
 	// post template to the tasks service
 	var template tasks.Template
-	if err := h.task.PostToService("/templates", taskToken, accessToken, cmd, template); err != nil {
+	if err := h.task.PostToService("/templates", taskToken, accessToken, cmd, &template); err != nil {
 		h.logger.Error(fmt.Sprintf("failed to post template: %s", err.Error()))
 		h.task.RespondUpstreamError(err, w)
 		return
@@ -242,6 +299,71 @@ func (h *templateHandler) createTemplate(w http.ResponseWriter, r *http.Request)
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusInternalServerError,
 			Message:    "internal server error",
+		}
+		e.SendJsonErr(w)
+		return
+	}
+}
+
+// getTemplate is a method that handles the request to get a template.
+func (h *templateHandler) getTemplate(w http.ResponseWriter, r *http.Request) {
+
+	// get session token from the request header
+	session, err := connect.GetSessionToken(r)
+	if err != nil {
+		h.logger.Error(fmt.Sprintf("failed to get session token from request: %s", err.Error()))
+		h.ux.HandleSessionErr(err, w)
+		return
+	}
+
+	// get access token tied to the session
+	// validates the session is active and authenticated
+	accessToken, err := h.ux.GetAccessToken(session)
+	if err != nil {
+		h.logger.Error(fmt.Sprintf("failed to get access token from session token: %s", err.Error()))
+		h.ux.HandleSessionErr(err, w)
+		return
+	}
+
+	// get the template slug from the request URL
+	slug, err := connect.GetValidSlug(r)
+	if err != nil {
+		h.logger.Error(fmt.Sprintf("invalid template slug: %s", err.Error()))
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusBadRequest,
+			Message:    "invalid template slug",
+		}
+		e.SendJsonErr(w)
+		return
+	}
+
+	// get service token
+	taskToken, err := h.tkn.GetServiceToken(util.ServiceTasks)
+	if err != nil {
+		h.logger.Error(fmt.Sprintf("failed to get service token for tasks service: %s", err.Error()))
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusInternalServerError,
+			Message:    "internal server error",
+		}
+		e.SendJsonErr(w)
+		return
+	}
+
+	// get template from the tasks service
+	var template tasks.Template
+	if err := h.task.GetServiceData(fmt.Sprintf("/templates/%s", slug), taskToken, accessToken, &template); err != nil {
+		h.logger.Error(fmt.Sprintf("failed to get template: %s", err.Error()))
+		h.task.RespondUpstreamError(err, w)
+		return
+	}
+
+	// send response to client
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(template); err != nil {
+		h.logger.Error(fmt.Sprintf("failed to json encode template: %s", err.Error()))
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusInternalServerError,
+			Message:    "internal server error: gateway failed to json encode template record",
 		}
 		e.SendJsonErr(w)
 		return

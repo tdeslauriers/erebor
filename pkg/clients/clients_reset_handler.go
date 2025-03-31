@@ -58,19 +58,17 @@ func (h *resetHandler) HandleReset(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// validate the user has an active, authenticated session
-	session := r.Header.Get("Authorization")
-	if session == "" {
-		h.logger.Error("no session token found in authorization header")
-		e := connect.ErrorHttp{
-			StatusCode: http.StatusUnauthorized,
-			Message:    "no session_id cookie found in request",
-		}
-		e.SendJsonErr(w)
+	session, err := connect.GetSessionToken(r)
+	if err != nil {
+		h.logger.Error(fmt.Sprintf("failed to get session token from request: %s", err.Error()))
+		h.session.HandleSessionErr(err, w)
 		return
 	}
 
-	if valid, err := h.session.IsValid(session); !valid {
-		h.logger.Error(fmt.Sprintf("invalid session token: %s", err.Error()))
+	// get access token tied to the session
+	accessToken, err := h.session.GetAccessToken(session)
+	if err != nil {
+		h.logger.Error(fmt.Sprintf("failed to get access token from session token: %s", err.Error()))
 		h.session.HandleSessionErr(err, w)
 		return
 	}
@@ -109,14 +107,6 @@ func (h *resetHandler) HandleReset(w http.ResponseWriter, r *http.Request) {
 
 	// csrf token no longer needed, set to empty string
 	cmd.Csrf = ""
-
-	// get access token tied to the session
-	accessToken, err := h.session.GetAccessToken(session)
-	if err != nil {
-		h.logger.Error(fmt.Sprintf("failed to get access token from session token: %s", err.Error()))
-		h.session.HandleSessionErr(err, w)
-		return
-	}
 
 	s2sToken, err := h.provider.GetServiceToken(util.ServiceS2s)
 	if err != nil {

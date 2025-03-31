@@ -494,7 +494,7 @@ func (s *service) HandleSessionErr(err error, w http.ResponseWriter) {
 	case strings.Contains(err.Error(), ErrInvalidSession):
 	case strings.Contains(err.Error(), ErrInvalidCsrf):
 		e := connect.ErrorHttp{
-			StatusCode: http.StatusBadRequest,
+			StatusCode: http.StatusUnauthorized,
 			Message:    err.Error(),
 		}
 		e.SendJsonErr(w)

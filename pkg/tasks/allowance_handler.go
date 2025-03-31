@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"strings"
 
 	"github.com/tdeslauriers/carapace/pkg/connect"
 	"github.com/tdeslauriers/carapace/pkg/session/provider"
@@ -55,25 +54,10 @@ type allowanceHandler struct {
 func (h *allowanceHandler) HandleAllowances(w http.ResponseWriter, r *http.Request) {
 
 	// get session token from the request header
-	session := r.Header.Get("Authorization")
-	if session == "" {
-		h.logger.Error("no session token found in authorization header")
-		e := connect.ErrorHttp{
-			StatusCode: http.StatusUnauthorized,
-			Message:    "no session cookie found in request",
-		}
-		e.SendJsonErr(w)
-		return
-	}
-
-	// light weight validation of session token
-	if len(session) < 16 || len(session) > 64 {
-		h.logger.Error("invalid session token provided in get /users/{slug} request")
-		e := connect.ErrorHttp{
-			StatusCode: http.StatusBadRequest,
-			Message:    "invalid session token provided",
-		}
-		e.SendJsonErr(w)
+	session, err := connect.GetSessionToken(r)
+	if err != nil {
+		h.logger.Error(fmt.Sprintf("failed to get session token from request: %s", err.Error()))
+		h.session.HandleSessionErr(err, w)
 		return
 	}
 
@@ -122,25 +106,10 @@ func (h *allowanceHandler) HandleAllowances(w http.ResponseWriter, r *http.Reque
 func (h *allowanceHandler) HandleAllowance(w http.ResponseWriter, r *http.Request) {
 
 	// get session token from the request header
-	session := r.Header.Get("Authorization")
-	if session == "" {
-		h.logger.Error("no session token found in /allowances/{slug} authorization header")
-		e := connect.ErrorHttp{
-			StatusCode: http.StatusUnauthorized,
-			Message:    "no session cookie found in request",
-		}
-		e.SendJsonErr(w)
-		return
-	}
-
-	// light weight validation of session token
-	if len(session) < 16 || len(session) > 64 {
-		h.logger.Error("invalid session token provided in /allowances/{slug} request")
-		e := connect.ErrorHttp{
-			StatusCode: http.StatusBadRequest,
-			Message:    "invalid session token provided",
-		}
-		e.SendJsonErr(w)
+	session, err := connect.GetSessionToken(r)
+	if err != nil {
+		h.logger.Error(fmt.Sprintf("failed to get session token from request: %s", err.Error()))
+		h.session.HandleSessionErr(err, w)
 		return
 	}
 
@@ -154,27 +123,12 @@ func (h *allowanceHandler) HandleAllowance(w http.ResponseWriter, r *http.Reques
 	}
 
 	// get the url slug from the request
-	segments := strings.Split(r.URL.Path, "/")
-
-	var slug string
-	if len(segments) > 1 {
-		slug = segments[len(segments)-1]
-	} else {
-		h.logger.Error("no scope slug provided in /allowance/{slug}request")
+	slug, err := connect.GetValidSlug(r)
+	if err != nil {
+		h.logger.Error(fmt.Sprintf("failed to get valid slug from request: %s", err.Error()))
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusBadRequest,
-			Message:    "no scope slug provided in /allowance/{slug} request",
-		}
-		e.SendJsonErr(w)
-		return
-	}
-
-	// light weight input validation (not checking if slug is valid or well-formed)
-	if len(slug) < 16 || len(slug) > 64 {
-		h.logger.Error("invalid scope slug")
-		e := connect.ErrorHttp{
-			StatusCode: http.StatusBadRequest,
-			Message:    "invalid scope slug",
+			Message:    "invalid slug",
 		}
 		e.SendJsonErr(w)
 		return

@@ -75,26 +75,10 @@ func (h *profileHandler) HandleProfile(w http.ResponseWriter, r *http.Request) {
 func (h *profileHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 
 	// validate the user has an active, authenticated session
-	session := r.Header.Get("Authorization")
-	if session == "" {
-		h.logger.Error("no session token found in authorization header")
-		e := connect.ErrorHttp{
-			StatusCode: http.StatusUnauthorized,
-			Message:    "no session token found in authorization header",
-		}
-		e.SendJsonErr(w)
-		return
-
-	}
-
-	// light weight input validation (not checking if session id is valid or well-formed)
-	if len(session) < 16 || len(session) > 64 {
-		h.logger.Error("invalid session token")
-		e := connect.ErrorHttp{
-			StatusCode: http.StatusBadRequest,
-			Message:    "invalid session token",
-		}
-		e.SendJsonErr(w)
+	session, err := connect.GetSessionToken(r)
+	if err != nil {
+		h.logger.Error(fmt.Sprintf("failed to get session token from request: %s", err.Error()))
+		h.session.HandleSessionErr(err, w)
 		return
 	}
 
@@ -177,25 +161,10 @@ func (h *profileHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 func (h *profileHandler) handlePut(w http.ResponseWriter, r *http.Request) {
 
 	// validate the user has an active, authenticated session
-	session := r.Header.Get("Authorization")
-	if session == "" {
-		h.logger.Error("no session token found in authorization header")
-		e := connect.ErrorHttp{
-			StatusCode: http.StatusUnauthorized,
-			Message:    "no session token found in authorization header",
-		}
-		e.SendJsonErr(w)
-		return
-	}
-
-	// light weight input validation (not checking if session id is valid or well-formed)
-	if len(session) < 16 || len(session) > 64 {
-		h.logger.Error("invalid session token")
-		e := connect.ErrorHttp{
-			StatusCode: http.StatusBadRequest,
-			Message:    "invalid session token",
-		}
-		e.SendJsonErr(w)
+	session, err := connect.GetSessionToken(r)
+	if err != nil {
+		h.logger.Error("failed to get session token from request", "err", err.Error())
+		h.session.HandleSessionErr(err, w)
 		return
 	}
 
