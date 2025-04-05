@@ -39,22 +39,22 @@ spec:
             - name: EREBOR_SERVER_CERT
               valueFrom:
                 secretKeyRef:
-                  name: secret-gateway-server-cert
+                  name: secret-erebor-server-cert
                   key: server-cert
             - name: EREBOR_SERVER_KEY
               valueFrom:
                 secretKeyRef:
-                  name: secret-gateway-server-cert
+                  name: secret-erebor-server-cert
                   key: server-key
             - name: EREBOR_CLIENT_CERT
               valueFrom:
                 secretKeyRef:
-                  name: secret-gateway-client-cert
+                  name: secret-erebor-client-cert
                   key: client-cert
             - name: EREBOR_CLIENT_KEY
               valueFrom:
                 secretKeyRef:
-                  name: secret-gateway-client-cert
+                  name: secret-erebor-client-cert
                   key: client-key
             - name: EREBOR_S2S_AUTH_URL
               valueFrom:
@@ -79,12 +79,12 @@ spec:
             - name: EREBOR_DB_CLIENT_CERT
               valueFrom:
                 secretKeyRef:
-                  name: secret-gateway-db-client-cert
+                  name: secret-erebor-db-client-cert
                   key: client-cert
             - name: EREBOR_DB_CLIENT_KEY
               valueFrom:
                 secretKeyRef:
-                  name: secret-gateway-db-client-cert
+                  name: secret-erebor-db-client-cert
                   key: client-key
             - name: EREBOR_DATABASE_URL
               valueFrom:

@@ -146,8 +146,8 @@ func (h *templateHandler) HandleTemplate(w http.ResponseWriter, r *http.Request)
 		h.getTemplate(w, r)
 		return
 	case "PUT":
-		// h.updateTemplate(w, r)
-		// return
+		h.updateTemplate(w, r)
+		return
 	case "DELETE":
 		// h.deleteTemplate(w, r)
 		// return
@@ -364,6 +364,111 @@ func (h *templateHandler) getTemplate(w http.ResponseWriter, r *http.Request) {
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusInternalServerError,
 			Message:    "internal server error: gateway failed to json encode template record",
+		}
+		e.SendJsonErr(w)
+		return
+	}
+}
+
+// updateTemplate is a method that handles the request to update a template.
+func (h *templateHandler) updateTemplate(w http.ResponseWriter, r *http.Request) {
+
+	fmt.Println("UPDATEING")
+
+	// get session token from the request header
+	session, err := connect.GetSessionToken(r)
+	if err != nil {
+		h.logger.Error(fmt.Sprintf("failed to get session token from request: %s", err.Error()))
+		h.ux.HandleSessionErr(err, w)
+		return
+	}
+
+	// get access token tied to the session
+	// validates the session is active and authenticated
+	accessToken, err := h.ux.GetAccessToken(session)
+	if err != nil {
+		h.logger.Error(fmt.Sprintf("failed to get access token from session token: %s", err.Error()))
+		h.ux.HandleSessionErr(err, w)
+		return
+	}
+
+	// get the template slug from the request URL
+	slug, err := connect.GetValidSlug(r)
+	if err != nil {
+		h.logger.Error(fmt.Sprintf("invalid template slug: %s", err.Error()))
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusBadRequest,
+			Message:    "invalid template slug",
+		}
+		e.SendJsonErr(w)
+		return
+	}
+
+	// decode the request body
+	var cmd tasks.TemplateCmd
+	if err := json.NewDecoder(r.Body).Decode(&cmd); err != nil {
+		errMsg := fmt.Sprintf("failed to decode json in template request body: %s", err.Error())
+		h.logger.Error(errMsg)
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusUnprocessableEntity,
+			Message:    errMsg,
+		}
+		e.SendJsonErr(w)
+		return
+	}
+
+	// validate the request body
+	if err := cmd.ValidateCmd(); err != nil {
+		errMsg := fmt.Sprintf("invalid template update command object: %s", err.Error())
+		h.logger.Error(errMsg)
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusUnprocessableEntity,
+			Message:    errMsg,
+		}
+		e.SendJsonErr(w)
+		return
+	}
+
+	// validate the csrf token
+	if valid, err := h.ux.IsValidCsrf(session, cmd.Csrf); !valid {
+		h.logger.Error(fmt.Sprintf("invalid csrf token: %s", err.Error()))
+		h.ux.HandleSessionErr(err, w)
+		return
+	}
+
+	// csrf token no longer needed, set to empty string
+	cmd.Csrf = ""
+
+	// get service token
+	taskToken, err := h.tkn.GetServiceToken(util.ServiceTasks)
+	if err != nil {
+		h.logger.Error(fmt.Sprintf("failed to get service token for tasks service: %s", err.Error()))
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusInternalServerError,
+			Message:    "internal server error",
+		}
+		e.SendJsonErr(w)
+		return
+	}
+
+	// update template in the tasks service
+	var template tasks.Template
+	if err := h.task.PostToService(fmt.Sprintf("/templates/%s", slug), taskToken, accessToken, cmd, &template); err != nil {
+		h.logger.Error(fmt.Sprintf("failed to put template: %s", err.Error()))
+		h.task.RespondUpstreamError(err, w)
+		return
+	}
+
+	h.logger.Info(fmt.Sprintf("template successfully updated: %s", template.Slug))
+
+	// send response
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(template); err != nil {
+		h.logger.Error(fmt.Sprintf("failed to json encode template: %s", err.Error()))
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusInternalServerError,
+			Message:    "internal server error",
 		}
 		e.SendJsonErr(w)
 		return
