@@ -3,6 +3,7 @@ package authentication
 import (
 	"erebor/internal/util"
 	"fmt"
+	"reflect"
 	"strings"
 )
 
@@ -27,31 +28,51 @@ type CallbackResponse struct {
 // they in no way give the user access to the data that is being called by the respective apis.
 type Render struct {
 	// users
-	ProfileRead *bool `json:"profile_read,omitempty"`
+	ProfileRead *bool               `json:"profile_read,omitempty"`
+	Users       *UserAccessFlags    `json:"users,omitempty"`
+	Gallery     *GalleryAccessFlags `json:"gallery,omitempty"`
+	Blog        *BlogAccessFlags    `json:"blog,omitempty"`
+	Tasks       *TaskAccessFlags    `json:"tasks,omitempty"`
+}
+
+// UserAccessFlags is a struct that is used to return the user access flags for ui rendering
+// NOTE: these flags are ux/ui convenience for feature display ONLY:
+// they in no way give the user access to the data that is being called by the respective apis.
+type UserAccessFlags struct {
 	UserRead    *bool `json:"user_read,omitempty"`
 	UserWrite   *bool `json:"user_write,omitempty"`
 	ScopeRead   *bool `json:"scope_read,omitempty"`
 	ScopeWrite  *bool `json:"scope_write,omitempty"`
+	ClientRead  *bool `json:"client_read,omitempty"`
+	ClientWrite *bool `json:"client_write,omitempty"`
+}
 
-	BlogRead  *bool `json:"blog_read,omitempty"`
-	BlogWrite *bool `json:"blog_write,omitempty"`
-
-	// Allowance
-	TaskRead        *bool `json:"task_read,omitempty"`
-	TaskWrite       *bool `json:"task_write,omitempty"`
-	AllowanceRead   *bool `json:"allowance_read,omitempty"`
-	AllowanceWrite  *bool `json:"allowance_write,omitempty"`
-	AllowancesRead  *bool `json:"allowances_read,omitempty"`
-	AllowancesWrite *bool `json:"allowances_write,omitempty"`
-
+// GalleryAccessFlags is a struct that is used to return the gallery access flags for ui rendering
+// NOTE: these flags are ux/ui convenience for feature display ONLY:
+// they in no way give the user access to the data that is being called by the respective apis.
+type GalleryAccessFlags struct {
 	GalleryRead  *bool `json:"gallery_read,omitempty"`
 	GalleryWrite *bool `json:"gallery_write,omitempty"`
+}
 
-	JudoRead  *bool `json:"judo_read,omitempty"`
-	JudoWrite *bool `json:"judo_write,omitempty"`
+// BlogAccessFlags is a struct that is used to return the blog access flags for ui rendering
+// NOTE: these flags are ux/ui convenience for feature display ONLY:
+// they in no way give the user access to the data that is being called by the respective apis.
+type BlogAccessFlags struct {
+	BlogRead  *bool `json:"blog_read,omitempty"`
+	BlogWrite *bool `json:"blog_write,omitempty"`
+}
 
-	FaimlyTreeRead  *bool `json:"familytree_read,omitempty"`
-	FaimlyTreeWrite *bool `json:"familytree_write,omitempty"`
+// TaskAccessFlags is a struct that is used to return the task access flags for ui rendering
+// NOTE: these flags are ux/ui convenience for feature display ONLY:
+// they in no way give the user access to the data that is being called by the respective apis.
+type TaskAccessFlags struct {
+	AllowancesRead  *bool `json:"allowances_read,omitempty"`
+	AllowancesWrite *bool `json:"allowances_write,omitempty"`
+	TemplatesRead   *bool `json:"templates_read,omitempty"`
+	TemplatesWrite  *bool `json:"templates_write,omitempty"`
+	TasksRead       *bool `json:"tasks_read,omitempty"`
+	TasksWrite      *bool `json:"tasks_write,omitempty"`
 }
 
 type UxAccess string
@@ -64,12 +85,13 @@ const (
 	Delete UxAccess = "d"
 
 	Profile ApiEndpoint = "profile"
-	User    ApiEndpoint = "user"
-	Scope   ApiEndpoint = "scope"
+	User    ApiEndpoint = "users"
+	Scope   ApiEndpoint = "scopes"
+	Client  ApiEndpoint = "clients"
 
-	Tasks      ApiEndpoint = "tasks"
 	Allowances ApiEndpoint = "allowances"
-	Allowance  ApiEndpoint = "allowance"
+	Templates  ApiEndpoint = "templates"
+	Tasks      ApiEndpoint = "tasks"
 )
 
 // SetRenderFlag is a function that is used to set the Render flag to the value that is passed in.
@@ -77,12 +99,45 @@ func setRenderFlag(b bool) *bool {
 	return &b
 }
 
+// checks for any fields in the struct that are set to a non-nil value.
+func HasAnyFieldsSet(i interface{}) bool {
+	v := reflect.ValueOf(i)
+
+	// If it's a pointer to a struct, dereference it
+	if v.Kind() == reflect.Ptr {
+		if v.IsNil() {
+			return false
+		}
+		v = v.Elem()
+	}
+
+	// Must be a struct
+	if v.Kind() != reflect.Struct {
+		return false
+	}
+
+	// Iterate through fields
+	for i := 0; i < v.NumField(); i++ {
+		field := v.Field(i)
+		if field.Kind() == reflect.Ptr && !field.IsNil() {
+			return true
+		}
+	}
+
+	return false
+}
+
 // BuildRender is a function that is used to build the Render struct based on the scopes string that is passed in.
 // Note: not all scopes map one to one with the Render object, or at all.
 // scopes should be in the following format: "r:shaw:profile:* r:junk:* r:gallery:*"
 func BuildRender(scopes string) Render {
 
+	// build render object
 	var render Render
+	users := &UserAccessFlags{}
+	gallery := &GalleryAccessFlags{}
+	blog := &BlogAccessFlags{}
+	tasks := &TaskAccessFlags{}
 
 	// check forf empty scopes
 	if len(scopes) < 1 {
@@ -117,34 +172,63 @@ func BuildRender(scopes string) Render {
 
 			case string(User):
 				if s[0] == string(Read) {
-					render.UserRead = setRenderFlag(true)
+					users.UserRead = setRenderFlag(true)
 					continue
 				}
 				if s[0] == string(Write) {
-					render.UserWrite = setRenderFlag(true)
+					users.UserWrite = setRenderFlag(true)
 					continue
 				}
 			case string(Scope):
+
+			default:
+				break
+			}
+
+		// Clients
+		case util.ServiceS2s:
+			switch s[2] {
+			case string(Scope):
 				if s[0] == string(Read) {
-					render.ScopeRead = setRenderFlag(true)
+					users.ScopeRead = setRenderFlag(true)
 					continue
 				}
 				if s[0] == string(Write) {
-					render.ScopeWrite = setRenderFlag(true)
+					users.ScopeWrite = setRenderFlag(true)
+					continue
+				}
+			case string(Client):
+				if s[0] == string(Read) {
+					users.ClientRead = setRenderFlag(true)
+					continue
+				}
+				if s[0] == string(Write) {
+					users.ClientWrite = setRenderFlag(true)
 					continue
 				}
 			default:
 				break
 			}
 
-		// Blog
-		case util.ServiceBlog:
+		// Gallery
+		case util.ServiceGallery:
 			if s[0] == string(Read) {
-				render.BlogRead = setRenderFlag(true)
+				gallery.GalleryRead = setRenderFlag(true)
 				continue
 			}
 			if s[0] == string(Write) {
-				render.BlogWrite = setRenderFlag(true)
+				gallery.GalleryWrite = setRenderFlag(true)
+				continue
+			}
+
+		// Blog
+		case util.ServiceBlog:
+			if s[0] == string(Read) {
+				blog.BlogRead = setRenderFlag(true)
+				continue
+			}
+			if s[0] == string(Write) {
+				blog.BlogWrite = setRenderFlag(true)
 				continue
 			}
 
@@ -155,71 +239,59 @@ func BuildRender(scopes string) Render {
 			}
 
 			switch s[2] {
-			case string(Tasks):
-				if s[0] == string(Read) {
-					render.TaskRead = setRenderFlag(true)
-					continue
-				}
-				if s[0] == string(Write) {
-					render.TaskWrite = setRenderFlag(true)
-					continue
-				}
-
 			case string(Allowances):
 				if s[0] == string(Read) {
-					render.AllowancesRead = setRenderFlag(true)
+					tasks.AllowancesRead = setRenderFlag(true)
 					continue
 				}
 				if s[0] == string(Write) {
-					render.AllowancesWrite = setRenderFlag(true)
+					tasks.AllowancesWrite = setRenderFlag(true)
 					continue
 				}
 
-			case string(Allowance):
+			case string(Templates):
 				if s[0] == string(Read) {
-					render.AllowanceRead = setRenderFlag(true)
+					tasks.TemplatesRead = setRenderFlag(true)
 					continue
 				}
 				if s[0] == string(Write) {
-					render.AllowanceWrite = setRenderFlag(true)
+					tasks.TemplatesWrite = setRenderFlag(true)
 					continue
 				}
+
+			case string(Tasks):
+				if s[0] == string(Read) {
+					tasks.TasksRead = setRenderFlag(true)
+					continue
+				}
+				if s[0] == string(Write) {
+					tasks.TasksWrite = setRenderFlag(true)
+					continue
+				}
+
 			default:
 				break
 			}
 
-		case util.ServiceGallery:
-			if s[0] == string(Read) {
-				render.GalleryRead = setRenderFlag(true)
-				continue
-			}
-			if s[0] == string(Write) {
-				render.GalleryWrite = setRenderFlag(true)
-				continue
-			}
-
-		case util.ServiceJudo:
-			if s[0] == string(Read) {
-				render.JudoRead = setRenderFlag(true)
-				continue
-			}
-			if s[0] == string(Write) {
-				render.JudoWrite = setRenderFlag(true)
-				continue
-			}
-
-		case util.ServiceFamilyTree:
-			if s[0] == string(Read) {
-				render.FaimlyTreeRead = setRenderFlag(true)
-				continue
-			}
-			if s[0] == string(Write) {
-				render.FaimlyTreeWrite = setRenderFlag(true)
-				continue
-			}
-
 		default:
 		}
+	}
+
+	// check for any fields in the access flags structs that are set to a non-nil value.
+	if HasAnyFieldsSet(users) {
+		render.Users = users
+	}
+
+	if HasAnyFieldsSet(gallery) {
+		render.Gallery = gallery
+	}
+
+	if HasAnyFieldsSet(blog) {
+		render.Blog = blog
+	}
+
+	if HasAnyFieldsSet(tasks) {
+		render.Tasks = tasks
 	}
 
 	return render
