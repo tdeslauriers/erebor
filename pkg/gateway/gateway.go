@@ -252,6 +252,7 @@ func (g *gateway) Run() error {
 	mux.HandleFunc("/templates/assignees", task.HandleGetAssignees)
 	mux.HandleFunc("/templates", task.HandleTemplates)
 	mux.HandleFunc("/templates/", task.HandleTemplate) // trailing slash required for /templates/{slug}
+	mux.HandleFunc("/tasks", task.HandleTasks) // 
 
 	erebor := &connect.TlsServer{
 		Addr:      g.config.ServicePort,

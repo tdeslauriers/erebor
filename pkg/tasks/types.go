@@ -12,12 +12,14 @@ import (
 type Handler interface {
 	AllowanceHandler
 	TemplateHandler
+	TaskHandler
 }
 
 func NewHandler(ux uxsession.Service, p provider.S2sTokenProvider, iam, task connect.S2sCaller) Handler {
 	return &handler{
 		AllowanceHandler: NewAllowanceHandler(ux, p, iam, task),
 		TemplateHandler:  NewTemplateHandler(ux, p, task),
+		TaskHandler:      NewTaskHandler(ux, p, task),
 	}
 }
 
@@ -26,6 +28,7 @@ var _ Handler = (*handler)(nil)
 type handler struct {
 	AllowanceHandler
 	TemplateHandler
+	TaskHandler
 }
 
 // CreateAllowanceCmd is a model for creating a new allowance account
