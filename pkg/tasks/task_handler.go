@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/tdeslauriers/carapace/pkg/connect"
@@ -52,8 +53,10 @@ func (h *taskHandler) HandleTasks(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case http.MethodGet:
-		h.handleTasks(w, r)
+		h.handleGetTasks(w, r)
 		return
+	case http.MethodPatch:
+		h.handlePatchTasks(w, r)
 	default:
 		h.logger.Error("only GET requests are allowed to /tasks endpoint")
 		e := connect.ErrorHttp{
@@ -65,10 +68,10 @@ func (h *taskHandler) HandleTasks(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// handleTasks handles GET requests to the /tasks endpoint, including validating query parameters, etc.
+// handleGetTasks handles GET requests to the /tasks endpoint, including validating query parameters, etc.
 // validates request parameters, including the CSRF token and session, and then forwards
 // the request to the task service.
-func (h *taskHandler) handleTasks(w http.ResponseWriter, r *http.Request) {
+func (h *taskHandler) handleGetTasks(w http.ResponseWriter, r *http.Request) {
 
 	// get session token from request headers
 	session, err := connect.GetSessionToken(r)
@@ -114,7 +117,7 @@ func (h *taskHandler) handleTasks(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var tasks []tasks.Task
-	if err := h.task.GetServiceData(buildTasksUrl("/tasks", params), accessToken, s2sToken, &tasks); err != nil {
+	if err := h.task.GetServiceData(buildTasksUrl("/tasks", params), s2sToken, accessToken, &tasks); err != nil {
 		h.logger.Error(fmt.Sprintf("failed to get tasks from tasks service for GET /tasks: %s", err.Error()))
 		h.task.RespondUpstreamError(err, w)
 		return
@@ -133,26 +136,104 @@ func (h *taskHandler) handleTasks(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// handlePatchTasks handles PATCH requests to the /tasks endpoint
+// validates request cmd, including the CSRF token and session, and then forwards
+// the request to the task service.
+func (h *taskHandler) handlePatchTasks(w http.ResponseWriter, r *http.Request) {
+
+	// get session token from request headers
+	session, err := connect.GetSessionToken(r)
+	if err != nil {
+		h.logger.Error(fmt.Sprintf("invalid session token on PATCH /tasks request: %v", err))
+		h.ux.HandleSessionErr(err, w)
+		return
+	}
+
+	// get access token tied to the session
+	// validates the session is active and authenticated
+	accessToken, err := h.ux.GetAccessToken(session)
+	if err != nil {
+		h.logger.Error(fmt.Sprintf("failed to get access token from session token for PATCH /tasks: %s", err.Error()))
+		h.ux.HandleSessionErr(err, w)
+		return
+	}
+
+	// get request body
+	var cmd tasks.TaskStatusCmd
+	if err := json.NewDecoder(r.Body).Decode(&cmd); err != nil {
+		h.logger.Error(fmt.Sprintf("failed to decode request body for PATCH /tasks: %s", err.Error()))
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusBadRequest,
+			Message:    "invalid request body",
+		}
+		e.SendJsonErr(w)
+		return
+	}
+
+	// validate request cmd
+	if err := cmd.ValidateCmd(); err != nil {
+		h.logger.Error(fmt.Sprintf("invalid request cmd for PATCH /tasks: %s", err.Error()))
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusUnprocessableEntity,
+			Message:    err.Error(),
+		}
+		e.SendJsonErr(w)
+		return
+	}
+
+	// validate the csrf token
+	if valid, err := h.ux.IsValidCsrf(session, cmd.Csrf); !valid {
+		h.logger.Error(fmt.Sprintf("invalid csrf token: %s", err.Error()))
+		h.ux.HandleSessionErr(err, w)
+		return
+	}
+
+	// csrf token no longer needed, set to empty string
+	cmd.Csrf = ""
+
+	// get service token
+	s2sToken, err := h.tkn.GetServiceToken(util.ServiceTasks)
+	if err != nil {
+		h.logger.Error(fmt.Sprintf("failed to get service token for tasks service for PATCH /tasks: %s", err.Error()))
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusInternalServerError,
+			Message:    "internal server error",
+		}
+		e.SendJsonErr(w)
+		return
+	}
+
+	var task tasks.Task
+	if err := h.task.PostToService("/tasks", s2sToken, accessToken, cmd, &task); err != nil {
+		h.logger.Error(fmt.Sprintf("failed to post to PATCH /tasks: %s", err.Error()))
+		h.task.RespondUpstreamError(err, w)
+		return
+	}
+
+	fmt.Printf("task: %+v\n", task)
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(task); err != nil {
+		h.logger.Error(fmt.Sprintf("failed to encode tasks response for PATCH /tasks: %s", err.Error()))
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusInternalServerError,
+			Message:    "internal server error",
+		}
+		e.SendJsonErr(w)
+		return
+	}
+}
+
 // buildTasksUrl is a helper function that builds a request to the tasks service
 // /tasks endpoint including query parameters.
-func buildTasksUrl(url string, params map[string][]string) string {
+func buildTasksUrl(url string, params url.Values) string {
 
 	var sb strings.Builder
 	sb.WriteString(url)
 
 	if len(params) > 0 {
 		sb.WriteString("?")
-		counter := 0
-		for k, v := range params {
-			sb.WriteString(k)
-			sb.WriteString("=")
-			sb.WriteString(strings.Join(v, ","))
-
-			if counter < len(params)-1 {
-				sb.WriteString("&")
-			}
-			counter++
-		}
+		sb.WriteString(params.Encode())
 	}
 
 	return sb.String()
