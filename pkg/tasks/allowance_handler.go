@@ -15,6 +15,10 @@ import (
 
 // AllowanceHandler is an interface for handling requests for allowances.
 type AllowanceHandler interface {
+
+	// HanldeAccount handles a users request for their own allowance account
+	HandleAccount(w http.ResponseWriter, r *http.Request)
+
 	// HandleAllowances handles the requests to get all or create a new allowance account(s).
 	HandleAllowances(w http.ResponseWriter, r *http.Request)
 
@@ -47,6 +51,61 @@ type allowanceHandler struct {
 	task     connect.S2sCaller
 
 	logger *slog.Logger
+}
+
+// HanldeAccount handles a users request for their own allowance account
+// when requested from /allowance endpoint.
+func (h *allowanceHandler) HandleAccount(w http.ResponseWriter, r *http.Request) {
+
+	// get session token from the request header
+	session, err := connect.GetSessionToken(r)
+	if err != nil {
+		h.logger.Error(fmt.Sprintf("failed to get session token from request: %s", err.Error()))
+		h.session.HandleSessionErr(err, w)
+		return
+	}
+
+	// get access token tied to the session
+	// validates the session is active and authenticated
+	accessToken, err := h.session.GetAccessToken(session)
+	if err != nil {
+		h.logger.Error(fmt.Sprintf("failed to get access token from session token for /allowance/{slug}: %s", err.Error()))
+		h.session.HandleSessionErr(err, w)
+		return
+	}
+
+	// forward request to allowance account service
+	// allowance service will validate user is real, authorized, and not already have an allowance account
+	svcToken, err := h.provider.GetServiceToken(util.ServiceTasks)
+	if err != nil {
+		h.logger.Error(fmt.Sprintf("failed to get service token for tasks service: %s", err.Error()))
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusInternalServerError,
+			Message:    "failed to get allowance account due to internal server error",
+		}
+		e.SendJsonErr(w)
+		return
+	}
+
+	// forward request to allowance account service
+	var allowance tasks.Allowance
+	if err := h.task.GetServiceData("/allowance", svcToken, accessToken, &allowance); err != nil {
+		h.logger.Error(fmt.Sprintf("failed to get allowance account: %s", err.Error()))
+		h.task.RespondUpstreamError(err, w)
+		return
+	}
+
+	// respond to client
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(allowance); err != nil {
+		h.logger.Error(fmt.Sprintf("failed to encode json response for /allowance account: %s", err.Error()))
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusInternalServerError,
+			Message:    "failed to encode allowance data to json",
+		}
+		e.SendJsonErr(w)
+		return
+	}
 }
 
 // HandleAllowances is the concrete implementation of the interface
