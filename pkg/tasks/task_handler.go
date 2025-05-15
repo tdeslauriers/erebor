@@ -210,8 +210,6 @@ func (h *taskHandler) handlePatchTasks(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fmt.Printf("task: %+v\n", task)
-
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(task); err != nil {
 		h.logger.Error(fmt.Sprintf("failed to encode tasks response for PATCH /tasks: %s", err.Error()))
