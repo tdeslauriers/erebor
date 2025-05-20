@@ -10,7 +10,6 @@ import (
 	"net/http"
 
 	"github.com/tdeslauriers/carapace/pkg/connect"
-	"github.com/tdeslauriers/carapace/pkg/profile"
 	"github.com/tdeslauriers/carapace/pkg/session/provider"
 	"github.com/tdeslauriers/carapace/pkg/tasks"
 )
@@ -98,7 +97,7 @@ func (h *templateHandler) HandleGetAssignees(w http.ResponseWriter, r *http.Requ
 	}
 
 	// get assignees
-	var assignees []profile.User
+	var assignees []tasks.Assignee
 	if err := h.task.GetServiceData("/templates/assignees", taskToken, accessToken, &assignees); err != nil {
 		h.logger.Error(fmt.Sprintf("failed to get assignees: %s", err.Error()))
 		h.task.RespondUpstreamError(err, w)

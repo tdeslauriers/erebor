@@ -40,3 +40,5 @@ github.com/tdeslauriers/carapace v0.1.48 h1:ioPm6ujUKnbGbCQE4QS90/TNl7deUI7HhAuD
 github.com/tdeslauriers/carapace v0.1.48/go.mod h1:L+wBCKttfgr6RaZxMWm6F/BXdAlRMquUeOCQyFgp9GM=
 github.com/tdeslauriers/carapace v0.1.51 h1:3T7EPvNkWS2bUvSAOC5nKzT03g7xLFmKlsLCXmLFXSY=
 github.com/tdeslauriers/carapace v0.1.51/go.mod h1:L+wBCKttfgr6RaZxMWm6F/BXdAlRMquUeOCQyFgp9GM=
+github.com/tdeslauriers/carapace v0.1.52 h1:2FN1hqxE2iJAr2G/3+jQTyWgncdfI8YRWWPqC+1G5XM=
+github.com/tdeslauriers/carapace v0.1.52/go.mod h1:L+wBCKttfgr6RaZxMWm6F/BXdAlRMquUeOCQyFgp9GM=
