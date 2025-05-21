@@ -372,8 +372,6 @@ func (h *templateHandler) getTemplate(w http.ResponseWriter, r *http.Request) {
 // updateTemplate is a method that handles the request to update a template.
 func (h *templateHandler) updateTemplate(w http.ResponseWriter, r *http.Request) {
 
-	fmt.Println("UPDATEING")
-
 	// get session token from the request header
 	session, err := connect.GetSessionToken(r)
 	if err != nil {

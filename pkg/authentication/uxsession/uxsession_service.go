@@ -330,6 +330,8 @@ func (s *service) DestroySession(session string) error {
 		return fmt.Errorf("failed to delete authenticated(%t) session id %s: %v", uxSession.Authenticated, uxSession.Id, err)
 	}
 
+	s.logger.Info(fmt.Sprintf("successfully deleted authenticated(%t) session id %s", uxSession.Authenticated, uxSession.Id))
+
 	return nil
 }
 

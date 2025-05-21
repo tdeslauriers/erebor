@@ -408,7 +408,6 @@ func (s *service) Validate(cmd types.AuthCodeCmd) error {
 	var check OauthExchange
 	if err := s.db.SelectRecord(query, &check, index); err != nil {
 		if err == sql.ErrNoRows {
-
 			return fmt.Errorf("session xxxxxx-%s: %s", cmd.Session[len(cmd.Session)-6:], ErrSessionNotFound)
 		} else {
 			return fmt.Errorf("session xxxxxx-%s is %s: %v", cmd.Session[len(cmd.Session)-6:], ErrInvalidSession, err)

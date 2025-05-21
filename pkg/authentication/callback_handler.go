@@ -86,8 +86,9 @@ func (h *callbackHandler) HandleCallback(w http.ResponseWriter, r *http.Request)
 
 	// validate oauth variables (state, nonce, client id, redirect) against the session token
 	if err := h.oAuth.Validate(cmd); err != nil {
-		fmt.Printf("FAIL: %v\n", err)
+		h.logger.Error(fmt.Sprintf("failed to validate oauth callback: %v\n", err))
 		h.oAuth.HandleServiceErr(err, w)
+		return
 	}
 
 	// get service token
