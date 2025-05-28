@@ -67,6 +67,8 @@ type BlogAccessFlags struct {
 // NOTE: these flags are ux/ui convenience for feature display ONLY:
 // they in no way give the user access to the data that is being called by the respective apis.
 type TaskAccessFlags struct {
+	AccountRead     *bool `json:"account_read,omitempty"`
+	AccountWrite    *bool `json:"account_write,omitempty"`
 	AllowancesRead  *bool `json:"allowances_read,omitempty"`
 	AllowancesWrite *bool `json:"allowances_write,omitempty"`
 	TemplatesRead   *bool `json:"templates_read,omitempty"`
@@ -89,6 +91,7 @@ const (
 	Scope   ApiEndpoint = "scopes"
 	Client  ApiEndpoint = "clients"
 
+	Account    ApiEndpoint = "account"
 	Allowances ApiEndpoint = "allowances"
 	Templates  ApiEndpoint = "templates"
 	Tasks      ApiEndpoint = "tasks"
@@ -239,6 +242,16 @@ func BuildRender(scopes string) Render {
 			}
 
 			switch s[2] {
+			case string(Account):
+				if s[0] == string(Read) {
+					tasks.AccountRead = setRenderFlag(true)
+					continue
+				}
+				if s[0] == string(Write) {
+					tasks.AccountWrite = setRenderFlag(true)
+					continue
+				}
+
 			case string(Allowances):
 				if s[0] == string(Read) {
 					tasks.AllowancesRead = setRenderFlag(true)

@@ -57,6 +57,27 @@ type allowanceHandler struct {
 // when requested from /allowance endpoint.
 func (h *allowanceHandler) HandleAccount(w http.ResponseWriter, r *http.Request) {
 
+	switch r.Method {
+	case http.MethodGet:
+		h.handleGetAccount(w, r)
+		return
+	case http.MethodPut:
+		h.handleUpdateAccount(w, r)
+		return
+	default:
+		h.logger.Error("only GET and PUT requests are allowed to /account endpoint")
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusMethodNotAllowed,
+			Message:    "only GET and PUT requests are allowed to /account endpoint",
+		}
+		e.SendJsonErr(w)
+		return
+	}
+}
+
+// handleGetAccount handles the GET request to get a users allowance account when requested from /allowance endpoint.
+func (h *allowanceHandler) handleGetAccount(w http.ResponseWriter, r *http.Request) {
+
 	// get session token from the request header
 	session, err := connect.GetSessionToken(r)
 	if err != nil {
@@ -69,7 +90,7 @@ func (h *allowanceHandler) HandleAccount(w http.ResponseWriter, r *http.Request)
 	// validates the session is active and authenticated
 	accessToken, err := h.session.GetAccessToken(session)
 	if err != nil {
-		h.logger.Error(fmt.Sprintf("failed to get access token from session token for /allowance/{slug}: %s", err.Error()))
+		h.logger.Error(fmt.Sprintf("failed to get access token from session token for /account: %s", err.Error()))
 		h.session.HandleSessionErr(err, w)
 		return
 	}
@@ -89,7 +110,7 @@ func (h *allowanceHandler) HandleAccount(w http.ResponseWriter, r *http.Request)
 
 	// forward request to allowance account service
 	var allowance tasks.Allowance
-	if err := h.task.GetServiceData("/allowance", svcToken, accessToken, &allowance); err != nil {
+	if err := h.task.GetServiceData("/account", svcToken, accessToken, &allowance); err != nil {
 		h.logger.Error(fmt.Sprintf("failed to get allowance account: %s", err.Error()))
 		h.task.RespondUpstreamError(err, w)
 		return
@@ -98,7 +119,96 @@ func (h *allowanceHandler) HandleAccount(w http.ResponseWriter, r *http.Request)
 	// respond to client
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(allowance); err != nil {
-		h.logger.Error(fmt.Sprintf("failed to encode json response for /allowance account: %s", err.Error()))
+		h.logger.Error(fmt.Sprintf("failed to encode json response for /account: %s", err.Error()))
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusInternalServerError,
+			Message:    "failed to encode allowance data to json",
+		}
+		e.SendJsonErr(w)
+		return
+	}
+}
+
+// handleUpdateAccount handles the PUT request to update a users allowance account when requested from /allowance endpoint.
+func (h *allowanceHandler) handleUpdateAccount(w http.ResponseWriter, r *http.Request) {
+
+	// get session token from the request header
+	session, err := connect.GetSessionToken(r)
+	if err != nil {
+		h.logger.Error(fmt.Sprintf("failed to get session token from request: %s", err.Error()))
+		h.session.HandleSessionErr(err, w)
+		return
+	}
+
+	// get access token tied to the session
+	// validates the session is active and authenticated
+	accessToken, err := h.session.GetAccessToken(session)
+	if err != nil {
+		h.logger.Error(fmt.Sprintf("failed to get access token from session token for /account: %s", err.Error()))
+		h.session.HandleSessionErr(err, w)
+		return
+	}
+
+	// decode the request body
+	var cmd tasks.UpdateAllowanceCmd
+	if err := json.NewDecoder(r.Body).Decode(&cmd); err != nil {
+		errMsg := fmt.Sprintf("failed to decode json in /account request body: %s", err.Error())
+		h.logger.Error(errMsg)
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusBadRequest,
+			Message:    errMsg,
+		}
+		e.SendJsonErr(w)
+		return
+	}
+
+	// validate the request body
+	if err := cmd.ValidateCmd(); err != nil {
+		errMsg := fmt.Sprintf("error validating request body: %s", err.Error())
+		h.logger.Error(errMsg)
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusUnprocessableEntity,
+			Message:    errMsg,
+		}
+		e.SendJsonErr(w)
+		return
+	}
+
+	// validate the csrf token
+	if valid, err := h.session.IsValidCsrf(session, cmd.Csrf); !valid {
+		h.logger.Error(fmt.Sprintf("invalid csrf token: %s", err.Error()))
+		h.session.HandleSessionErr(err, w)
+		return
+	}
+
+	// prepare for upstream submission
+	cmd.Csrf = ""
+
+	// forward request to allowance account service
+	// allowance service will validate user is real, authorized, and not already have an allowance account
+	svcToken, err := h.provider.GetServiceToken(util.ServiceTasks)
+	if err != nil {
+		h.logger.Error(fmt.Sprintf("failed to get service token for tasks service: %s", err.Error()))
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusInternalServerError,
+			Message:    "failed to update allowance account due to internal server error",
+		}
+		e.SendJsonErr(w)
+		return
+	}
+
+	// forward request to allowance account service
+	var allowance tasks.Allowance
+	if err := h.task.PostToService("/account", svcToken, accessToken, cmd, &allowance); err != nil {
+		h.logger.Error(fmt.Sprintf("failed to update allowance account: %s", err.Error()))
+		h.task.RespondUpstreamError(err, w)
+		return
+	}
+
+	// respond to client
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(allowance); err != nil {
+		h.logger.Error(fmt.Sprintf("failed to encode json response for allowance account update: %s", err.Error()))
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusInternalServerError,
 			Message:    "failed to encode allowance data to json",
@@ -144,7 +254,7 @@ func (h *allowanceHandler) HandleAllowances(w http.ResponseWriter, r *http.Reque
 
 	switch r.Method {
 	case http.MethodGet:
-		h.handleGetAll(w, r, taskToken, accessToken)
+		h.handleGetAll(w, taskToken, accessToken)
 		return
 	case http.MethodPost:
 		h.handleCreate(w, r, session, taskToken, accessToken)
@@ -176,7 +286,7 @@ func (h *allowanceHandler) HandleAllowance(w http.ResponseWriter, r *http.Reques
 	// validates the session is active and authenticated
 	accessToken, err := h.session.GetAccessToken(session)
 	if err != nil {
-		h.logger.Error(fmt.Sprintf("failed to get access token from session token for /allowance/{slug}: %s", err.Error()))
+		h.logger.Error(fmt.Sprintf("failed to get access token from session token for /allowances/{slug}: %s", err.Error()))
 		h.session.HandleSessionErr(err, w)
 		return
 	}
@@ -200,7 +310,7 @@ func (h *allowanceHandler) HandleAllowance(w http.ResponseWriter, r *http.Reques
 		h.logger.Error(fmt.Sprintf("failed to get service token for tasks service: %s", err.Error()))
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusInternalServerError,
-			Message:    "failed to get allowance account due to internal server error",
+			Message:    "internal server error",
 		}
 		e.SendJsonErr(w)
 		return
@@ -215,10 +325,10 @@ func (h *allowanceHandler) HandleAllowance(w http.ResponseWriter, r *http.Reques
 		h.handleUpdateAllowance(w, r, slug, session, svcToken, accessToken)
 		return
 	default:
-		h.logger.Error("only GET requests are allowed to /allowances/{slug} endpoint")
+		h.logger.Error("only GET and PUT requests are allowed to /allowances/{slug} endpoint")
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusMethodNotAllowed,
-			Message:    "only GET requests are allowed to /allowances/{slug} endpoint",
+			Message:    "only GET and PUT requests are allowed to /allowances/{slug} endpoint",
 		}
 		e.SendJsonErr(w)
 		return
@@ -226,7 +336,7 @@ func (h *allowanceHandler) HandleAllowance(w http.ResponseWriter, r *http.Reques
 }
 
 // handleGetAll handles the GET request to get all allowance accounts when requested from /allowances endpoint.
-func (h *allowanceHandler) handleGetAll(w http.ResponseWriter, r *http.Request, svcToken, accessToken string) {
+func (h *allowanceHandler) handleGetAll(w http.ResponseWriter, svcToken, accessToken string) {
 
 	// forward request to allowance account service
 	var allowances []tasks.Allowance
@@ -382,7 +492,7 @@ func (h *allowanceHandler) handleUpdateAllowance(w http.ResponseWriter, r *http.
 	// respond to client
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(allowance); err != nil {
-		h.logger.Error(fmt.Sprintf("failed to encode json response for allowance/%s account: %s", slug, err.Error()))
+		h.logger.Error(fmt.Sprintf("failed to encode json response for allowances/%s account: %s", slug, err.Error()))
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusInternalServerError,
 			Message:    "failed to encode allowance data to json",
