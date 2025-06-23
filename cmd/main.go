@@ -41,6 +41,7 @@ func main() {
 			UserVerifyingKey: true,
 			OauthRedirect:    true,
 			Tasks:            true,
+			Gallery:          true,
 		},
 	}
 

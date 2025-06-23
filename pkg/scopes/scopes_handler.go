@@ -134,6 +134,14 @@ func (h *handler) HandleAdd(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// validate session token and get access token
+	accessToken, err := h.session.GetAccessToken(session)
+	if err != nil {
+		h.logger.Error(fmt.Sprintf("failed to get access token from session token for /scope/add call to s2s service: %s", err.Error()))
+		h.session.HandleSessionErr(err, w)
+		return
+	}
+
 	// get request body
 	var cmd ScopeCmd
 	if err := json.NewDecoder(r.Body).Decode(&cmd); err != nil {
@@ -165,13 +173,8 @@ func (h *handler) HandleAdd(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// validate session token and get access token
-	accessToken, err := h.session.GetAccessToken(session)
-	if err != nil {
-		h.logger.Error(fmt.Sprintf("failed to get access token from session token for /scope/add call to s2s service: %s", err.Error()))
-		h.session.HandleSessionErr(err, w)
-		return
-	}
+	// remove csrf token from request cmd
+	cmd.Csrf = ""
 
 	// get s2s token for s2s service
 	s2sToken, err := h.tknProvider.GetServiceToken(util.ServiceS2s)

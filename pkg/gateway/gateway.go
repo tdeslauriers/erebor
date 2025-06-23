@@ -11,6 +11,7 @@ import (
 	"erebor/pkg/authentication/oauth"
 	"erebor/pkg/authentication/uxsession"
 	"erebor/pkg/clients"
+	"erebor/pkg/gallery"
 	"erebor/pkg/scopes"
 	"erebor/pkg/tasks"
 	"erebor/pkg/user"
@@ -115,6 +116,7 @@ func New(config *config.Config) (Gateway, error) {
 	s2s := connect.NewS2sCaller(config.ServiceAuth.Url, util.ServiceS2s, client, retry)
 	identity := connect.NewS2sCaller(config.UserAuth.Url, util.ServiceIdentity, client, retry)
 	task := connect.NewS2sCaller(config.Tasks.Url, util.ServiceTasks, client, retry)
+	gallery := connect.NewS2sCaller(config.Gallery.Url, util.ServiceGallery, client, retry)
 
 	// s2s token provider
 	s2sTokenProvider := provider.NewS2sTokenProvider(s2s, creds, repository, cryptor)
@@ -154,6 +156,7 @@ func New(config *config.Config) (Gateway, error) {
 		s2s:         s2s,
 		iam:         identity,
 		task:        task,
+		gallery:     gallery,
 		uxSession:   uxSession,
 		oAuth:       oAuth,
 		verifier:    identityVerifier, // for user Id token (jwt) verification
@@ -176,6 +179,7 @@ type gateway struct {
 	s2s         connect.S2sCaller
 	iam         connect.S2sCaller
 	task        connect.S2sCaller
+	gallery     connect.S2sCaller
 	uxSession   uxsession.Service
 	oAuth       oauth.Service
 	verifier    jwt.Verifier
@@ -218,6 +222,8 @@ func (g *gateway) Run() error {
 
 	task := tasks.NewHandler(g.uxSession, g.tknProvider, g.iam, g.task)
 
+	glry := gallery.NewHandler(g.uxSession, g.tknProvider, g.gallery)
+
 	// setup mux
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", diagnostics.HealthCheckHandler)
@@ -253,7 +259,9 @@ func (g *gateway) Run() error {
 	mux.HandleFunc("/templates/assignees", task.HandleGetAssignees)
 	mux.HandleFunc("/templates", task.HandleTemplates)
 	mux.HandleFunc("/templates/", task.HandleTemplate) // trailing slash required for /templates/{slug}
-	mux.HandleFunc("/tasks", task.HandleTasks)         //
+	mux.HandleFunc("/tasks", task.HandleTasks)
+
+	mux.HandleFunc("/images/", glry.HandleImage) // trailing slash required for /images/{slug}
 
 	erebor := &connect.TlsServer{
 		Addr:      g.config.ServicePort,

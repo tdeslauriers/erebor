@@ -11,6 +11,7 @@ const (
 	PackageScopes  string = "scopes"
 	PackageClients string = "clients"
 	PackageTasks   string = "tasks"
+	PackageGallery  string = "gallery"
 
 	ComponentKey string = "component"
 
@@ -33,6 +34,7 @@ const (
 	ComponentTasks         string = "tasks"
 	ComponentAllowances    string = "allowances"
 	ComponentTemplate      string = "task templates"
+	ComponentImages		string = "gallery images"
 
 	SerivceKey = "service"
 

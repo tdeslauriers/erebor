@@ -9,12 +9,14 @@ import (
 	"github.com/tdeslauriers/carapace/pkg/validate"
 )
 
+// Handler is a composite interface that aggregates all task-service-related handlers.
 type Handler interface {
 	AllowanceHandler
 	TemplateHandler
 	TaskHandler
 }
 
+// NewHandler creates a new instance of Handler, returning a pointer to the concrete implementation(s).
 func NewHandler(ux uxsession.Service, p provider.S2sTokenProvider, iam, task connect.S2sCaller) Handler {
 	return &handler{
 		AllowanceHandler: NewAllowanceHandler(ux, p, iam, task),
@@ -62,7 +64,3 @@ func (c *CreateAllowanceCmd) ValidateCmd() error {
 
 	return nil
 }
-
-
-
-

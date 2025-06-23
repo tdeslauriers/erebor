@@ -51,8 +51,10 @@ type UserAccessFlags struct {
 // NOTE: these flags are ux/ui convenience for feature display ONLY:
 // they in no way give the user access to the data that is being called by the respective apis.
 type GalleryAccessFlags struct {
-	GalleryRead  *bool `json:"gallery_read,omitempty"`
-	GalleryWrite *bool `json:"gallery_write,omitempty"`
+	AlbumRead  *bool `json:"album_read,omitempty"`
+	AlbumWrite *bool `json:"album_write,omitempty"`
+	ImageRead  *bool `json:"image_read,omitempty"`
+	ImageWrite *bool `json:"image_write,omitempty"`
 }
 
 // BlogAccessFlags is a struct that is used to return the blog access flags for ui rendering
@@ -95,6 +97,9 @@ const (
 	Allowances ApiEndpoint = "allowances"
 	Templates  ApiEndpoint = "templates"
 	Tasks      ApiEndpoint = "tasks"
+
+	Albums ApiEndpoint = "albums"
+	Images ApiEndpoint = "images"
 )
 
 // SetRenderFlag is a function that is used to set the Render flag to the value that is passed in.
@@ -215,13 +220,27 @@ func BuildRender(scopes string) Render {
 
 		// Gallery
 		case util.ServiceGallery:
-			if s[0] == string(Read) {
-				gallery.GalleryRead = setRenderFlag(true)
-				continue
-			}
-			if s[0] == string(Write) {
-				gallery.GalleryWrite = setRenderFlag(true)
-				continue
+			switch s[2] {
+			case string(Albums):
+				if s[0] == string(Read) {
+					gallery.AlbumRead = setRenderFlag(true)
+					continue
+				}
+				if s[0] == string(Write) {
+					gallery.AlbumWrite = setRenderFlag(true)
+					continue
+				}
+			case string(Images):
+				if s[0] == string(Read) {
+					gallery.ImageRead = setRenderFlag(true)
+					continue
+				}
+				if s[0] == string(Write) {
+					gallery.ImageWrite = setRenderFlag(true)
+					continue
+				}
+			default:
+				break
 			}
 
 		// Blog
