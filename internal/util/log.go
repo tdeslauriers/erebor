@@ -3,15 +3,16 @@ package util
 const (
 	PackageKey = "package"
 
-	PackageMain    string = "main"
-	PackageGateway string = "gateway"
-	PackageAuth    string = "authentication"
-	PackageSession string = "uxsession"
-	PackageUser    string = "user"
-	PackageScopes  string = "scopes"
-	PackageClients string = "clients"
-	PackageTasks   string = "tasks"
-	PackageGallery  string = "gallery"
+	PackageMain        string = "main"
+	PackageGateway     string = "gateway"
+	PackageAuth        string = "authentication"
+	PackageSession     string = "uxsession"
+	PackageUser        string = "user"
+	PackageScopes      string = "scopes"
+	PackageClients     string = "clients"
+	PackageTasks       string = "tasks"
+	PackageGallery     string = "gallery"
+	PackagePermissions string = "permissions"
 
 	ComponentKey string = "component"
 
@@ -34,7 +35,8 @@ const (
 	ComponentTasks         string = "tasks"
 	ComponentAllowances    string = "allowances"
 	ComponentTemplate      string = "task templates"
-	ComponentImages		string = "gallery images"
+	ComponentImages        string = "gallery images"
+	ComponentPermissions   string = "permissions"
 
 	SerivceKey = "service"
 

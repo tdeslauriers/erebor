@@ -209,6 +209,8 @@ func (h *imageHandler) postImageData(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.logger.Info(fmt.Sprintf("placeholder image data successfully created for slug %s", data.Slug))
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	if err := json.NewEncoder(w).Encode(data); err != nil {

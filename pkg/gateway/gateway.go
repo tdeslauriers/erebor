@@ -12,6 +12,7 @@ import (
 	"erebor/pkg/authentication/uxsession"
 	"erebor/pkg/clients"
 	"erebor/pkg/gallery"
+	"erebor/pkg/permissions"
 	"erebor/pkg/scopes"
 	"erebor/pkg/tasks"
 	"erebor/pkg/user"
@@ -114,18 +115,12 @@ func New(config *config.Config) (Gateway, error) {
 
 	// callers
 	s2s := connect.NewS2sCaller(config.ServiceAuth.Url, util.ServiceS2s, client, retry)
-	identity := connect.NewS2sCaller(config.UserAuth.Url, util.ServiceIdentity, client, retry)
+	iam := connect.NewS2sCaller(config.UserAuth.Url, util.ServiceIdentity, client, retry)
 	task := connect.NewS2sCaller(config.Tasks.Url, util.ServiceTasks, client, retry)
 	gallery := connect.NewS2sCaller(config.Gallery.Url, util.ServiceGallery, client, retry)
 
 	// s2s token provider
-	s2sTokenProvider := provider.NewS2sTokenProvider(s2s, creds, repository, cryptor)
-
-	// ux session service
-	uxSession := uxsession.NewService(&config.OauthRedirect, repository, indexer, cryptor, s2sTokenProvider, identity)
-
-	// oauth service: state, nonce, redirect
-	oAuth := oauth.NewService(config.OauthRedirect, repository, cryptor, indexer)
+	tkn := provider.NewS2sTokenProvider(s2s, creds, repository, cryptor)
 
 	// format public key for use in jwt verification
 	pubPem, err := base64.StdEncoding.DecodeString(config.Jwt.UserVerifyingKey)
@@ -142,26 +137,20 @@ func New(config *config.Config) (Gateway, error) {
 		return nil, fmt.Errorf("not an ECDSA public key")
 	}
 
-	// id token jwt verifier
-	identityVerifier := jwt.NewVerifier(config.ServiceName, publicKey)
-
-	// clean up
-	cleanup := schedule.NewCleanup(repository)
-
 	return &gateway{
 		config:      *config,
 		serverTls:   serverTlsConfig,
 		repository:  repository,
-		tknProvider: s2sTokenProvider,
+		tknProvider: tkn,
 		s2s:         s2s,
-		iam:         identity,
+		iam:         iam,
 		task:        task,
 		gallery:     gallery,
-		uxSession:   uxSession,
-		oAuth:       oAuth,
-		verifier:    identityVerifier, // for user Id token (jwt) verification
+		uxSession:   uxsession.NewService(&config.OauthRedirect, repository, indexer, cryptor, tkn, iam),
+		oAuth:       oauth.NewService(config.OauthRedirect, repository, cryptor, indexer),
+		verifier:    jwt.NewVerifier(config.ServiceName, publicKey),
 		cryptor:     cryptor,
-		cleanup:     cleanup,
+		cleanup:     schedule.NewCleanup(repository),
 
 		logger: slog.Default().
 			With(slog.String(util.PackageKey, util.PackageGateway)).
@@ -199,60 +188,67 @@ func (g *gateway) CloseDb() error {
 
 func (g *gateway) Run() error {
 
-	// setup handlers
-	// session
-	uxSessionHandler := uxsession.NewHandler(g.uxSession)
-	csrfHandler := uxsession.NewCsrfHandler(g.uxSession)
-
-	// authentication
-	register := authentication.NewRegistrationHandler(g.config.OauthRedirect, g.uxSession, g.tknProvider, g.iam)
-
-	oauth := oauth.NewHandler(g.oAuth)
-	login := authentication.NewLoginHandler(g.uxSession, g.tknProvider, g.iam)
-	logout := authentication.NewLogoutHandler(g.uxSession)
-
-	callback := authentication.NewCallbackHandler(g.tknProvider, g.iam, g.oAuth, g.uxSession, g.verifier)
-
-	// profile/accounts
-	accounts := user.NewHandler(g.uxSession, g.tknProvider, g.iam)
-
-	scope := scopes.NewHandler(g.uxSession, g.tknProvider, g.s2s)
-
-	client := clients.NewHandler(g.uxSession, g.tknProvider, g.s2s)
-
-	task := tasks.NewHandler(g.uxSession, g.tknProvider, g.iam, g.task)
-
-	glry := gallery.NewHandler(g.uxSession, g.tknProvider, g.gallery)
-
 	// setup mux
 	mux := http.NewServeMux()
+
+	// health check
 	mux.HandleFunc("/health", diagnostics.HealthCheckHandler)
 
+	// anonymous sessions
+	uxSessionHandler := uxsession.NewHandler(g.uxSession)
 	mux.HandleFunc("/session/anonymous", uxSessionHandler.HandleGetSession)
+
+	// csrf
+	csrfHandler := uxsession.NewCsrfHandler(g.uxSession)
 	mux.HandleFunc("/session/csrf/", csrfHandler.HandleGetCsrf) // trailing slash required for /session/csrf/{session}
 
+	// user registation
+	register := authentication.NewRegistrationHandler(g.config.OauthRedirect, g.uxSession, g.tknProvider, g.iam)
 	mux.HandleFunc("/register", register.HandleRegistration)
 
+	// oauth state
+	oauth := oauth.NewHandler(g.oAuth)
 	mux.HandleFunc("/oauth/state", oauth.HandleGetState)
+
+	// oauth callback
+	callback := authentication.NewCallbackHandler(g.tknProvider, g.iam, g.oAuth, g.uxSession, g.verifier)
 	mux.HandleFunc("/oauth/callback", callback.HandleCallback)
+
+	// login
+	login := authentication.NewLoginHandler(g.uxSession, g.tknProvider, g.iam)
 	mux.HandleFunc("/login", login.HandleLogin)
+
+	// logout
+	logout := authentication.NewLogoutHandler(g.uxSession)
 	mux.HandleFunc("/logout", logout.HandleLogout)
 
+	// user/profile/pw
+	accounts := user.NewHandler(g.uxSession, g.tknProvider, g.iam)
 	mux.HandleFunc("/profile", accounts.HandleProfile)
 	mux.HandleFunc("/reset", accounts.HandleReset)
 	mux.HandleFunc("/users", accounts.HandleUsers)
 	mux.HandleFunc("/users/", accounts.HandleUser) // trailing slash required for /users/{slug}
 	mux.HandleFunc("/users/scopes", accounts.HandleScopes)
 
+	// scopes
+	scope := scopes.NewHandler(g.uxSession, g.tknProvider, g.s2s)
 	mux.HandleFunc("/scopes", scope.HandleScopes)
 	mux.HandleFunc("/scopes/add", scope.HandleAdd)
 	mux.HandleFunc("/scopes/", scope.HandleScope) // trailing slash required for /scopes/{slug}
 
+	// permissions
+	pm := permissions.NewHandler(g.uxSession, g.tknProvider, g.task, g.gallery)
+	mux.HandleFunc("/permissions", pm.HandlePermissions)
+
+	// clients/s2s
+	client := clients.NewHandler(g.uxSession, g.tknProvider, g.s2s)
 	mux.HandleFunc("/clients", client.HandleClients)
 	mux.HandleFunc("/clients/reset", client.HandleReset)
 	mux.HandleFunc("/clients/", client.HandleClient) // trailing slash required for /clients/{slug}; POST is /clients/register
 	mux.HandleFunc("/clients/scopes", client.HandleScopes)
 
+	// tasks/allowances
+	task := tasks.NewHandler(g.uxSession, g.tknProvider, g.iam, g.task)
 	mux.HandleFunc("/account", task.HandleAccount)
 	mux.HandleFunc("/allowances", task.HandleAllowances) // POST is account creation
 	mux.HandleFunc("/allowances/", task.HandleAllowance) // trailing slash required for /allowances/{slug}
@@ -261,6 +257,8 @@ func (g *gateway) Run() error {
 	mux.HandleFunc("/templates/", task.HandleTemplate) // trailing slash required for /templates/{slug}
 	mux.HandleFunc("/tasks", task.HandleTasks)
 
+	// gallery/images/pics
+	glry := gallery.NewHandler(g.uxSession, g.tknProvider, g.gallery)
 	mux.HandleFunc("/images/", glry.HandleImage) // trailing slash required for /images/{slug}
 
 	erebor := &connect.TlsServer{
