@@ -59,8 +59,8 @@ func (h *handler) HandlePermissions(w http.ResponseWriter, r *http.Request) {
 		h.getAllPermissions(w, r)
 		return
 	case http.MethodPost:
-	// h.createPermission(w, r)
-	// return
+		h.createPermission(w, r)
+		return
 	default:
 		h.logger.Error(fmt.Sprintf("unsupported method %s for endpoint %s", r.Method, r.URL.Path))
 		e := connect.ErrorHttp{
@@ -166,4 +166,121 @@ func (h *handler) getServicePermissions(service string, accessToken string, svc 
 
 	h.logger.Info(fmt.Sprintf("successfully retrieved %d permissions from %s", len(ps), service))
 	pmCh <- ps
+}
+
+// createPermission is a helper method that handles the POST request to the /permissions endpoint,
+// creating a new permission record in the downstream services.
+func (h *handler) createPermission(w http.ResponseWriter, r *http.Request) {
+
+	// get session token from request
+	session, err := connect.GetSessionToken(r)
+	if err != nil {
+		h.logger.Error(fmt.Sprintf("failed to get session token from add-permission request: %s", err.Error()))
+		h.session.HandleSessionErr(err, w)
+		return
+	}
+
+	// get the user access token
+	accessToken, err := h.session.GetAccessToken(session)
+	if err != nil {
+		h.logger.Error(fmt.Sprintf("failed to get access token from session token: %s", err.Error()))
+		h.session.HandleSessionErr(err, w)
+		return
+	}
+
+	// get the request body
+	var cmd permissions.Permission
+	if err := json.NewDecoder(r.Body).Decode(&cmd); err != nil {
+		h.logger.Error(fmt.Sprintf("failed to decode request body to permission command: %s", err.Error()))
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusBadRequest,
+			Message:    fmt.Sprintf("failed to decode request body to permission command: %s", err.Error()),
+		}
+		e.SendJsonErr(w)
+		return
+	}
+
+	// validate the command
+	if err := cmd.Validate(); err != nil {
+		h.logger.Error(fmt.Sprintf("failed to validate permission command: %s", err.Error()))
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusUnprocessableEntity,
+			Message:    fmt.Sprintf("failed to validate permission command: %s", err.Error()),
+		}
+		e.SendJsonErr(w)
+		return
+	}
+
+	// validate the csrf token
+	if valid, err := h.session.IsValidCsrf(session, cmd.Csrf); !valid {
+		h.logger.Error(fmt.Sprintf("invalid session or csrf token: %s", err.Error()))
+		h.session.HandleSessionErr(err, w)
+		return
+	}
+
+	// remove the csrf token from the command -> not needed upstream
+	cmd.Csrf = ""
+
+	// determine which service to send the permission to
+	service, err := selectService(cmd.Service)
+	if err != nil {
+		h.logger.Error(fmt.Sprintf("failed to select service for permission: %s", err.Error()))
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusUnprocessableEntity,
+			Message:    fmt.Sprintf("failed to select service for permission: %s", err.Error()),
+		}
+		e.SendJsonErr(w)
+		return
+	}
+
+	// get service token for the selected service
+	s2sToken, err := h.token.GetServiceToken(service)
+	if err != nil {
+		h.logger.Error(fmt.Sprintf("failed to get service token for %s: %s", service, err.Error()))
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusInternalServerError,
+			Message:    fmt.Sprintf("failed to get service token for %s: %s", service, err.Error()),
+		}
+		e.SendJsonErr(w)
+		return
+	}
+
+	// post to applicable service
+	var p permissions.Permission
+	switch service {
+	case util.ServiceTasks:
+		if err := h.tasks.PostToService("/permissions", s2sToken, accessToken, cmd, &p); err != nil {
+			h.logger.Error(fmt.Sprintf("failed to post permission to tasks service: %s", err.Error()))
+			h.tasks.RespondUpstreamError(err, w)
+			return
+		}
+	case util.ServiceGallery:
+		if err := h.gallery.PostToService("/permissions", s2sToken, accessToken, cmd, &p); err != nil {
+			h.logger.Error(fmt.Sprintf("failed to post permission to gallery service: %s", err.Error()))
+			h.tasks.RespondUpstreamError(err, w)
+			return
+		}
+	default:
+		h.logger.Error(fmt.Sprintf("unsupported service %s for permission creation", service))
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusUnprocessableEntity,
+			Message:    fmt.Sprintf("unsupported service %s for permission creation", service),
+		}
+		e.SendJsonErr(w)
+		return
+	}
+
+	h.logger.Info(fmt.Sprintf("successfully created permission %s for service %s", p.Name, service))
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	if err := json.NewEncoder(w).Encode(p); err != nil {
+		h.logger.Error(fmt.Sprintf("failed to encode permission to JSON: %s", err.Error()))
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusInternalServerError,
+			Message:    fmt.Sprintf("failed to encode permission to JSON: %s", err.Error()),
+		}
+		e.SendJsonErr(w)
+		return
+	}
 }

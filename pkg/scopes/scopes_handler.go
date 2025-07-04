@@ -129,7 +129,7 @@ func (h *handler) HandleAdd(w http.ResponseWriter, r *http.Request) {
 	// get session token from request
 	session, err := connect.GetSessionToken(r)
 	if err != nil {
-		h.logger.Error(fmt.Sprintf("failed to get session token from request: %s", err.Error()))
+		h.logger.Error(fmt.Sprintf("failed to get session token from scope add request: %s", err.Error()))
 		h.session.HandleSessionErr(err, w)
 		return
 	}
@@ -173,7 +173,7 @@ func (h *handler) HandleAdd(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// remove csrf token from request cmd
+	// remove csrf token from request cmd -> not needed upstream
 	cmd.Csrf = ""
 
 	// get s2s token for s2s service
