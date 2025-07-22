@@ -222,13 +222,14 @@ func (g *gateway) Run() error {
 	logout := authentication.NewLogoutHandler(g.uxSession)
 	mux.HandleFunc("/logout", logout.HandleLogout)
 
-	// user/profile/pw
-	accounts := user.NewHandler(g.uxSession, g.tknProvider, g.iam)
+	// user, profile, pw
+	accounts := user.NewHandler(g.uxSession, g.tknProvider, g.iam, g.task, g.gallery)
 	mux.HandleFunc("/profile", accounts.HandleProfile)
 	mux.HandleFunc("/reset", accounts.HandleReset)
 	mux.HandleFunc("/users", accounts.HandleUsers)
 	mux.HandleFunc("/users/", accounts.HandleUser) // trailing slash required for /users/{slug}
 	mux.HandleFunc("/users/scopes", accounts.HandleScopes)
+	mux.HandleFunc("/users/permissions", accounts.HandlePermissions)
 
 	// scopes
 	scope := scopes.NewHandler(g.uxSession, g.tknProvider, g.s2s)

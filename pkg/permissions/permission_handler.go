@@ -357,7 +357,7 @@ func (h *handler) createPermission(w http.ResponseWriter, r *http.Request) {
 	cmd.Csrf = ""
 
 	// determine which service to send the permission to
-	service, err := selectService(cmd.Service)
+	service, err := selectService(cmd.ServiceName)
 	if err != nil {
 		h.logger.Error(fmt.Sprintf("failed to select service for permission: %s", err.Error()))
 		e := connect.ErrorHttp{
@@ -472,6 +472,7 @@ func (h *handler) updatePermission(w http.ResponseWriter, r *http.Request) {
 	if valid := validate.IsValidUuid(slug); !valid {
 		h.logger.Error(fmt.Sprintf("invalid permission slug: %s", slug))
 		e := connect.ErrorHttp{
+			
 			StatusCode: http.StatusBadRequest,
 			Message:    fmt.Sprintf("invalid permission slug: %s", slug),
 		}
@@ -515,11 +516,11 @@ func (h *handler) updatePermission(w http.ResponseWriter, r *http.Request) {
 	// check url path service matches command service
 	// this is a redundant check since it will be dropped, but it would suggest
 	// tampering with the request if the service in the URL does not match the command
-	if cmd.Service != service {
-		h.logger.Error(fmt.Sprintf("service in URL %s does not match service in update command %s", service, cmd.Service))
+	if cmd.ServiceName != service {
+		h.logger.Error(fmt.Sprintf("service in URL %s does not match service in update command %s", service, cmd.ServiceName))
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusBadRequest,
-			Message:    fmt.Sprintf("service in URL %s does not match service in update command %s", service, cmd.Service),
+			Message:    fmt.Sprintf("service in URL %s does not match service in update command %s", service, cmd.ServiceName),
 		}
 		e.SendJsonErr(w)
 		return

@@ -4,12 +4,17 @@ import (
 	"encoding/json"
 	"erebor/internal/util"
 	"erebor/pkg/authentication/uxsession"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/tdeslauriers/carapace/pkg/connect"
+	"github.com/tdeslauriers/carapace/pkg/jwt"
+	"github.com/tdeslauriers/carapace/pkg/permissions"
 	"github.com/tdeslauriers/carapace/pkg/profile"
 	"github.com/tdeslauriers/carapace/pkg/session/provider"
 )
@@ -173,6 +178,18 @@ func (h *userHandler) handleGetUser(w http.ResponseWriter, r *http.Request) {
 
 	// TODO: placeholder for geting silhouette data from silhouette service
 
+	// get permissions for the user from applicable services
+	ps, err := h.getPermissions(user.Username, accessToken)
+	if err != nil {
+		h.logger.Error(fmt.Sprintf("failed to get permissions for user %s: %s", user.Username, err.Error()))
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusInternalServerError,
+			Message:    "failed to get permissions for user",
+		}
+		e.SendJsonErr(w)
+		return
+	}
+
 	// build profile model for user data + silhouette data
 	profile := ProfileCmd{
 		// NEVER RETURN THE CSRF/SESSION TOKEN TO THE CLIENT
@@ -188,6 +205,7 @@ func (h *userHandler) handleGetUser(w http.ResponseWriter, r *http.Request) {
 		AccountExpired: user.AccountExpired,
 		AccountLocked:  user.AccountLocked,
 		Scopes:         user.Scopes,
+		Permissions:    ps,
 	}
 
 	// add date of birth fields to profile model if birthdate is present
@@ -369,4 +387,108 @@ func (h *userHandler) handlePutUser(w http.ResponseWriter, r *http.Request) {
 		e.SendJsonErr(w)
 		return
 	}
+}
+
+// getPermissions is a helper function which  fetches permissions for a user from multiple services concurrently.
+// it mostly exists to make the code more readable and to avoid code duplication.
+func (h *userHandler) getPermissions(username, accessToken string) ([]permissions.Permission, error) {
+
+	// check user scopes to determine which services to call for permissions
+	jot, err := jwt.BuildFromToken(accessToken)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build JWT from access token: %v", err)
+	}
+
+	hasTasksScope := hasScope(util.ServiceTasks, jot.Claims.Scopes)
+	hasGalleryScope := hasScope(util.ServiceGallery, jot.Claims.Scopes)
+
+	// get permissions from tasks and gallery services
+	var (
+		wg     sync.WaitGroup
+		permCh = make(chan []permissions.Permission, 2)
+		errCh  = make(chan error, 2)
+	)
+
+	if hasTasksScope {
+		wg.Add(1)
+		go h.getServicePermissions(username, util.ServiceTasks, accessToken, permCh, errCh, &wg)
+	}
+	if hasGalleryScope {
+		wg.Add(1)
+		go h.getServicePermissions(username, util.ServiceGallery, accessToken, permCh, errCh, &wg)
+	}
+
+	wg.Wait()
+	close(permCh)
+	close(errCh)
+
+	// determine if there were any errors from the goroutines
+	if len(errCh) > 0 {
+		var errs []error
+		for err := range errCh {
+			errs = append(errs, err)
+		}
+		return nil, fmt.Errorf("failed to get permissions from services: %s", errors.Join(errs...))
+	}
+
+	// collect permissions from channels
+	var all []permissions.Permission
+	for perms := range permCh {
+		all = append(all, perms...)
+	}
+
+	return all, nil
+}
+
+// is a helper method to fetch permissions for a user from a specific service
+// mostly it exists to make the code more readable and to avoid code duplication
+func (h *userHandler) getServicePermissions(username, service, accessToken string, pCh chan<- []permissions.Permission, errCh chan<- error, wg *sync.WaitGroup) {
+
+	defer wg.Done()
+
+	// get service token for the service
+	token, err := h.provider.GetServiceToken(service)
+	if err != nil {
+		errCh <- fmt.Errorf("failed to get service token for %s service: %s", service, err.Error())
+		return
+	}
+
+	var prefix string
+	switch service {
+	case util.ServiceTasks:
+		prefix = "/allowances"
+	case util.ServiceGallery:
+		prefix = "/patrons"
+	default:
+		errCh <- fmt.Errorf("unknown service: %s", service)
+		return
+	}
+
+	// make request to the service
+	var permissions []permissions.Permission
+	if err := h.identity.GetServiceData(fmt.Sprintf("%s/permissions?email=%s", prefix, username), token, accessToken, &permissions); err != nil {
+		errCh <- fmt.Errorf("failed to get permissions from %s service: %s", service, err.Error())
+		return
+	}
+
+	pCh <- permissions
+}
+
+// hasScope checks if the user has a services's scope in their access token to determine
+// if they should call the service or skip it
+func hasScope(service string, scopes string) bool {
+
+	// scopes is a space-separated string of scopes, e.g. "tasks:read tasks:write gallery:read"
+	scps := strings.Split(scopes, " ")
+	if len(scps) == 0 {
+		return false
+	}
+
+	// check if the scope slice has the service name in it.
+	for _, s := range scps {
+		if strings.Contains(s, service) {
+			return true
+		}
+	}
+	return false
 }

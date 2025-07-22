@@ -7,6 +7,7 @@ import (
 
 	"github.com/tdeslauriers/carapace/pkg/connect"
 	"github.com/tdeslauriers/carapace/pkg/data"
+	"github.com/tdeslauriers/carapace/pkg/permissions"
 	"github.com/tdeslauriers/carapace/pkg/session/provider"
 	"github.com/tdeslauriers/carapace/pkg/session/types"
 	"github.com/tdeslauriers/carapace/pkg/validate"
@@ -14,18 +15,20 @@ import (
 
 // Handler is the interface for handling user requests from the client.  Aggregates all user handler interfaces.
 type Handler interface {
+	PermissionsHandler
 	ProfileHandler
 	ResetHandler
 	ScopesHandler
 	UserHandler
 }
 
-func NewHandler(ux uxsession.Service, p provider.S2sTokenProvider, c connect.S2sCaller) Handler {
+func NewHandler(ux uxsession.Service, p provider.S2sTokenProvider, iam, task, g connect.S2sCaller) Handler {
 	return &handler{
-		ProfileHandler: NewProfileHandler(ux, p, c),
-		ResetHandler:   NewResetHandler(ux, p, c),
-		ScopesHandler:  NewScopesHandler(ux, p, c),
-		UserHandler:    NewUserHandler(ux, p, c),
+		PermissionsHandler: NewPermissionsHandler(ux, p, iam, task, g),
+		ProfileHandler:     NewProfileHandler(ux, p, iam),
+		ResetHandler:       NewResetHandler(ux, p, iam),
+		ScopesHandler:      NewScopesHandler(ux, p, iam),
+		UserHandler:        NewUserHandler(ux, p, iam),
 	}
 }
 
@@ -33,6 +36,7 @@ var _ Handler = (*handler)(nil)
 
 // handler is the concrete implementation of the interface function that handles user requests from the client.
 type handler struct {
+	PermissionsHandler
 	ProfileHandler
 	ResetHandler
 	ScopesHandler
@@ -44,19 +48,20 @@ type handler struct {
 type ProfileCmd struct {
 	Csrf string `json:"csrf,omitempty"`
 
-	Id             string          `json:"id,omitempty"`
-	Username       string          `json:"username"`
-	Firstname      string          `json:"firstname"`
-	Lastname       string          `json:"lastname"`
-	BirthMonth     int             `json:"birth_month,omitempty"`
-	BirthDay       int             `json:"birth_day,omitempty"`
-	BirthYear      int             `json:"birth_year,omitempty"`
-	Slug           string          `json:"slug,omitempty"`
-	CreatedAt      data.CustomTime `json:"created_at"`
-	Enabled        bool            `json:"enabled"`
-	AccountExpired bool            `json:"account_expired"`
-	AccountLocked  bool            `json:"account_locked"`
-	Scopes         []types.Scope   `json:"scopes,omitempty"` // will not always be returned: call specific
+	Id             string                   `json:"id,omitempty"`
+	Username       string                   `json:"username"`
+	Firstname      string                   `json:"firstname"`
+	Lastname       string                   `json:"lastname"`
+	BirthMonth     int                      `json:"birth_month,omitempty"`
+	BirthDay       int                      `json:"birth_day,omitempty"`
+	BirthYear      int                      `json:"birth_year,omitempty"`
+	Slug           string                   `json:"slug,omitempty"`
+	CreatedAt      data.CustomTime          `json:"created_at"`
+	Enabled        bool                     `json:"enabled"`
+	AccountExpired bool                     `json:"account_expired"`
+	AccountLocked  bool                     `json:"account_locked"`
+	Scopes         []types.Scope            `json:"scopes,omitempty"`      // will not always be returned: call specific
+	Permissions    []permissions.Permission `json:"permissions,omitempty"` // will not always be returned: call specific
 }
 
 func (cmd *ProfileCmd) ValidateCmd() error {
