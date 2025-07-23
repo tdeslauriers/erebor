@@ -28,7 +28,7 @@ func NewHandler(ux uxsession.Service, p provider.S2sTokenProvider, iam, task, g 
 		ProfileHandler:     NewProfileHandler(ux, p, iam),
 		ResetHandler:       NewResetHandler(ux, p, iam),
 		ScopesHandler:      NewScopesHandler(ux, p, iam),
-		UserHandler:        NewUserHandler(ux, p, iam),
+		UserHandler:        NewUserHandler(ux, p, iam, task, g),
 	}
 }
 
@@ -48,20 +48,20 @@ type handler struct {
 type ProfileCmd struct {
 	Csrf string `json:"csrf,omitempty"`
 
-	Id             string                   `json:"id,omitempty"`
-	Username       string                   `json:"username"`
-	Firstname      string                   `json:"firstname"`
-	Lastname       string                   `json:"lastname"`
-	BirthMonth     int                      `json:"birth_month,omitempty"`
-	BirthDay       int                      `json:"birth_day,omitempty"`
-	BirthYear      int                      `json:"birth_year,omitempty"`
-	Slug           string                   `json:"slug,omitempty"`
-	CreatedAt      data.CustomTime          `json:"created_at"`
-	Enabled        bool                     `json:"enabled"`
-	AccountExpired bool                     `json:"account_expired"`
-	AccountLocked  bool                     `json:"account_locked"`
-	Scopes         []types.Scope            `json:"scopes,omitempty"`      // will not always be returned: call specific
-	Permissions    []permissions.Permission `json:"permissions,omitempty"` // will not always be returned: call specific
+	Id             string                         `json:"id,omitempty"`
+	Username       string                         `json:"username"`
+	Firstname      string                         `json:"firstname"`
+	Lastname       string                         `json:"lastname"`
+	BirthMonth     int                            `json:"birth_month,omitempty"`
+	BirthDay       int                            `json:"birth_day,omitempty"`
+	BirthYear      int                            `json:"birth_year,omitempty"`
+	Slug           string                         `json:"slug,omitempty"`
+	CreatedAt      data.CustomTime                `json:"created_at"`
+	Enabled        bool                           `json:"enabled"`
+	AccountExpired bool                           `json:"account_expired"`
+	AccountLocked  bool                           `json:"account_locked"`
+	Scopes         []types.Scope                  `json:"scopes,omitempty"`      // will not always be returned: call specific
+	Permissions    []permissions.PermissionRecord `json:"permissions,omitempty"` // will not always be returned: call specific
 }
 
 func (cmd *ProfileCmd) ValidateCmd() error {

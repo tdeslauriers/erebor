@@ -56,8 +56,9 @@ type permissionsHandler struct {
 func (h *permissionsHandler) HandlePermissions(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
-	case http.MethodGet:
-		return
+	// case http.MethodGet:
+
+	// 	return
 	case http.MethodPut:
 		h.updateUserPermissions(w, r)
 		return
@@ -179,29 +180,28 @@ func (h *permissionsHandler) updateUserPermissions(w http.ResponseWriter, r *htt
 		errCh = make(chan error, 2) // buffered channel to collect errors
 	)
 
-	wg.Add(1)
+	// wg.Add(1)
+	// go func(eChan chan error, wg *sync.WaitGroup) {
+	// 	defer wg.Done()
 
-	go func(eChan chan error, wg *sync.WaitGroup) {
-		defer wg.Done()
+	// 	galleryCmd := exo.UpdatePermissionsCmd{
+	// 		Entity:      user.Username,
+	// 		Permissions: galleryPermissions,
+	// 	}
 
-		galleryCmd := exo.UpdatePermissionsCmd{
-			Entity:      user.Username,
-			Permissions: galleryPermissions,
-		}
+	// 	// get service token for gallery service
+	// 	galleryToken, err := h.provider.GetServiceToken(util.ServiceGallery)
+	// 	if err != nil {
+	// 		eChan <- fmt.Errorf("failed to get service token for gallery service: %s", err.Error())
+	// 		return
+	// 	}
 
-		// get service token for gallery service
-		galleryToken, err := h.provider.GetServiceToken(util.ServiceGallery)
-		if err != nil {
-			eChan <- fmt.Errorf("failed to get service token for gallery service: %s", err.Error())
-			return
-		}
-
-		// make request to the gallery service
-		if err := h.gallery.PostToService("/permissions", galleryToken, accessToken, galleryCmd, nil); err != nil {
-			eChan <- fmt.Errorf("failed to update gallery permissions: %s", err.Error())
-			return
-		}
-	}(errCh, &wg)
+	// 	// make request to the gallery service
+	// 	if err := h.gallery.PostToService("/patrons/permissions", galleryToken, accessToken, galleryCmd, nil); err != nil {
+	// 		eChan <- fmt.Errorf("failed to update gallery permissions: %s", err.Error())
+	// 		return
+	// 	}
+	// }(errCh, &wg)
 
 	wg.Add(1)
 	go func(eChan chan error, wg *sync.WaitGroup) {
@@ -220,7 +220,7 @@ func (h *permissionsHandler) updateUserPermissions(w http.ResponseWriter, r *htt
 		}
 
 		// make request to the tasks service
-		if err := h.tasks.PostToService("/permissions", tasksToken, accessToken, tasksCmd, nil); err != nil {
+		if err := h.tasks.PostToService("/allowances/permissions", tasksToken, accessToken, tasksCmd, nil); err != nil {
 			eChan <- fmt.Errorf("failed to update tasks permissions: %s", err.Error())
 			return
 		}

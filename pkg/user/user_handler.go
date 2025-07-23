@@ -28,11 +28,13 @@ type UserHandler interface {
 	HandleUser(w http.ResponseWriter, r *http.Request)
 }
 
-func NewUserHandler(ux uxsession.Service, p provider.S2sTokenProvider, c connect.S2sCaller) UserHandler {
+func NewUserHandler(ux uxsession.Service, p provider.S2sTokenProvider, i, t, g connect.S2sCaller) UserHandler {
 	return &userHandler{
 		session:  ux,
 		provider: p,
-		identity: c,
+		identity: i,
+		tasks:    t,
+		gallery:  g,
 
 		logger: slog.Default().
 			With(slog.String(util.PackageKey, util.PackageUser)).
@@ -46,6 +48,8 @@ type userHandler struct {
 	session  uxsession.Service
 	provider provider.S2sTokenProvider
 	identity connect.S2sCaller
+	tasks    connect.S2sCaller
+	gallery  connect.S2sCaller
 
 	logger *slog.Logger
 }
@@ -391,7 +395,7 @@ func (h *userHandler) handlePutUser(w http.ResponseWriter, r *http.Request) {
 
 // getPermissions is a helper function which  fetches permissions for a user from multiple services concurrently.
 // it mostly exists to make the code more readable and to avoid code duplication.
-func (h *userHandler) getPermissions(username, accessToken string) ([]permissions.Permission, error) {
+func (h *userHandler) getPermissions(username, accessToken string) ([]permissions.PermissionRecord, error) {
 
 	// check user scopes to determine which services to call for permissions
 	jot, err := jwt.BuildFromToken(accessToken)
@@ -405,7 +409,7 @@ func (h *userHandler) getPermissions(username, accessToken string) ([]permission
 	// get permissions from tasks and gallery services
 	var (
 		wg     sync.WaitGroup
-		permCh = make(chan []permissions.Permission, 2)
+		permCh = make(chan []permissions.PermissionRecord, 2)
 		errCh  = make(chan error, 2)
 	)
 
@@ -432,7 +436,7 @@ func (h *userHandler) getPermissions(username, accessToken string) ([]permission
 	}
 
 	// collect permissions from channels
-	var all []permissions.Permission
+	var all []permissions.PermissionRecord
 	for perms := range permCh {
 		all = append(all, perms...)
 	}
@@ -442,7 +446,7 @@ func (h *userHandler) getPermissions(username, accessToken string) ([]permission
 
 // is a helper method to fetch permissions for a user from a specific service
 // mostly it exists to make the code more readable and to avoid code duplication
-func (h *userHandler) getServicePermissions(username, service, accessToken string, pCh chan<- []permissions.Permission, errCh chan<- error, wg *sync.WaitGroup) {
+func (h *userHandler) getServicePermissions(username, service, accessToken string, pCh chan<- []permissions.PermissionRecord, errCh chan<- error, wg *sync.WaitGroup) {
 
 	defer wg.Done()
 
@@ -453,25 +457,27 @@ func (h *userHandler) getServicePermissions(username, service, accessToken strin
 		return
 	}
 
-	var prefix string
 	switch service {
 	case util.ServiceTasks:
-		prefix = "/allowances"
+		var permissions []permissions.PermissionRecord
+		if err := h.tasks.GetServiceData(fmt.Sprintf("/allowances/permissions?username=%s", username), token, accessToken, &permissions); err != nil {
+			errCh <- fmt.Errorf("failed to get permissions from %s service: %s", service, err.Error())
+			return
+		}
+		pCh <- permissions
+		return
 	case util.ServiceGallery:
-		prefix = "/patrons"
+		var permissions []permissions.PermissionRecord
+		if err := h.gallery.GetServiceData(fmt.Sprintf("/patrons/permissions?username=%s", username), token, accessToken, &permissions); err != nil {
+			errCh <- fmt.Errorf("failed to get permissions from %s service: %s", service, err.Error())
+			return
+		}
+		pCh <- permissions
+		return
 	default:
 		errCh <- fmt.Errorf("unknown service: %s", service)
 		return
 	}
-
-	// make request to the service
-	var permissions []permissions.Permission
-	if err := h.identity.GetServiceData(fmt.Sprintf("%s/permissions?email=%s", prefix, username), token, accessToken, &permissions); err != nil {
-		errCh <- fmt.Errorf("failed to get permissions from %s service: %s", service, err.Error())
-		return
-	}
-
-	pCh <- permissions
 }
 
 // hasScope checks if the user has a services's scope in their access token to determine

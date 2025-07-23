@@ -28,7 +28,7 @@ func selectService(service string) (string, error) {
 // that the gateway receives from the client.  Entity will be a resource slug.
 type UpdatePermissionsCmd struct {
 	Csrf               string              `json:"csrf,omitempty"`
-	EntitySlug         string              `json:"entity,omitempty"`
+	EntitySlug         string              `json:"entity_slug,omitempty"`
 	ServicePermissions []ServicePermission `json:"service_permissions,omitempty"`
 }
 
