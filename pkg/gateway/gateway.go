@@ -13,6 +13,7 @@ import (
 	"erebor/pkg/clients"
 	"erebor/pkg/gallery"
 	"erebor/pkg/permissions"
+	"erebor/pkg/scheduled"
 	"erebor/pkg/scopes"
 	"erebor/pkg/tasks"
 	"erebor/pkg/user"
@@ -27,7 +28,6 @@ import (
 	"github.com/tdeslauriers/carapace/pkg/data"
 	"github.com/tdeslauriers/carapace/pkg/diagnostics"
 	"github.com/tdeslauriers/carapace/pkg/jwt"
-	"github.com/tdeslauriers/carapace/pkg/schedule"
 	"github.com/tdeslauriers/carapace/pkg/session/provider"
 )
 
@@ -150,7 +150,7 @@ func New(config *config.Config) (Gateway, error) {
 		oAuth:       oauth.NewService(config.OauthRedirect, repository, cryptor, indexer),
 		verifier:    jwt.NewVerifier(config.ServiceName, publicKey),
 		cryptor:     cryptor,
-		cleanup:     schedule.NewCleanup(repository),
+		cleanup:     scheduled.NewService(repository, tkn, iam, gallery),
 
 		logger: slog.Default().
 			With(slog.String(util.PackageKey, util.PackageGateway)).
@@ -173,7 +173,7 @@ type gateway struct {
 	oAuth       oauth.Service
 	verifier    jwt.Verifier
 	cryptor     data.Cryptor
-	cleanup     schedule.Cleanup
+	cleanup     scheduled.Service
 
 	logger *slog.Logger
 }
@@ -281,6 +281,7 @@ func (g *gateway) Run() error {
 	g.cleanup.ExpiredAccess()
 	g.cleanup.ExpiredS2s()
 	g.cleanup.ExpiredSession(1)
+	g.cleanup.ReconcileGalleryAccounts()
 
 	return nil
 }
