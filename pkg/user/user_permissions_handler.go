@@ -180,28 +180,28 @@ func (h *permissionsHandler) updateUserPermissions(w http.ResponseWriter, r *htt
 		errCh = make(chan error, 2) // buffered channel to collect errors
 	)
 
-	// wg.Add(1)
-	// go func(eChan chan error, wg *sync.WaitGroup) {
-	// 	defer wg.Done()
+	wg.Add(1)
+	go func(eChan chan error, wg *sync.WaitGroup) {
+		defer wg.Done()
 
-	// 	galleryCmd := exo.UpdatePermissionsCmd{
-	// 		Entity:      user.Username,
-	// 		Permissions: galleryPermissions,
-	// 	}
+		galleryCmd := exo.UpdatePermissionsCmd{
+			Entity:      user.Username,
+			Permissions: galleryPermissions,
+		}
 
-	// 	// get service token for gallery service
-	// 	galleryToken, err := h.provider.GetServiceToken(util.ServiceGallery)
-	// 	if err != nil {
-	// 		eChan <- fmt.Errorf("failed to get service token for gallery service: %s", err.Error())
-	// 		return
-	// 	}
+		// get service token for gallery service
+		galleryToken, err := h.provider.GetServiceToken(util.ServiceGallery)
+		if err != nil {
+			eChan <- fmt.Errorf("failed to get service token for gallery service: %s", err.Error())
+			return
+		}
 
-	// 	// make request to the gallery service
-	// 	if err := h.gallery.PostToService("/patrons/permissions", galleryToken, accessToken, galleryCmd, nil); err != nil {
-	// 		eChan <- fmt.Errorf("failed to update gallery permissions: %s", err.Error())
-	// 		return
-	// 	}
-	// }(errCh, &wg)
+		// make request to the gallery service
+		if err := h.gallery.PostToService("/patrons/permissions", galleryToken, accessToken, galleryCmd, nil); err != nil {
+			eChan <- fmt.Errorf("failed to update gallery permissions: %s", err.Error())
+			return
+		}
+	}(errCh, &wg)
 
 	wg.Add(1)
 	go func(eChan chan error, wg *sync.WaitGroup) {
