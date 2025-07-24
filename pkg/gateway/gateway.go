@@ -203,7 +203,7 @@ func (g *gateway) Run() error {
 	mux.HandleFunc("/session/csrf/", csrfHandler.HandleGetCsrf) // trailing slash required for /session/csrf/{session}
 
 	// user registation
-	register := authentication.NewRegistrationHandler(g.config.OauthRedirect, g.uxSession, g.tknProvider, g.iam)
+	register := authentication.NewRegistrationHandler(g.config.OauthRedirect, g.uxSession, g.tknProvider, g.iam, g.gallery)
 	mux.HandleFunc("/register", register.HandleRegistration)
 
 	// oauth state

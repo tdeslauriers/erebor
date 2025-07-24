@@ -13,6 +13,7 @@ import (
 	"github.com/tdeslauriers/carapace/pkg/connect"
 	"github.com/tdeslauriers/carapace/pkg/session/provider"
 	"github.com/tdeslauriers/carapace/pkg/session/types"
+	"github.com/tdeslauriers/pixie/pkg/patron"
 )
 
 type RegistrationHandler interface {
@@ -20,14 +21,18 @@ type RegistrationHandler interface {
 	HandleRegistration(w http.ResponseWriter, r *http.Request)
 }
 
-func NewRegistrationHandler(o config.OauthRedirect, s uxsession.Service, p provider.S2sTokenProvider, c connect.S2sCaller) RegistrationHandler {
+func NewRegistrationHandler(o config.OauthRedirect, s uxsession.Service, p provider.S2sTokenProvider, iam, g connect.S2sCaller) RegistrationHandler {
 	return &registrationHandler{
 		oAuth:     o,
 		uxSession: s,
 		s2sToken:  p,
-		caller:    c,
+		identity:  iam,
+		gallery:   g,
 
-		logger: slog.Default().With(slog.String(util.PackageKey, util.PackageAuth)).With(slog.String(util.ComponentKey, util.ComponentRegister)),
+		logger: slog.Default().
+			With(slog.String(util.SerivceKey, util.ServiceGateway)).
+			With(slog.String(util.PackageKey, util.PackageAuth)).
+			With(slog.String(util.ComponentKey, util.ComponentRegister)),
 	}
 }
 
@@ -37,7 +42,8 @@ type registrationHandler struct {
 	oAuth     config.OauthRedirect
 	uxSession uxsession.Service
 	s2sToken  provider.S2sTokenProvider
-	caller    connect.S2sCaller
+	identity  connect.S2sCaller
+	gallery   connect.S2sCaller
 
 	logger *slog.Logger
 }
@@ -96,7 +102,7 @@ func (h *registrationHandler) HandleRegistration(w http.ResponseWriter, r *http.
 	cmd.Csrf = ""
 
 	// get shaw service token
-	s2sToken, err := h.s2sToken.GetServiceToken(util.ServiceIdentity)
+	s2sIamToken, err := h.s2sToken.GetServiceToken(util.ServiceIdentity)
 	if err != nil {
 		h.logger.Error(err.Error())
 		e := connect.ErrorHttp{
@@ -109,13 +115,35 @@ func (h *registrationHandler) HandleRegistration(w http.ResponseWriter, r *http.
 
 	// call identity service with registration request
 	var registered types.UserAccount
-	if err := h.caller.PostToService("/register", s2sToken, "", cmd, &registered); err != nil {
+	if err := h.identity.PostToService("/register", s2sIamToken, "", cmd, &registered); err != nil {
 		h.logger.Error(fmt.Sprintf("failed to register user %s", cmd.Username), "err", err.Error())
-		h.caller.RespondUpstreamError(err, w)
+		h.identity.RespondUpstreamError(err, w)
 		return
 	}
 
-	// TODO: gallery account creation
+	h.logger.Info(fmt.Sprintf("user %s successfully registered", registered.Username))
+
+	// ghost account creation in downstream services
+	// concurrent so can return immediately --> ghost account creation abstracted from user
+	// gallery account creation
+	go func(username string) {
+
+		s2sGalleryToken, err := h.s2sToken.GetServiceToken(util.ServiceGallery)
+		if err != nil {
+			// logging only, not returning error --> hidden/abstracted from user
+			h.logger.Error(fmt.Sprintf("failed to get s2s token for gallery service: %s", err.Error()))
+			return
+		}
+
+		if err := h.gallery.PostToService("/patrons/register", s2sGalleryToken, "", patron.PatronRegisterCmd{Username: username}, nil); err != nil {
+			// logging only, not returning error --> hidden/abstracted from user
+			h.logger.Error(fmt.Sprintf("failed to create gallery patron for user %s: %s", registered.Username, err.Error()))
+			return
+		}
+
+		h.logger.Info(fmt.Sprintf("gallery patron account successfully created for user %s", username))
+
+	}(registered.Username)
 
 	// respond 201 + registered user
 	w.Header().Set("Content-Type", "application/json")
