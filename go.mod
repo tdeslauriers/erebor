@@ -1,12 +1,12 @@
 module erebor
 
-go 1.23.0
+go 1.23.9
 
 toolchain go1.24.4
 
 require (
-	github.com/tdeslauriers/carapace v0.1.66
-	github.com/tdeslauriers/pixie v0.0.6
+	github.com/tdeslauriers/carapace v0.1.67
+	github.com/tdeslauriers/pixie v0.0.7
 )
 
 require (

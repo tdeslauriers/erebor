@@ -54,6 +54,9 @@ func (h *imageHandler) HandleImage(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		h.getImageData(w, r)
 		return
+	case http.MethodPut: // /images/slug --> slug will be the slug for PUTs
+		h.updateImageData(w, r)
+		return
 	case http.MethodPost: // /images/upload --> upload will be the slug for POSTs
 		h.postImageData(w, r)
 		return
@@ -133,6 +136,91 @@ func (h *imageHandler) getImageData(w http.ResponseWriter, r *http.Request) {
 		e.SendJsonErr(w)
 		return
 	}
+}
+
+// updateImageData handles the PUT request to update image data by slug.
+func (h *imageHandler) updateImageData(w http.ResponseWriter, r *http.Request) {
+
+	// get session token from the request header
+	session, err := connect.GetSessionToken(r)
+	if err != nil {
+		h.logger.Error(fmt.Sprintf("invalid session token on /images/slug put request: %s", err.Error()))
+		h.ux.HandleSessionErr(err, w)
+		return
+	}
+
+	// get access token tied to the session
+	accessToken, err := h.ux.GetAccessToken(session)
+	if err != nil {
+		h.logger.Error(fmt.Sprintf("failed to get access token from session token: %s", err.Error()))
+		h.ux.HandleSessionErr(err, w)
+		return
+	}
+
+	// get the template slug from the request URL
+	slug, err := connect.GetValidSlug(r)
+	if err != nil {
+		h.logger.Error(fmt.Sprintf("invalid image slug: %s", err.Error()))
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusBadRequest,
+			Message:    "invalid template slug",
+		}
+		e.SendJsonErr(w)
+		return
+	}
+
+	var cmd image.UpdateMetadataCmd
+	if err := json.NewDecoder(r.Body).Decode(&cmd); err != nil {
+		h.logger.Error(fmt.Sprintf("failed to decode JSON in image metadata update request body: %s", err.Error()))
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusBadRequest,
+			Message:    "improperly formatted json",
+		}
+		e.SendJsonErr(w)
+		return
+	}
+
+	if err := cmd.Validate(); err != nil {
+		h.logger.Error(fmt.Sprintf("failed to validate image metadata update command: %s", err.Error()))
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusUnprocessableEntity,
+			Message:    err.Error(),
+		}
+		e.SendJsonErr(w)
+		return
+	}
+
+	// validate the csrf token
+	if valid, err := h.ux.IsValidCsrf(session, cmd.Csrf); !valid {
+		h.logger.Error(fmt.Sprintf("invalid session or csrf token: %s", err.Error()))
+		h.ux.HandleSessionErr(err, w)
+		return
+	}
+
+	// csrf token from the command
+	cmd.Csrf = ""
+
+	// get service token
+	galleryToken, err := h.tkn.GetServiceToken(util.ServiceGallery)
+	if err != nil {
+		h.logger.Error(fmt.Sprintf("failed to get service token for gallery service: %s", err.Error()))
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusInternalServerError,
+			Message:    "internal server error",
+		}
+		e.SendJsonErr(w)
+		return
+	}
+
+	// post update cmd to gallery service
+	if err := h.gallery.PostToService(fmt.Sprintf("/images/%s", slug), galleryToken, accessToken, cmd, nil); err != nil {
+		h.logger.Error(fmt.Sprintf("failed to update image data for slug %s: %s", slug, err.Error()))
+		h.gallery.RespondUpstreamError(err, w)
+		return
+	}
+
+	h.logger.Info(fmt.Sprintf("image data successfully updated for image slug %s", slug))
+	w.WriteHeader(http.StatusNoContent) // 204 No Content
 }
 
 // postImageData handles the POST request to upload image data.
