@@ -275,7 +275,7 @@ func (h *imageHandler) postImageData(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// csrf token from the command
+	// remove csrf token from the command
 	cmd.Csrf = ""
 
 	// get service token

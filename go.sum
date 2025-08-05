@@ -49,6 +49,10 @@ github.com/tdeslauriers/pixie v0.0.6 h1:rn2k3UreTfUhPVCnyjtU2uOmB8eq/cp0ai8dqNuT
 github.com/tdeslauriers/pixie v0.0.6/go.mod h1:BV4zXLd0ysoxo44kB4BYMFoBBlBQDy/Zk+KgkQepVw4=
 github.com/tdeslauriers/pixie v0.0.7 h1:LzeuFRCSinEb8IMpVOAydhEfBDRVTcf8Fu/BJTJS2Uw=
 github.com/tdeslauriers/pixie v0.0.7/go.mod h1:HAPfLNihElgBhzUbQPWbAKzjmg5PIyY7vxqeYXpQbUg=
+github.com/tdeslauriers/pixie v0.0.9 h1:VYvUG8+P+i+p5tm52u/bfhYWStPccdwhghvSfP7CM5c=
+github.com/tdeslauriers/pixie v0.0.9/go.mod h1:HAPfLNihElgBhzUbQPWbAKzjmg5PIyY7vxqeYXpQbUg=
+github.com/tdeslauriers/pixie v0.0.10 h1:OVETECxdN7XPLrxGSxvkxGX3HP8C6JE1phxoS9twTbw=
+github.com/tdeslauriers/pixie v0.0.10/go.mod h1:HAPfLNihElgBhzUbQPWbAKzjmg5PIyY7vxqeYXpQbUg=
 github.com/tinylib/msgp v1.3.0 h1:ULuf7GPooDaIlbyvgAxBV/FI7ynli6LZ1/nVUNu+0ww=
 github.com/tinylib/msgp v1.3.0/go.mod h1:ykjzy2wzgrlvpDCRc4LA8UXy6D8bzMSuAF3WD57Gok0=
 golang.org/x/crypto v0.39.0 h1:SHs+kF4LP+f+p14esP5jAoDpHU8Gu/v9lFRK6IT5imM=
