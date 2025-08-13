@@ -262,6 +262,7 @@ func (g *gateway) Run() error {
 	// gallery/images/pics
 	glry := gallery.NewHandler(g.uxSession, g.tknProvider, g.gallery)
 	mux.HandleFunc("/albums", glry.HandleAlbums)
+	mux.HandleFunc("/albums/", glry.HandleAlbum) // trailing slash required for /albums/{slug}
 	mux.HandleFunc("/images/", glry.HandleImage) // trailing slash required for /images/{slug}
 
 	erebor := &connect.TlsServer{

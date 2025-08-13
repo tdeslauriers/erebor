@@ -338,18 +338,6 @@ func (h *handler) handlePut(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// get s2s token for s2s service
-	s2sToken, err := h.tknProvider.GetServiceToken(util.ServiceS2s)
-	if err != nil {
-		h.logger.Error(fmt.Sprintf("failed to get s2s token for /scope/%s call to s2s service: %s", slug, err.Error()))
-		e := connect.ErrorHttp{
-			StatusCode: http.StatusInternalServerError,
-			Message:    "failed to get s2s token",
-		}
-		e.SendJsonErr(w)
-		return
-	}
-
 	// get request body
 	var cmd ScopeCmd
 	if err := json.NewDecoder(r.Body).Decode(&cmd); err != nil {
@@ -389,6 +377,18 @@ func (h *handler) handlePut(w http.ResponseWriter, r *http.Request) {
 		Description: cmd.Description,
 		Active:      cmd.Active,
 		Slug:        cmd.Slug,
+	}
+
+	// get s2s token for s2s service
+	s2sToken, err := h.tknProvider.GetServiceToken(util.ServiceS2s)
+	if err != nil {
+		h.logger.Error(fmt.Sprintf("failed to get s2s token for /scope/%s call to s2s service: %s", slug, err.Error()))
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusInternalServerError,
+			Message:    "failed to get s2s token",
+		}
+		e.SendJsonErr(w)
+		return
 	}
 
 	// update scope in s2s service
