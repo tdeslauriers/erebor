@@ -10,7 +10,7 @@ import (
 
 	"github.com/tdeslauriers/carapace/pkg/connect"
 	"github.com/tdeslauriers/carapace/pkg/session/provider"
-	"github.com/tdeslauriers/pixie/pkg/image"
+	"github.com/tdeslauriers/pixie/pkg/api"
 )
 
 // ImageHandler defines the interface for handling and forwarding image-related operations against the gallery service.
@@ -115,7 +115,7 @@ func (h *imageHandler) getImageData(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var img image.ImageData
+	var img api.ImageData
 	if err := h.gallery.GetServiceData(fmt.Sprintf("/images/%s", slug), galleryToken, accessToken, &img); err != nil {
 		h.logger.Error(fmt.Sprintf("failed to get image data for slug %s: %s", slug, err.Error()))
 		e := connect.ErrorHttp{
@@ -169,7 +169,7 @@ func (h *imageHandler) updateImageData(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var cmd image.UpdateMetadataCmd
+	var cmd api.UpdateMetadataCmd
 	if err := json.NewDecoder(r.Body).Decode(&cmd); err != nil {
 		h.logger.Error(fmt.Sprintf("failed to decode JSON in image metadata update request body: %s", err.Error()))
 		e := connect.ErrorHttp{
@@ -246,7 +246,7 @@ func (h *imageHandler) postImageData(w http.ResponseWriter, r *http.Request) {
 	// getting the slug is unnecessary for /images/upload
 
 	// get request body
-	var cmd image.AddMetaDataCmd
+	var cmd api.AddMetaDataCmd
 	if err := json.NewDecoder(r.Body).Decode(&cmd); err != nil {
 		h.logger.Error(fmt.Sprintf("failed to decode JSON in image upload request body: %s", err.Error()))
 		e := connect.ErrorHttp{
@@ -290,7 +290,7 @@ func (h *imageHandler) postImageData(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var data image.ImageData
+	var data api.ImageData
 	if err := h.gallery.PostToService("/images/upload", galleryToken, accessToken, cmd, &data); err != nil {
 		h.logger.Error(fmt.Sprintf("failed to upload image data: %s", err.Error()))
 		h.gallery.RespondUpstreamError(err, w)

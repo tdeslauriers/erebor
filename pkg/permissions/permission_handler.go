@@ -38,7 +38,7 @@ func NewHandler(ux uxsession.Service, p provider.S2sTokenProvider, t, g connect.
 
 		logger: slog.Default().
 			With(slog.String(util.SerivceKey, util.ServiceGateway)).
-			With(slog.String(util.ComponentKey, util.ComponentPermissions)).
+			With(slog.String(util.ComponentKey, util.ComponentPermissionsHandler)).
 			With(slog.String(util.PackageKey, util.PackagePermissions)),
 	}
 }
@@ -221,10 +221,10 @@ func (h *handler) getPermissionBySlug(w http.ResponseWriter, r *http.Request) {
 
 	// there should only be service and slug in the path
 	if len(parts) != 2 {
-		h.logger.Error("invalid path in permission/{service}/{slug} in request URL")
+		h.logger.Error("invalid path in /permissions/{service}/{slug} in request URL")
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusBadRequest,
-			Message:    "invalid path in permission/{service}/{slug} in request URL",
+			Message:    "invalid path in /permissions/{service}/{slug} in request URL",
 		}
 		e.SendJsonErr(w)
 		return
@@ -472,7 +472,7 @@ func (h *handler) updatePermission(w http.ResponseWriter, r *http.Request) {
 	if valid := validate.IsValidUuid(slug); !valid {
 		h.logger.Error(fmt.Sprintf("invalid permission slug: %s", slug))
 		e := connect.ErrorHttp{
-			
+
 			StatusCode: http.StatusBadRequest,
 			Message:    fmt.Sprintf("invalid permission slug: %s", slug),
 		}

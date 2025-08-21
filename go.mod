@@ -6,7 +6,7 @@ toolchain go1.24.4
 
 require (
 	github.com/tdeslauriers/carapace v0.1.68
-	github.com/tdeslauriers/pixie v0.0.14
+	github.com/tdeslauriers/pixie v0.1.0
 )
 
 require (

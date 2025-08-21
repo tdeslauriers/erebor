@@ -264,6 +264,7 @@ func (g *gateway) Run() error {
 	mux.HandleFunc("/albums", glry.HandleAlbums)
 	mux.HandleFunc("/albums/", glry.HandleAlbum) // trailing slash required for /albums/{slug}
 	mux.HandleFunc("/images/", glry.HandleImage) // trailing slash required for /images/{slug}
+	mux.HandleFunc("/images/permissions", glry.HandlePermissions)
 
 	erebor := &connect.TlsServer{
 		Addr:      g.config.ServicePort,

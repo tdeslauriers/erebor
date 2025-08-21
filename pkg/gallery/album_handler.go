@@ -10,7 +10,7 @@ import (
 
 	"github.com/tdeslauriers/carapace/pkg/connect"
 	"github.com/tdeslauriers/carapace/pkg/session/provider"
-	"github.com/tdeslauriers/pixie/pkg/album"
+	"github.com/tdeslauriers/pixie/pkg/api"
 )
 
 // AlbumHandler is an interface that defines methods for handling album-related operations.
@@ -130,7 +130,7 @@ func (h *albumHandler) getAlbums(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// call the gallery service to get the albums
-	var albums []album.Album
+	var albums []api.Album
 	if err := h.gallery.GetServiceData("/albums", galleryToken, accessToken, &albums); err != nil {
 		h.logger.Error(fmt.Sprintf("failed to retrieve albums: %s", err.Error()))
 		h.gallery.RespondUpstreamError(err, w)
@@ -194,7 +194,7 @@ func (h *albumHandler) getAlbum(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var albumData album.Album
+	var albumData api.Album
 	if err := h.gallery.GetServiceData(fmt.Sprintf("/albums/%s", slug), galleryToken, accessToken, &albumData); err != nil {
 		h.logger.Error(fmt.Sprintf("failed to get album data for slug %s: %s", slug, err.Error()))
 		e := connect.ErrorHttp{
@@ -249,7 +249,7 @@ func (h *albumHandler) updateAlbum(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// decode the request body into an album update command
-	var cmd album.AlbumUpdateCmd
+	var cmd api.AlbumUpdateCmd
 	if err := json.NewDecoder(r.Body).Decode(&cmd); err != nil {
 		h.logger.Error(fmt.Sprintf("failed to decode JSON in album update request body: %s", err.Error()))
 		e := connect.ErrorHttp{
@@ -327,7 +327,7 @@ func (h *albumHandler) postAlbum(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// decode the request body into an album creation command
-	var cmd album.AddAlbumCmd
+	var cmd api.AddAlbumCmd
 	if err := json.NewDecoder(r.Body).Decode(&cmd); err != nil {
 		h.logger.Error(fmt.Sprintf("failed to decode JSON in album creation request body: %s", err.Error()))
 		e := connect.ErrorHttp{
@@ -372,7 +372,7 @@ func (h *albumHandler) postAlbum(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// call the gallery service to create the album
-	var created album.Album
+	var created api.Album
 	if err := h.gallery.PostToService("/albums", galleryToken, accessToken, cmd, &created); err != nil {
 		h.logger.Error(fmt.Sprintf("failed to create album: %s", err.Error()))
 		h.gallery.RespondUpstreamError(err, w)

@@ -39,8 +39,9 @@ const (
 	ComponentTemplate             string = "task templates"
 	ComponentAlbums               string = "gallery albums"
 	ComponentImages               string = "gallery images"
-	ComponentPermissions          string = "permissions"
+	ComponentImagePermissions     string = "image permissions"
 	ComponentScheduledUserAccount string = "scheduled user account service"
+	ComponentPermissionsHandler   string = "permissions handler"
 
 	SerivceKey = "service"
 
