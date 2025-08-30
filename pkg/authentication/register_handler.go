@@ -30,7 +30,7 @@ func NewRegistrationHandler(o config.OauthRedirect, s uxsession.Service, p provi
 		gallery:   g,
 
 		logger: slog.Default().
-			With(slog.String(util.SerivceKey, util.ServiceGateway)).
+			With(slog.String(util.ServiceKey, util.ServiceGateway)).
 			With(slog.String(util.PackageKey, util.PackageAuth)).
 			With(slog.String(util.ComponentKey, util.ComponentRegister)),
 	}

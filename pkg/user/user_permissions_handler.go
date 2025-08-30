@@ -35,7 +35,7 @@ func NewPermissionsHandler(ux uxsession.Service, p provider.S2sTokenProvider, ia
 		logger: slog.Default().
 			With(slog.String(util.PackageKey, util.PackageUser)).
 			With(slog.String(util.ComponentKey, util.ComponentUserPermissions)).
-			With(slog.String(util.SerivceKey, util.ServiceGateway)),
+			With(slog.String(util.ServiceKey, util.ServiceGateway)),
 	}
 }
 

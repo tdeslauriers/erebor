@@ -35,7 +35,7 @@ func NewAllowanceHandler(ux uxsession.Service, p provider.S2sTokenProvider, iam,
 		task:     task,
 
 		logger: slog.Default().
-			With(slog.String(util.SerivceKey, util.ServiceGateway)).
+			With(slog.String(util.ServiceKey, util.ServiceGateway)).
 			With(slog.String(util.PackageKey, util.PackageTasks)).
 			With(slog.String(util.ComponentKey, util.ComponentAllowances)),
 	}

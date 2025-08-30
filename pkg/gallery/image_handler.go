@@ -29,7 +29,7 @@ func NewImageHandler(ux uxsession.Service, p provider.S2sTokenProvider, g connec
 		gallery: g,
 
 		logger: slog.Default().
-			With(slog.String(util.SerivceKey, util.ServiceGateway)).
+			With(slog.String(util.ServiceKey, util.ServiceGateway)).
 			With(slog.String(util.PackageKey, util.PackageGallery)).
 			With(slog.String(util.ComponentKey, util.ComponentImages)),
 	}
@@ -57,7 +57,7 @@ func (h *imageHandler) HandleImage(w http.ResponseWriter, r *http.Request) {
 	case http.MethodPut: // /images/slug --> slug will be the slug for PUTs
 		h.updateImageData(w, r)
 		return
-	case http.MethodPost: // /images/upload --> upload will be the slug for POSTs
+	case http.MethodPost:
 		h.postImageData(w, r)
 		return
 	default:

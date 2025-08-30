@@ -28,7 +28,7 @@ func NewScopesHandler(ux uxsession.Service, p provider.S2sTokenProvider, c conne
 		logger: slog.Default().
 			With(slog.String(util.PackageKey, util.PackageUser)).
 			With(slog.String(util.ComponentKey, util.ComponentUserScopes)).
-			With(slog.String(util.SerivceKey, util.ServiceGateway)),
+			With(slog.String(util.ServiceKey, util.ServiceGateway)),
 	}
 }
 

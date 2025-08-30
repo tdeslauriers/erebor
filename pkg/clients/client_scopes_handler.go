@@ -28,7 +28,7 @@ func NewScopesHandler(ux uxsession.Service, p provider.S2sTokenProvider, c conne
 		logger: slog.Default().
 			With(slog.String(util.PackageKey, util.PackageClients)).
 			With(slog.String(util.ComponentKey, util.ComponentClientsScopes)).
-			With(slog.String(util.SerivceKey, util.ServiceGateway)),
+			With(slog.String(util.ServiceKey, util.ServiceGateway)),
 	}
 }
 
@@ -57,7 +57,7 @@ func (h *scopesHandler) HandleScopes(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// validate the user has an active, authenticated session
-	session , err := connect.GetSessionToken(r)
+	session, err := connect.GetSessionToken(r)
 	if err != nil {
 		h.logger.Error(fmt.Sprintf("failed to get session from request: %s", err.Error()))
 		h.session.HandleSessionErr(err, w)

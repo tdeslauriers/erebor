@@ -248,6 +248,7 @@ func (g *gateway) Run() error {
 	mux.HandleFunc("/clients/reset", client.HandleReset)
 	mux.HandleFunc("/clients/", client.HandleClient) // trailing slash required for /clients/{slug}; POST is /clients/register
 	mux.HandleFunc("/clients/scopes", client.HandleScopes)
+	mux.HandleFunc("/clients/generate/pat", client.HandleGeneratePat)
 
 	// tasks/allowances
 	task := tasks.NewHandler(g.uxSession, g.tknProvider, g.iam, g.task)
@@ -260,10 +261,11 @@ func (g *gateway) Run() error {
 	mux.HandleFunc("/tasks", task.HandleTasks)
 
 	// gallery/images/pics
-	glry := gallery.NewHandler(g.uxSession, g.tknProvider, g.gallery)
+	glry := gallery.NewHandler(g.uxSession, g.tknProvider, g.s2s, g.gallery)
 	mux.HandleFunc("/albums", glry.HandleAlbums)
 	mux.HandleFunc("/albums/", glry.HandleAlbum) // trailing slash required for /albums/{slug}
 	mux.HandleFunc("/images/", glry.HandleImage) // trailing slash required for /images/{slug}
+	mux.HandleFunc("/images/notify/upload", glry.HandleImageUploadNotification)
 	mux.HandleFunc("/images/permissions", glry.HandlePermissions)
 
 	erebor := &connect.TlsServer{

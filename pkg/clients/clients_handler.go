@@ -12,6 +12,7 @@ import (
 	"github.com/tdeslauriers/carapace/pkg/connect"
 	"github.com/tdeslauriers/carapace/pkg/profile"
 	"github.com/tdeslauriers/carapace/pkg/session/provider"
+	"github.com/tdeslauriers/ran/pkg/pat"
 )
 
 // NewClientHandler returns a new Handler.
@@ -24,7 +25,7 @@ func NewClientHandler(ux uxsession.Service, p provider.S2sTokenProvider, c conne
 		logger: slog.Default().
 			With(slog.String(util.PackageKey, util.PackageClients)).
 			With(slog.String(util.ComponentKey, util.ComponentClients)).
-			With(slog.String(util.SerivceKey, util.ServiceGateway)),
+			With(slog.String(util.ServiceKey, util.ServiceGateway)),
 	}
 }
 
@@ -36,6 +37,9 @@ type ClientHandler interface {
 
 	// HandleClient handles a request from the client by submitting it against the s2s service clients/{slug} endpoint.
 	HandleClient(w http.ResponseWriter, r *http.Request)
+
+	// HandleGeneratePat handles a request from the client to generate a personal access token (PAT) for service clients.
+	HandleGeneratePat(w http.ResponseWriter, r *http.Request)
 }
 
 var _ ClientHandler = (*clientHandler)(nil)
@@ -427,4 +431,83 @@ func (h *clientHandler) handlePostClient(w http.ResponseWriter, r *http.Request)
 		h.logger.Error(fmt.Sprintf("failed to encode registered client: %s", err.Error()))
 		return
 	}
+}
+
+// HandleGeneratePat handles a request from the client to generate a personal access token (PAT) for service clients.
+func (h *clientHandler) HandleGeneratePat(w http.ResponseWriter, r *http.Request) {
+
+	if r.Method != http.MethodPost {
+		h.logger.Error("only POST requests are allowed to /clients/generate/pat endpoint")
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusMethodNotAllowed,
+			Message:    "only POST requests are allowed to /clients/generate/pat endpoint",
+		}
+		e.SendJsonErr(w)
+		return
+	}
+
+	// get the user's session token from the request
+	session, err := connect.GetSessionToken(r)
+	if err != nil {
+		h.logger.Error(fmt.Sprintf("failed to get session from request: %s", err.Error()))
+		h.session.HandleSessionErr(err, w)
+		return
+	}
+
+	// validate session token and get access token
+	accessToken, err := h.session.GetAccessToken(session)
+	if err != nil {
+		h.logger.Error(fmt.Sprintf("failed to get access token from session token for post to /clients/generate/pat on s2s service: %s", err.Error()))
+		h.session.HandleSessionErr(err, w)
+		return
+	}
+
+	// decode the request body
+	var cmd pat.GeneratePatCmd
+	if err := json.NewDecoder(r.Body).Decode(&cmd); err != nil {
+		h.logger.Error(fmt.Sprintf("failed to decode json in post /clients/generate/pat request body: %s", err.Error()))
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusBadRequest,
+			Message:    "improperly formatted json for pat generation request",
+		}
+		e.SendJsonErr(w)
+		return
+	}
+
+	// validate the request body
+	if err := cmd.Validate(); err != nil {
+		h.logger.Error(fmt.Sprintf("error validating request body of pat generation request: %s", err.Error()))
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusUnprocessableEntity,
+			Message:    err.Error(),
+		}
+		e.SendJsonErr(w)
+		return
+	}
+
+	// validate csrf token
+	if valid, err := h.session.IsValidCsrf(session, cmd.Csrf); !valid {
+		h.logger.Error("invalid csrf token", "err", err.Error())
+		h.session.HandleSessionErr(err, w)
+		return
+	}
+
+	// set csrf to empty string to avoid sending it upstream
+	cmd.Csrf = ""
+
+	// get s2s token for s2s service
+	s2sToken, err := h.provider.GetServiceToken(util.ServiceS2s)
+	if err != nil {
+		h.logger.Error(fmt.Sprintf("failed to get s2s token for post to /clients/generate/pat on s2s service: %s", err.Error()))
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusInternalServerError,
+			Message:    "failed to get s2s token",
+		}
+		e.SendJsonErr(w)
+		return
+	}
+
+	// send request to s2s service to generate pat
+
+	// respond with pat to ui
 }

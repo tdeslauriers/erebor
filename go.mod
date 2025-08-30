@@ -5,8 +5,9 @@ go 1.23.9
 toolchain go1.24.4
 
 require (
-	github.com/tdeslauriers/carapace v0.1.68
-	github.com/tdeslauriers/pixie v0.1.0
+	github.com/tdeslauriers/carapace v0.1.72
+	github.com/tdeslauriers/pixie v0.1.2
+	github.com/tdeslauriers/ran v0.0.2
 )
 
 require (
@@ -20,14 +21,11 @@ require (
 	github.com/minio/minio-go/v7 v7.0.95 // indirect
 	github.com/philhofer/fwd v1.2.0 // indirect
 	github.com/rs/xid v1.6.0 // indirect
-	github.com/tinylib/msgp v1.3.0 // indirect
+	github.com/tinylib/msgp v1.4.0 // indirect
 	golang.org/x/crypto v0.41.0 // indirect
-	golang.org/x/mod v0.27.0 // indirect
 	golang.org/x/net v0.43.0 // indirect
-	golang.org/x/sync v0.16.0 // indirect
 	golang.org/x/sys v0.35.0 // indirect
 	golang.org/x/text v0.28.0 // indirect
-	golang.org/x/tools v0.36.0 // indirect
 )
 
 require (

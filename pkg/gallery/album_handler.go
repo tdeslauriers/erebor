@@ -32,7 +32,7 @@ func NewAlbumHandler(ux uxsession.Service, p provider.S2sTokenProvider, g connec
 		gallery: g,
 
 		logger: slog.Default().
-			With(slog.String(util.SerivceKey, util.ServiceGateway)).
+			With(slog.String(util.ServiceKey, util.ServiceGateway)).
 			With(slog.String(util.PackageKey, util.PackageGallery)).
 			With(slog.String(util.ComponentKey, util.ComponentAlbums)),
 	}

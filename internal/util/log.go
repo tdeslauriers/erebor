@@ -3,17 +3,18 @@ package util
 const (
 	PackageKey = "package"
 
-	PackageMain        string = "main"
-	PackageGateway     string = "gateway"
-	PackageAuth        string = "authentication"
-	PackageSession     string = "uxsession"
-	PackageUser        string = "user"
-	PackageScopes      string = "scopes"
-	PackageClients     string = "clients"
-	PackageTasks       string = "tasks"
-	PackageGallery     string = "gallery"
-	PackagePermissions string = "permissions"
-	PackageScheduled   string = "scheduled"
+	PackageMain         string = "main"
+	PackageGateway      string = "gateway"
+	PackageAuth         string = "authentication"
+	PackageSession      string = "uxsession"
+	PackageUser         string = "user"
+	PackageScopes       string = "scopes"
+	PackageClients      string = "clients"
+	PackageTasks        string = "tasks"
+	PackageGallery      string = "gallery"
+	PackagePermissions  string = "permissions"
+	PackageScheduled    string = "scheduled"
+	PackageNotification string = "notification"
 
 	ComponentKey string = "component"
 
@@ -42,8 +43,9 @@ const (
 	ComponentImagePermissions     string = "image permissions"
 	ComponentScheduledUserAccount string = "scheduled user account service"
 	ComponentPermissionsHandler   string = "permissions handler"
+	ComponentNotificationHandler  string = "notification handler"
 
-	SerivceKey = "service"
+	ServiceKey = "service"
 
 	// service names in definitions.go
 )
