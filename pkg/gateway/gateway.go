@@ -28,6 +28,7 @@ import (
 	"github.com/tdeslauriers/carapace/pkg/data"
 	"github.com/tdeslauriers/carapace/pkg/diagnostics"
 	"github.com/tdeslauriers/carapace/pkg/jwt"
+	"github.com/tdeslauriers/carapace/pkg/pat"
 	"github.com/tdeslauriers/carapace/pkg/session/provider"
 )
 
@@ -137,6 +138,8 @@ func New(config *config.Config) (Gateway, error) {
 		return nil, fmt.Errorf("not an ECDSA public key")
 	}
 
+	//
+
 	return &gateway{
 		config:      *config,
 		serverTls:   serverTlsConfig,
@@ -149,6 +152,7 @@ func New(config *config.Config) (Gateway, error) {
 		uxSession:   uxsession.NewService(&config.OauthRedirect, repository, indexer, cryptor, tkn, iam),
 		oAuth:       oauth.NewService(config.OauthRedirect, repository, cryptor, indexer),
 		verifier:    jwt.NewVerifier(config.ServiceName, publicKey),
+		pat:         pat.NewVerifier(util.ServiceS2s, s2s, tkn),
 		cryptor:     cryptor,
 		cleanup:     scheduled.NewService(repository, tkn, iam, gallery),
 
@@ -172,6 +176,7 @@ type gateway struct {
 	uxSession   uxsession.Service
 	oAuth       oauth.Service
 	verifier    jwt.Verifier
+	pat         pat.Verifier
 	cryptor     data.Cryptor
 	cleanup     scheduled.Service
 
@@ -261,7 +266,7 @@ func (g *gateway) Run() error {
 	mux.HandleFunc("/tasks", task.HandleTasks)
 
 	// gallery/images/pics
-	glry := gallery.NewHandler(g.uxSession, g.tknProvider, g.s2s, g.gallery)
+	glry := gallery.NewHandler(g.uxSession, g.tknProvider, g.s2s, g.gallery, g.pat)
 	mux.HandleFunc("/albums", glry.HandleAlbums)
 	mux.HandleFunc("/albums/", glry.HandleAlbum) // trailing slash required for /albums/{slug}
 	mux.HandleFunc("/images/", glry.HandleImage) // trailing slash required for /images/{slug}

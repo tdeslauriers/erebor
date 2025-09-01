@@ -508,6 +508,23 @@ func (h *clientHandler) HandleGeneratePat(w http.ResponseWriter, r *http.Request
 	}
 
 	// send request to s2s service to generate pat
+	var response pat.Pat
+	if err := h.s2s.PostToService("/generate/pat", s2sToken, accessToken, cmd, &response); err != nil {
+		h.logger.Error(fmt.Sprintf("failed to generate pat: %s", err.Error()))
+		h.s2s.RespondUpstreamError(err, w)
+		return
+	}
 
 	// respond with pat to ui
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		h.logger.Error(fmt.Sprintf("failed to encode generated pat: %s", err.Error()))
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusInternalServerError,
+			Message:    "failed to encode generated pat",
+		}
+		e.SendJsonErr(w)
+		return
+	}
 }

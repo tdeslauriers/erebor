@@ -21,7 +21,7 @@ func main() {
 
 	// set up logger for main
 	logger := slog.Default().
-		With(slog.String(util.SerivceKey, util.ServiceGateway)).
+		With(slog.String(util.ServiceKey, util.ServiceGateway)).
 		With(slog.String(util.PackageKey, util.PackageMain)).
 		With(slog.String(util.ComponentKey, util.ComponentMain))
 
