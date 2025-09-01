@@ -43,6 +43,10 @@ github.com/tdeslauriers/carapace v0.1.78 h1:BWjQUCGKBA1VxBQufuoRrAKlPog9rjGitEOW
 github.com/tdeslauriers/carapace v0.1.78/go.mod h1:lXPX8KLcpSMSDT13DDoaBTS0boNRaBnbnV6KMJKVmWY=
 github.com/tdeslauriers/carapace v0.1.79 h1:KNRyabJhqUhcdC9+LPS2Y4I87PzRknnWAeWflpj5Qdg=
 github.com/tdeslauriers/carapace v0.1.79/go.mod h1:lXPX8KLcpSMSDT13DDoaBTS0boNRaBnbnV6KMJKVmWY=
+github.com/tdeslauriers/carapace v0.1.80 h1:CFsiPuKWNHufo7qFSDmxVLOjVlpYSbS4A6R2iCKdXyA=
+github.com/tdeslauriers/carapace v0.1.80/go.mod h1:lXPX8KLcpSMSDT13DDoaBTS0boNRaBnbnV6KMJKVmWY=
+github.com/tdeslauriers/carapace v0.1.81 h1:JcsYwZAVSRSO/1YjgI/8YfwfvU8c8ycvY95TEgB0rAw=
+github.com/tdeslauriers/carapace v0.1.81/go.mod h1:lXPX8KLcpSMSDT13DDoaBTS0boNRaBnbnV6KMJKVmWY=
 github.com/tdeslauriers/pixie v0.1.2 h1:ejLdWBwruruUkYamZJn5GwJXgn2mMNQ+OsqenTciCZk=
 github.com/tdeslauriers/pixie v0.1.2/go.mod h1:5v7eyYPfBPQxf0wlIkcuIrH7Ztm7bMlSJ/GyYv92ePw=
 github.com/tdeslauriers/ran v0.0.2 h1:6IcKCtRiR2ya+AcQpe0NdWjIagmvyIjMgMQWiFADrh0=

@@ -24,10 +24,9 @@ type Handler interface {
 }
 
 // NewHandler creates a new instance of Handler, returning a pointer to the concrete implementation.
-func NewHandler(p provider.S2sTokenProvider, s2s, g connect.S2sCaller, pat pat.Verifier) Handler {
+func NewHandler(p provider.S2sTokenProvider, g connect.S2sCaller, pat pat.Verifier) Handler {
 	return &handler{
 		token:   p,
-		s2s:     s2s,
 		gallery: g,
 		pat:     pat,
 
@@ -43,7 +42,6 @@ var _ Handler = (*handler)(nil)
 type handler struct {
 	token   provider.S2sTokenProvider
 	gallery connect.S2sCaller
-	s2s     connect.S2sCaller
 	pat     pat.Verifier
 
 	logger *slog.Logger

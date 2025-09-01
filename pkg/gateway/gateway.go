@@ -266,7 +266,7 @@ func (g *gateway) Run() error {
 	mux.HandleFunc("/tasks", task.HandleTasks)
 
 	// gallery/images/pics
-	glry := gallery.NewHandler(g.uxSession, g.tknProvider, g.s2s, g.gallery, g.pat)
+	glry := gallery.NewHandler(g.uxSession, g.tknProvider, g.gallery, g.pat)
 	mux.HandleFunc("/albums", glry.HandleAlbums)
 	mux.HandleFunc("/albums/", glry.HandleAlbum) // trailing slash required for /albums/{slug}
 	mux.HandleFunc("/images/", glry.HandleImage) // trailing slash required for /images/{slug}
