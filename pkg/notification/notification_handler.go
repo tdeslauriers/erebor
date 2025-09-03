@@ -126,8 +126,8 @@ func (h *handler) HandleImageUploadNotification(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	h.logger.Info(fmt.Sprintf("gallery service successfully notified of image upload %s", webhook.MinioKey))
+	h.logger.Info(fmt.Sprintf("successfully notified gallery service of image upload %s", webhook.MinioKey))
 
-	w.WriteHeader(http.StatusNoContent)
+	w.WriteHeader(http.StatusOK)
 	return
 }
