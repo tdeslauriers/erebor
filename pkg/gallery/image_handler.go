@@ -290,7 +290,7 @@ func (h *imageHandler) postImageData(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var data api.ImageData
+	var data api.Placeholder
 	if err := h.gallery.PostToService("/images/upload", galleryToken, accessToken, cmd, &data); err != nil {
 		h.logger.Error(fmt.Sprintf("failed to upload image data: %s", err.Error()))
 		h.gallery.RespondUpstreamError(err, w)

@@ -14,7 +14,7 @@ export EREBOR_CLIENT_CERT=$(op document get "erebor_service_client_dev_cert" --v
 export EREBOR_CLIENT_KEY=$(op document get "erebor_service_client_dev_key" --vault world_site | base64 -w 0)
 
 # S2S Auth creds192.168.154.138
-export EREBOR_S2S_AUTH_URL=$(op read "op://world_site/ran_service_app_local/url"):$(op read "op://world_site/ran_service_app_local/port")
+export EREBOR_S2S_AUTH_URL=$(op read "op://world_site/ran_service_container_dev/url"):$(op read "op://world_site/ran_service_container_dev/port")
 export EREBOR_S2S_AUTH_CLIENT_ID=$(op read "op://world_site/erebor_s2s_login_dev/username")
 export EREBOR_S2S_AUTH_CLIENT_SECRET=$(op read "op://world_site/erebor_s2s_login_dev/password")
 
@@ -44,5 +44,8 @@ export EREBOR_USER_JWT_VERIFYING_KEY=$(op read "op://world_site/shaw_jwt_key_pai
 
 export EREBOR_OAUTH_CALLBACK_URL=$(op read "op://world_site/erebor_oauth_callback_dev/url"):$(op read "op://world_site/erebor_oauth_callback_dev/port")/callback
 export EREBOR_OAUTH_CALLBACK_CLIENT_ID=$(op read "op://world_site/erebor_oauth_callback_dev/client_id")
+
+export EREBOR_TASKS_URL=$(op read "op://world_site/apprentice_service_container_dev/url"):$(op read "op://world_site/apprentice_service_container_dev/port") 
+export EREBOR_GALLERY_URL=$(op read "op://world_site/pixie_service_container_dev/url"):$(op read "op://world_site/pixie_service_container_dev/port") 
 
 
