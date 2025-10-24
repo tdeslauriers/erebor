@@ -97,7 +97,7 @@ func (h *imageHandler) getImageData(w http.ResponseWriter, r *http.Request) {
 		h.logger.Error(fmt.Sprintf("invalid image slug: %s", err.Error()))
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusBadRequest,
-			Message:    "invalid template slug",
+			Message:    "invalid image slug",
 		}
 		e.SendJsonErr(w)
 		return
@@ -118,11 +118,7 @@ func (h *imageHandler) getImageData(w http.ResponseWriter, r *http.Request) {
 	var img api.ImageData
 	if err := h.gallery.GetServiceData(fmt.Sprintf("/images/%s", slug), galleryToken, accessToken, &img); err != nil {
 		h.logger.Error(fmt.Sprintf("failed to get image data for slug %s: %s", slug, err.Error()))
-		e := connect.ErrorHttp{
-			StatusCode: http.StatusInternalServerError,
-			Message:    "internal server error",
-		}
-		e.SendJsonErr(w)
+		h.gallery.RespondUpstreamError(err, w)
 		return
 	}
 
@@ -163,12 +159,13 @@ func (h *imageHandler) updateImageData(w http.ResponseWriter, r *http.Request) {
 		h.logger.Error(fmt.Sprintf("invalid image slug: %s", err.Error()))
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusBadRequest,
-			Message:    "invalid template slug",
+			Message:    "invalid image slug",
 		}
 		e.SendJsonErr(w)
 		return
 	}
 
+	// decode the request body
 	var cmd api.UpdateMetadataCmd
 	if err := json.NewDecoder(r.Body).Decode(&cmd); err != nil {
 		h.logger.Error(fmt.Sprintf("failed to decode JSON in image metadata update request body: %s", err.Error()))
@@ -180,6 +177,7 @@ func (h *imageHandler) updateImageData(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// input validation on request body command
 	if err := cmd.Validate(); err != nil {
 		h.logger.Error(fmt.Sprintf("failed to validate image metadata update command: %s", err.Error()))
 		e := connect.ErrorHttp{

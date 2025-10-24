@@ -7,9 +7,11 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 
 	"github.com/tdeslauriers/carapace/pkg/connect"
 	"github.com/tdeslauriers/carapace/pkg/session/provider"
+	"github.com/tdeslauriers/carapace/pkg/validate"
 	"github.com/tdeslauriers/pixie/pkg/api"
 )
 
@@ -171,12 +173,28 @@ func (h *albumHandler) getAlbum(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// get the album slug from the request URL
-	slug, err := connect.GetValidSlug(r)
-	if err != nil {
-		h.logger.Error(fmt.Sprintf("invalid album slug: %s", err.Error()))
+	// get the slug to determine if user is going to /albums/staged or /albums/{slug}
+	// get the url slug from the request
+	segments := strings.Split(r.URL.Path, "/")
+
+	var slug string
+	if len(segments) > 1 {
+		slug = segments[len(segments)-1]
+	} else {
+		h.logger.Error("slug is required for GET request to /albums/{slug}")
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusBadRequest,
-			Message:    "invalid album slug",
+			Message:    "slug is required for GET request to /albums/{slug}",
+		}
+		e.SendJsonErr(w)
+		return
+	}
+
+	if slug == "" || (slug != "staged" && !validate.IsValidUuid(slug)) {
+		h.logger.Error("invalid album slug submitted to gateway")
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusBadRequest,
+			Message:    "invalid album slug submitted to gateway",
 		}
 		e.SendJsonErr(w)
 		return
@@ -197,11 +215,7 @@ func (h *albumHandler) getAlbum(w http.ResponseWriter, r *http.Request) {
 	var albumData api.Album
 	if err := h.gallery.GetServiceData(fmt.Sprintf("/albums/%s", slug), galleryToken, accessToken, &albumData); err != nil {
 		h.logger.Error(fmt.Sprintf("failed to get album data for slug %s: %s", slug, err.Error()))
-		e := connect.ErrorHttp{
-			StatusCode: http.StatusInternalServerError,
-			Message:    "internal server error",
-		}
-		e.SendJsonErr(w)
+		h.gallery.RespondUpstreamError(err, w)
 		return
 	}
 

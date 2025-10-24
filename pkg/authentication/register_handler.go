@@ -135,7 +135,7 @@ func (h *registrationHandler) HandleRegistration(w http.ResponseWriter, r *http.
 			return
 		}
 
-		if err := h.gallery.PostToService("/patrons/register", s2sGalleryToken, "", patron.PatronRegisterCmd{Username: username}, nil); err != nil {
+		if err := h.gallery.PostToService("/s2s/patrons/register", s2sGalleryToken, "", patron.PatronRegisterCmd{Username: username}, nil); err != nil {
 			// logging only, not returning error --> hidden/abstracted from user
 			h.logger.Error(fmt.Sprintf("failed to create gallery patron for user %s: %s", registered.Username, err.Error()))
 			return

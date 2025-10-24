@@ -141,6 +141,11 @@ spec:
                 configMapKeyRef:
                   name: cm-allowance-service
                   key: allowance-url
+            - name: EREBOR_GALLERY_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: cm-gallery-service
+                  key: gallery-url
           resources:
             limits:
               memory: "128Mi"
