@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 
 	"github.com/tdeslauriers/carapace/pkg/connect"
 	"github.com/tdeslauriers/carapace/pkg/session/provider"
@@ -292,15 +293,14 @@ func (h *allowanceHandler) HandleAllowance(w http.ResponseWriter, r *http.Reques
 	}
 
 	// get the url slug from the request
-	slug, err := connect.GetValidSlug(r)
-	if err != nil {
-		h.logger.Error(fmt.Sprintf("failed to get valid slug from request: %s", err.Error()))
-		e := connect.ErrorHttp{
-			StatusCode: http.StatusBadRequest,
-			Message:    "invalid slug",
-		}
-		e.SendJsonErr(w)
-		return
+	// get the url slug from the request
+	segments := strings.Split(r.URL.Path, "/")
+
+	var slug string
+	if len(segments) > 1 {
+		slug = segments[len(segments)-1]
+	} else {
+		h.logger.Error("no slug found in request")
 	}
 
 	// forward request to allowance account service

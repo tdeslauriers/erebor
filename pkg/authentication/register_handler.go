@@ -143,7 +143,7 @@ func (h *registrationHandler) HandleRegistration(w http.ResponseWriter, r *http.
 
 		h.logger.Info(fmt.Sprintf("gallery patron account successfully created for user %s", username))
 
-	}(registered.Username)
+	}(cmd.Username)
 
 	// respond 201 + registered user
 	w.Header().Set("Content-Type", "application/json")
