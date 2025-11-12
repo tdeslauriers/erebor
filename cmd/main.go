@@ -27,7 +27,7 @@ func main() {
 
 	// service definition
 	def := config.SvcDefinition{
-		ServiceName: "erebor",
+		ServiceName: util.ServiceGateway,
 		Tls:         config.StandardTls,
 		Requires: config.Requires{
 			S2sClient:        true,

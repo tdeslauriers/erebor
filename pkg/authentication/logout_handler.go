@@ -1,6 +1,7 @@
 package authentication
 
 import (
+	"context"
 	"encoding/json"
 	"erebor/internal/util"
 	"erebor/pkg/authentication/uxsession"
@@ -38,8 +39,15 @@ type logoutHandler struct {
 
 func (h *logoutHandler) HandleLogout(w http.ResponseWriter, r *http.Request) {
 
+	// build/collect telemetry and add fields to the logger
+	telemetry := connect.NewTelemetry(r)
+	logger := h.logger.With(telemetry.TelemetryFields()...)
+
+	// add telemetry to context
+	ctx := context.WithValue(r.Context(), connect.TelemetryKey, telemetry)
+
 	if r.Method != "POST" {
-		h.logger.Error("only POST requests are allowed to /logout endpoint")
+		logger.Error("only POST requests are allowed")
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusMethodNotAllowed,
 			Message:    "only POST requests are allowed",
@@ -51,7 +59,7 @@ func (h *logoutHandler) HandleLogout(w http.ResponseWriter, r *http.Request) {
 	var cmd LogoutCmd
 	err := json.NewDecoder(r.Body).Decode(&cmd)
 	if err != nil {
-		h.logger.Error("failed to decode json in the logout cmd request body", "err", err.Error())
+		logger.Error("failed to decode json in the logout cmd request body", "err", err.Error())
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusBadRequest,
 			Message:    "improperly formatted json",
@@ -61,7 +69,7 @@ func (h *logoutHandler) HandleLogout(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := cmd.ValidateCmd(); err != nil {
-		h.logger.Error("failed to validate session input value", "err", err.Error())
+		logger.Error("failed to validate session input value", "err", err.Error())
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusUnprocessableEntity,
 			Message:    "failed to validate session",
@@ -71,8 +79,8 @@ func (h *logoutHandler) HandleLogout(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// logout user
-	if err := h.uxSession.DestroySession(cmd.Session); err != nil {
-		h.logger.Error("failed to logout", "err", err.Error())
+	if err := h.uxSession.DestroySession(ctx, cmd.Session); err != nil {
+		logger.Error("failed to logout", "err", err.Error())
 		h.uxSession.HandleSessionErr(err, w)
 		return
 	}

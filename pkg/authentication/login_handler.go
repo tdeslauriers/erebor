@@ -1,7 +1,9 @@
 package authentication
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 
@@ -21,11 +23,11 @@ type LoginHandler interface {
 }
 
 // NewLoginHandler creates a new LoginHandler instance.
-func NewLoginHandler(ux uxsession.Service, p provider.S2sTokenProvider, c connect.S2sCaller) LoginHandler {
+func NewLoginHandler(ux uxsession.Service, p provider.S2sTokenProvider, iam *connect.S2sCaller) LoginHandler {
 	return &loginHandler{
 		uxSession: ux,
 		s2sToken:  p,
-		caller:    c,
+		iam:       iam,
 
 		logger: slog.Default().
 			With(slog.String(util.PackageKey, util.PackageAuth)).
@@ -39,7 +41,7 @@ var _ LoginHandler = (*loginHandler)(nil)
 type loginHandler struct {
 	uxSession uxsession.Service
 	s2sToken  provider.S2sTokenProvider
-	caller    connect.S2sCaller
+	iam       *connect.S2sCaller
 
 	logger *slog.Logger
 }
@@ -48,8 +50,15 @@ type loginHandler struct {
 
 func (h *loginHandler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 
+	// build/collect telemetry and add fields to the logger
+	telemetry := connect.NewTelemetry(r)
+	telemetryLogger := h.logger.With(telemetry.TelemetryFields()...)
+
+	// add telemetry to context for downstream calls
+	ctx := context.WithValue(r.Context(), connect.TelemetryKey, telemetry)
+
 	if r.Method != "POST" {
-		h.logger.Error("only POST requests are allowed to /login endpoint")
+		telemetryLogger.Error("only POST requests are allowed")
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusMethodNotAllowed,
 			Message:    "only POST requests are allowed",
@@ -61,10 +70,10 @@ func (h *loginHandler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	var cmd types.UserLoginCmd
 	err := json.NewDecoder(r.Body).Decode(&cmd)
 	if err != nil {
-		h.logger.Error("unable to decode json in user login request body", "err", err.Error())
+		telemetryLogger.Error("failed to decode json in user login request body", "err", err.Error())
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusBadRequest,
-			Message:    "improperly formatted json",
+			Message:    "failed to decode json in login request body",
 		}
 		e.SendJsonErr(w)
 		return
@@ -73,7 +82,7 @@ func (h *loginHandler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	// login level field validation
 	// very lightweight validation, just to ensure the fields are not empty ot too long
 	if err := cmd.ValidateCmd(); err != nil {
-		h.logger.Error("unable to validate fields in login request body", "err", err.Error())
+		telemetryLogger.Error("failed to validate fields in login request body", "err", err.Error())
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusUnprocessableEntity,
 			Message:    err.Error(),
@@ -84,15 +93,15 @@ func (h *loginHandler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 
 	// check for valid session with valid csrf token
 	if valid, err := h.uxSession.IsValidCsrf(cmd.Session, cmd.Csrf); !valid {
-		h.logger.Error("invalid session or csrf token", "err", err.Error())
+		telemetryLogger.Error("invalid session or csrf token", "err", err.Error())
 		h.uxSession.HandleSessionErr(err, w)
 		return
 	}
 
 	// get service token
-	s2sToken, err := h.s2sToken.GetServiceToken(util.ServiceIdentity)
+	s2sToken, err := h.s2sToken.GetServiceToken(ctx, util.ServiceIdentity)
 	if err != nil {
-		h.logger.Error("failed to retreive s2s token")
+		telemetryLogger.Error("failed to retreive s2s token")
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusInternalServerError,
 			Message:    "login unsuccessful: internal server error",
@@ -101,19 +110,28 @@ func (h *loginHandler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// post creds to user auth login service
-	var authcode types.AuthCodeExchange
-	if err := h.caller.PostToService("/login", s2sToken, "", cmd, &authcode); err != nil {
-		h.logger.Error("call to identity service login endpoint failed", "err", err.Error())
-		h.caller.RespondUpstreamError(err, w)
+	// post creds to user auth identity service
+	authCode, err := connect.PostToService[types.UserLoginCmd, types.AuthCodeExchange](
+		h.iam,
+		ctx,
+		"/login",
+		s2sToken,
+		"",
+		cmd,
+	)
+	if err != nil {
+		telemetryLogger.Error("failed to post login cmd to identity service", "err", err.Error())
+		h.iam.RespondUpstreamError(err, w)
 		return
 	}
+
+	telemetryLogger.Info(fmt.Sprintf("successfully logged in user %s", cmd.Username))
 
 	// send auth code to client
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	if err := json.NewEncoder(w).Encode(authcode); err != nil {
-		h.logger.Error("failed to encode auth code response to json", "err", err.Error())
+	if err := json.NewEncoder(w).Encode(authCode); err != nil {
+		telemetryLogger.Error("failed to encode auth code response to json", "err", err.Error())
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusInternalServerError,
 			Message:    "failed to encode login response to json",

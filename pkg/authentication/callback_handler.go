@@ -1,6 +1,7 @@
 package authentication
 
 import (
+	"context"
 	"encoding/json"
 	"erebor/internal/util"
 	"erebor/pkg/authentication/oauth"
@@ -23,17 +24,18 @@ type CallbackHandler interface {
 	HandleCallback(w http.ResponseWriter, r *http.Request)
 }
 
-func NewCallbackHandler(p provider.S2sTokenProvider, c connect.S2sCaller, o oauth.Service, ux uxsession.Service, v jwt.Verifier) CallbackHandler {
+func NewCallbackHandler(p provider.S2sTokenProvider, iam *connect.S2sCaller, o oauth.Service, ux uxsession.Service, v jwt.Verifier) CallbackHandler {
 	return &callbackHandler{
 		s2sToken:  p,
-		caller:    c,
+		iam:       iam,
 		oAuth:     o,
 		uxSession: ux,
 		verifier:  v,
 
 		logger: slog.Default().
 			With(slog.String(util.PackageKey, util.PackageAuth)).
-			With(slog.String(util.ComponentKey, util.ComponentCallback)),
+			With(slog.String(util.ComponentKey, util.ComponentCallback)).
+			With(slog.String(util.ServiceKey, util.ServiceGateway)),
 	}
 }
 
@@ -41,7 +43,7 @@ var _ CallbackHandler = (*callbackHandler)(nil)
 
 type callbackHandler struct {
 	s2sToken  provider.S2sTokenProvider
-	caller    connect.S2sCaller
+	iam       *connect.S2sCaller
 	oAuth     oauth.Service
 	uxSession uxsession.Service
 	verifier  jwt.Verifier
@@ -51,8 +53,15 @@ type callbackHandler struct {
 
 func (h *callbackHandler) HandleCallback(w http.ResponseWriter, r *http.Request) {
 
+	// build/collect telemetry and add fields to the logger
+	telemetry := connect.NewTelemetry(r)
+	logger := h.logger.With(telemetry.TelemetryFields()...)
+
+	// add telemetry to context for downstream calls
+	ctx := context.WithValue(r.Context(), connect.TelemetryKey, telemetry)
+
 	if r.Method != "POST" {
-		h.logger.Error("only POST requests are allowed to /callback endpoint")
+		logger.Error("only POST requests are allowed")
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusMethodNotAllowed,
 			Message:    "only POST requests are allowed",
@@ -60,11 +69,11 @@ func (h *callbackHandler) HandleCallback(w http.ResponseWriter, r *http.Request)
 		e.SendJsonErr(w)
 		return
 	}
-
+	// decode json body into struct
 	var cmd callback.AuthCodeCmd
 	err := json.NewDecoder(r.Body).Decode(&cmd)
 	if err != nil {
-		h.logger.Error("failed to decode json in user callback request body", "err", err.Error())
+		logger.Error("failed to decode json in user callback request body", "err", err.Error())
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusBadRequest,
 			Message:    "improperly formatted json",
@@ -75,7 +84,7 @@ func (h *callbackHandler) HandleCallback(w http.ResponseWriter, r *http.Request)
 
 	// input validation of the callback request
 	if err := cmd.ValidateCmd(); err != nil {
-		h.logger.Error("invalid callback request", "err", err.Error())
+		logger.Error("invalid callback request", "err", err.Error())
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusBadRequest,
 			Message:    err.Error(),
@@ -86,15 +95,15 @@ func (h *callbackHandler) HandleCallback(w http.ResponseWriter, r *http.Request)
 
 	// validate oauth variables (state, nonce, client id, redirect) against the session token
 	if err := h.oAuth.Validate(cmd); err != nil {
-		h.logger.Error(fmt.Sprintf("failed to validate oauth callback: %v\n", err))
+		logger.Error(fmt.Sprintf("failed to validate oauth callback: %v\n", err))
 		h.oAuth.HandleServiceErr(err, w)
 		return
 	}
 
 	// get service token
-	s2sToken, err := h.s2sToken.GetServiceToken(util.ServiceIdentity)
+	s2sToken, err := h.s2sToken.GetServiceToken(ctx, util.ServiceIdentity)
 	if err != nil {
-		h.logger.Error("failed to retreive s2s token")
+		logger.Error("failed to retreive identity s2s token")
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusInternalServerError,
 			Message:    "login unsuccessful: internal server error",
@@ -111,17 +120,24 @@ func (h *callbackHandler) HandleCallback(w http.ResponseWriter, r *http.Request)
 		RedirectUrl: cmd.Redirect,
 	}
 
-	// send request to identity service to get access, request, and id tokens
-	var access provider.UserAuthorization
-	if err := h.caller.PostToService("/callback", s2sToken, "", payload, &access); err != nil {
-		h.logger.Error("call to identity service callback endpoint failed", "err", err.Error())
-		h.caller.RespondUpstreamError(err, w)
+	// post request to identity service to get access, request, and id tokens
+	access, err := connect.PostToService[callback.AccessTokenCmd, provider.UserAuthorization](
+		h.iam,
+		ctx,
+		"/callback",
+		s2sToken,
+		"",
+		payload,
+	)
+	if err != nil {
+		logger.Error("failed to call identity service callback endpoint", "err", err.Error())
+		h.iam.RespondUpstreamError(err, w)
 		return
 	}
 
 	// validate  id and access token
 	if access.IdTokenExpires.Before(time.Now().UTC()) {
-		h.logger.Error("id token has expired")
+		logger.Error("id token has expired")
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusUnauthorized,
 			Message:    "id token has expired",
@@ -155,7 +171,7 @@ func (h *callbackHandler) HandleCallback(w http.ResponseWriter, r *http.Request)
 			}
 			count++
 		}
-		h.logger.Error("failed to parse callback token", "err", builder.String())
+		logger.Error("failed to parse callback token", "err", builder.String())
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusUnauthorized,
 			Message:    "failed to parse callback tokens",
@@ -217,7 +233,7 @@ func (h *callbackHandler) HandleCallback(w http.ResponseWriter, r *http.Request)
 			}
 			count++
 		}
-		h.logger.Error("failed to build authenticated session", "err", builder.String())
+		logger.Error("failed to build authenticated session", "err", builder.String())
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusInternalServerError,
 			Message:    "failed to persist callback session",
@@ -233,7 +249,7 @@ func (h *callbackHandler) HandleCallback(w http.ResponseWriter, r *http.Request)
 	}
 
 	if err := h.uxSession.PersistXref(xref); err != nil {
-		h.logger.Error("failed to persist session access xref", "err", err.Error())
+		logger.Error("failed to persist session access xref", "err", err.Error())
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusInternalServerError,
 			Message:    "failed to persist session access xref",
@@ -242,14 +258,14 @@ func (h *callbackHandler) HandleCallback(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// // destroy previous anonymous session
-	// // do not wait to return callback response
-	// go func() {
-	// 	if err := h.uxSession.DestroySession(cmd.Session); err != nil {
-	// 		h.logger.Error("failed to destroy anonymous session", "err", err.Error())
-	// 		return
-	// 	}
-	// }()
+	// destroy previous anonymous session
+	// do not wait to return callback response
+	go func() {
+		if err := h.uxSession.DestroySession(ctx, cmd.Session); err != nil {
+			logger.Error("failed to destroy anonymous session", "err", err.Error())
+			return
+		}
+	}()
 
 	// return authentication data
 	response := CallbackResponse{
@@ -267,7 +283,7 @@ func (h *callbackHandler) HandleCallback(w http.ResponseWriter, r *http.Request)
 
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(response); err != nil {
-		h.logger.Error("failed to encode callback response to json", "err", err.Error())
+		logger.Error("failed to encode callback response to json", "err", err.Error())
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusInternalServerError,
 			Message:    "failed to encode callback response to json",

@@ -169,10 +169,10 @@ type gateway struct {
 	serverTls   *tls.Config
 	repository  data.SqlRepository
 	tknProvider provider.S2sTokenProvider
-	s2s         connect.S2sCaller
-	iam         connect.S2sCaller
-	task        connect.S2sCaller
-	gallery     connect.S2sCaller
+	s2s         *connect.S2sCaller
+	iam         *connect.S2sCaller
+	task        *connect.S2sCaller
+	gallery     *connect.S2sCaller
 	uxSession   uxsession.Service
 	oAuth       oauth.Service
 	verifier    jwt.Verifier
