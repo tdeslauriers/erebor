@@ -14,14 +14,14 @@ var serviceSelection = map[string]struct{}{
 	util.ServiceTasks:   {},
 }
 
-// returns the canonical name of the service
+// selectSerivce returns the canonical name of the service
 func selectService(service string) (string, error) {
 	// check if the service is in the selection map
 	key := strings.TrimSpace(strings.ToLower(service))
 	if _, ok := serviceSelection[key]; ok {
 		return key, nil
 	}
-	return "", fmt.Errorf("service %s not found in selection", service)
+	return "", fmt.Errorf("service %s not found in allowed service selection", service)
 }
 
 // UpdatePermissionsCmd is a model that represents the payload for updating permissions
