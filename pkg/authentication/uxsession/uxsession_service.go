@@ -460,8 +460,8 @@ func (s *service) removeAccessTokens(ctx context.Context, sessionId string, errC
 
 			// send cmd to identity service to destroy refresh token
 			_, err = connect.PostToService[types.DestroyRefreshCmd, struct{}](
-				s.identity,
 				ctx,
+				s.identity,
 				"/refresh/destroy",
 				s2sBearer,
 				"",
@@ -481,8 +481,6 @@ func (s *service) removeAccessTokens(ctx context.Context, sessionId string, errC
 func (s *service) removeOauthFlow(sessionId string, errChan chan error, wg *sync.WaitGroup) {
 
 	defer wg.Done()
-
-
 
 	oauthXref := make([]UxsesionOauthFlow, 0, 32)
 	qry := "SELECT id, uxsession_uuid, oauthflow_uuid FROM uxsession_oauthflow WHERE uxsession_uuid = ?"

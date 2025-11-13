@@ -112,8 +112,8 @@ func (h *loginHandler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 
 	// post creds to user auth identity service
 	authCode, err := connect.PostToService[types.UserLoginCmd, types.AuthCodeExchange](
-		h.iam,
 		ctx,
+		h.iam,
 		"/login",
 		s2sToken,
 		"",

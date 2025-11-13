@@ -30,7 +30,7 @@ func NewResetHandler(ux uxsession.Service, p provider.S2sTokenProvider, c connec
 
 		logger: slog.Default().
 			With(slog.String(util.PackageKey, util.PackageUser)).
-			With(slog.String(util.ComponentKey, util.ComponentReset)),
+			With(slog.String(util.ComponentKey, util.ComponentResetUser)),
 	}
 }
 

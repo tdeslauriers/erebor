@@ -41,7 +41,7 @@ func (s *service) GetAccessToken(ctx context.Context, session string) (string, e
 	logger := s.logger
 	telemetry, ok := ctx.Value(connect.TelemetryKey).(*connect.Telemetry)
 	if !ok {
-		s.logger.Warn("failed to extract telemetry from context of GetAccessToken call")
+		s.logger.Warn("missing telemetry in context for GetAccessToken function")
 	} else {
 		logger = s.logger.With(telemetry.TelemetryFields()...)
 	}
@@ -202,8 +202,8 @@ func (s *service) GetAccessToken(ctx context.Context, session string) (string, e
 
 		// use refresh token to get new access token
 		access, err := connect.PostToService[types.UserRefreshCmd, provider.UserAuthorization](
-			s.identity,
 			ctx,
+			s.identity,
 			"/refresh",
 			s2sToken,
 			"",

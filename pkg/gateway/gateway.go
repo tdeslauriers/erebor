@@ -249,9 +249,8 @@ func (g *gateway) Run() error {
 
 	// clients/s2s
 	client := clients.NewHandler(g.uxSession, g.tknProvider, g.s2s)
-	mux.HandleFunc("/clients", client.HandleClients)
+	mux.HandleFunc("/clients/{slug...}", client.HandleClients) // POST is /clients/register
 	mux.HandleFunc("/clients/reset", client.HandleReset)
-	mux.HandleFunc("/clients/", client.HandleClient) // trailing slash required for /clients/{slug}; POST is /clients/register
 	mux.HandleFunc("/clients/scopes", client.HandleScopes)
 	mux.HandleFunc("/clients/generate/pat", client.HandleGeneratePat)
 

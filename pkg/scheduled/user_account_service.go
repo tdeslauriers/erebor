@@ -22,7 +22,7 @@ type UserAccountService interface {
 }
 
 // NewUserAccountService returns a new instance of ScheduledService.
-func NewUserAccountService(tkn provider.S2sTokenProvider, iam, g connect.S2sCaller) UserAccountService {
+func NewUserAccountService(tkn provider.S2sTokenProvider, iam, g *connect.S2sCaller) UserAccountService {
 	return &userAccountService{
 		token:    tkn,
 		identity: iam,
@@ -41,8 +41,8 @@ var _ UserAccountService = (*userAccountService)(nil)
 // It implements the methods defined in the ScheduledService interface.
 type userAccountService struct {
 	token    provider.S2sTokenProvider
-	identity connect.S2sCaller
-	gallery  connect.S2sCaller
+	identity *connect.S2sCaller
+	gallery  *connect.S2sCaller
 
 	logger *slog.Logger
 }

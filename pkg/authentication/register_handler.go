@@ -129,8 +129,8 @@ func (h *registrationHandler) HandleRegistration(w http.ResponseWriter, r *http.
 
 	// post registration request to identity service
 	registered, err := connect.PostToService[types.UserRegisterCmd, types.UserAccount](
-		h.identity,
 		ctx,
+		h.identity,
 		"/register",
 		s2sIamToken,
 		"",
@@ -154,8 +154,8 @@ func (h *registrationHandler) HandleRegistration(w http.ResponseWriter, r *http.
 		}
 
 		_, err = connect.PostToService[patron.PatronRegisterCmd, struct{}](
-			h.gallery,
 			ctx,
+			h.gallery,
 			"/s2s/patrons/register",
 			s2sGalleryToken,
 			"",

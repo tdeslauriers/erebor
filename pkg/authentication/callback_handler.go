@@ -122,8 +122,8 @@ func (h *callbackHandler) HandleCallback(w http.ResponseWriter, r *http.Request)
 
 	// post request to identity service to get access, request, and id tokens
 	access, err := connect.PostToService[callback.AccessTokenCmd, provider.UserAuthorization](
-		h.iam,
 		ctx,
+		h.iam,
 		"/callback",
 		s2sToken,
 		"",

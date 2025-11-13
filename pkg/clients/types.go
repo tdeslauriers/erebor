@@ -18,7 +18,7 @@ type Handler interface {
 }
 
 // NewHandler returns a new Handler.
-func NewHandler(ux uxsession.Service, p provider.S2sTokenProvider, c connect.S2sCaller) Handler {
+func NewHandler(ux uxsession.Service, p provider.S2sTokenProvider, c *connect.S2sCaller) Handler {
 	return &handler{
 		ClientHandler: NewClientHandler(ux, p, c),
 		ResetHandler:  NewResetHandler(ux, p, c),
