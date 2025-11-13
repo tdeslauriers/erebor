@@ -53,33 +53,37 @@ type clientHandler struct {
 // It is the concrete implementation of the ClientHandler interface.
 func (h *clientHandler) HandleClients(w http.ResponseWriter, r *http.Request) {
 
+	// generate telemetry
+	telemetry := connect.NewTelemetry(r)
+	logger := h.logger.With(telemetry.TelemetryFields()...)
+
 	switch r.Method {
 	case http.MethodGet:
 
 		// check for a slug to determine if this is a get call for all clients or the slug of a specific client
-		// get the url slug from the request  if it exists
+		// get the url slug from the request if it exists
 		slug := r.PathValue("slug")
 		if slug == "" {
 
-			h.handleGetAllClients(w, r)
+			h.handleGetAllClients(w, r, telemetry, logger)
 			return
 		} else {
 
-			h.handleGetClient(w, r)
+			h.handleGetClient(w, r, telemetry, logger)
 			return
 		}
 	case http.MethodPut:
-		h.handlePutClient(w, r)
+		h.handlePutClient(w, r, telemetry, logger)
 		return
 	case http.MethodPost:
 		// this is used for the register service client use case/business logic, it will reject all other post requests
-		h.handlePostClient(w, r)
+		h.handlePostClient(w, r, telemetry, logger)
 		return
 	default:
-		h.logger.Error("only GET, POST, PUT, and DELETE requests are allowed to /clients/{slug} endpoint")
+		logger.Error(fmt.Sprintf("unsupported method %s for endpoint %s", r.Method, r.URL.Path))
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusMethodNotAllowed,
-			Message:    "only GET, POST, PUT, and DELETE requests are allowed to /clients/{slug} endpoint",
+			Message:    fmt.Sprintf("unsupported method %s for endpoint %s", r.Method, r.URL.Path),
 		}
 		e.SendJsonErr(w)
 		return
@@ -88,19 +92,15 @@ func (h *clientHandler) HandleClients(w http.ResponseWriter, r *http.Request) {
 
 // handleGetAllClients is a helper function which handles a request /clients by submitting it against
 // the s2s service clients endpoint.
-func (h *clientHandler) handleGetAllClients(w http.ResponseWriter, r *http.Request) {
-
-	// generate telemetry
-	telemetry := connect.NewTelemetry(r)
-	logger := h.logger.With(telemetry.TelemetryFields()...)
+func (h *clientHandler) handleGetAllClients(w http.ResponseWriter, r *http.Request, tel *connect.Telemetry, log *slog.Logger) {
 
 	// add telemetry to context for downstream calls
-	ctx := context.WithValue(r.Context(), connect.TelemetryKey, telemetry)
+	ctx := context.WithValue(r.Context(), connect.TelemetryKey, tel)
 
 	// get the user token from the request
 	session, err := connect.GetSessionToken(r)
 	if err != nil {
-		logger.Error("failed to get session from request", "err", err.Error())
+		log.Error("failed to get session from request", "err", err.Error())
 		h.session.HandleSessionErr(err, w)
 		return
 	}
@@ -108,7 +108,7 @@ func (h *clientHandler) handleGetAllClients(w http.ResponseWriter, r *http.Reque
 	// get user access token
 	accessToken, err := h.session.GetAccessToken(ctx, session)
 	if err != nil {
-		logger.Error("failed to exchange session token for access token", "err", err.Error())
+		log.Error("failed to exchange session token for access token", "err", err.Error())
 		h.session.HandleSessionErr(err, w)
 		return
 	}
@@ -116,7 +116,7 @@ func (h *clientHandler) handleGetAllClients(w http.ResponseWriter, r *http.Reque
 	// get s2s token for s2s service
 	s2sTkn, err := h.provider.GetServiceToken(ctx, util.ServiceS2s)
 	if err != nil {
-		logger.Error(fmt.Sprintf("failed to get s2s token: %s", err.Error()))
+		log.Error(fmt.Sprintf("failed to get s2s token: %s", err.Error()))
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusInternalServerError,
 			Message:    "internal service error",
@@ -134,17 +134,17 @@ func (h *clientHandler) handleGetAllClients(w http.ResponseWriter, r *http.Reque
 		accessToken,
 	)
 	if err != nil {
-		logger.Error("failed to get service clients from s2s service", "err", err.Error())
+		log.Error("failed to get service clients from s2s service", "err", err.Error())
 		h.s2s.RespondUpstreamError(err, w)
 		return
 	}
 
-	logger.Info(fmt.Sprintf("successfully retrieved %d clients from s2s service", len(clients)))
+	log.Info(fmt.Sprintf("successfully retrieved %d clients from s2s service", len(clients)))
 
 	// respond with clients to ui
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(clients); err != nil {
-		logger.Error("failed to encode clients to json", "err", err.Error())
+		log.Error("failed to encode clients to json", "err", err.Error())
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusInternalServerError,
 			Message:    "failed to encode clients to json",
@@ -155,19 +155,15 @@ func (h *clientHandler) handleGetAllClients(w http.ResponseWriter, r *http.Reque
 }
 
 // handleGetClient handles a GET request from the client by submitting it against the s2s service clients/{slug} endpoint.
-func (h *clientHandler) handleGetClient(w http.ResponseWriter, r *http.Request) {
-
-	// generate telemetry
-	telemetry := connect.NewTelemetry(r)
-	logger := h.logger.With(telemetry.TelemetryFields()...)
+func (h *clientHandler) handleGetClient(w http.ResponseWriter, r *http.Request, tel *connect.Telemetry, log *slog.Logger) {
 
 	// add telemetry to context for downstream calls
-	ctx := context.WithValue(r.Context(), connect.TelemetryKey, telemetry)
+	ctx := context.WithValue(r.Context(), connect.TelemetryKey, tel)
 
 	// get the user's session token from the request
 	session, err := connect.GetSessionToken(r)
 	if err != nil {
-		logger.Error("failed to get session from request", "err", err.Error())
+		log.Error("failed to get session from request", "err", err.Error())
 		h.session.HandleSessionErr(err, w)
 		return
 	}
@@ -175,7 +171,7 @@ func (h *clientHandler) handleGetClient(w http.ResponseWriter, r *http.Request) 
 	// validate session token and get access token
 	accessToken, err := h.session.GetAccessToken(ctx, session)
 	if err != nil {
-		logger.Error("failed to exchange session token for access token", "err", err.Error())
+		log.Error("failed to exchange session token for access token", "err", err.Error())
 		h.session.HandleSessionErr(err, w)
 		return
 	}
@@ -183,7 +179,7 @@ func (h *clientHandler) handleGetClient(w http.ResponseWriter, r *http.Request) 
 	// get the url slug from the request
 	slug, err := connect.GetValidSlug(r)
 	if err != nil {
-		logger.Error("failed to get valid slug from request", "err", err.Error())
+		log.Error("failed to get valid slug from request", "err", err.Error())
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusBadRequest,
 			Message:    "invalid service client slug",
@@ -195,7 +191,7 @@ func (h *clientHandler) handleGetClient(w http.ResponseWriter, r *http.Request) 
 	// get s2s token for s2s service
 	s2sToken, err := h.provider.GetServiceToken(ctx, util.ServiceS2s)
 	if err != nil {
-		logger.Error(fmt.Sprintf("failed to get s2s token for get /client/%s call to s2s service", slug), "err", err.Error())
+		log.Error(fmt.Sprintf("failed to get s2s token for get /client/%s call to s2s service", slug), "err", err.Error())
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusInternalServerError,
 			Message:    "internal service error",
@@ -213,18 +209,18 @@ func (h *clientHandler) handleGetClient(w http.ResponseWriter, r *http.Request) 
 		accessToken,
 	)
 	if err != nil {
-		logger.Error(fmt.Sprintf("failed to get service client %s from s2s service", slug), "err", err.Error())
+		log.Error(fmt.Sprintf("failed to get service client %s from s2s service", slug), "err", err.Error())
 		h.s2s.RespondUpstreamError(err, w)
 		return
 	}
 
-	logger.Info(fmt.Sprintf("successfully retrieved client %s from s2s service", slug))
+	log.Info(fmt.Sprintf("successfully retrieved client %s from s2s service", slug))
 
 	// respond with service client to ui
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(client); err != nil {
-		logger.Error(fmt.Sprintf("failed to encode client %s to json", slug), "err", err.Error())
+		log.Error(fmt.Sprintf("failed to encode client %s to json", slug), "err", err.Error())
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusInternalServerError,
 			Message:    "failed to encode service client to json",
@@ -235,19 +231,15 @@ func (h *clientHandler) handleGetClient(w http.ResponseWriter, r *http.Request) 
 }
 
 // handlePutClient handles a PUT request from the client by submitting it against the s2s service clients/{slug} endpoint.\
-func (h *clientHandler) handlePutClient(w http.ResponseWriter, r *http.Request) {
-
-	// generate telemetry
-	telemetry := connect.NewTelemetry(r)
-	logger := h.logger.With(telemetry.TelemetryFields()...)
+func (h *clientHandler) handlePutClient(w http.ResponseWriter, r *http.Request, tel *connect.Telemetry, log *slog.Logger) {
 
 	// add telemetry to context for downstream calls
-	ctx := context.WithValue(r.Context(), connect.TelemetryKey, telemetry)
+	ctx := context.WithValue(r.Context(), connect.TelemetryKey, tel)
 
 	// get the user's session token from the request
 	session, err := connect.GetSessionToken(r)
 	if err != nil {
-		logger.Error("failed to get session from request", "err", err.Error())
+		log.Error("failed to get session from request", "err", err.Error())
 		h.session.HandleSessionErr(err, w)
 		return
 	}
@@ -255,7 +247,7 @@ func (h *clientHandler) handlePutClient(w http.ResponseWriter, r *http.Request) 
 	// validate session token and get access token
 	accessToken, err := h.session.GetAccessToken(ctx, session)
 	if err != nil {
-		logger.Error("failed to exchange session token for access token", "err", err.Error())
+		log.Error("failed to exchange session token for access token", "err", err.Error())
 		h.session.HandleSessionErr(err, w)
 		return
 	}
@@ -263,7 +255,7 @@ func (h *clientHandler) handlePutClient(w http.ResponseWriter, r *http.Request) 
 	// get the url slug from the request
 	slug, err := connect.GetValidSlug(r)
 	if err != nil {
-		logger.Error("failed to get valid slug from request", "err", err.Error())
+		log.Error("failed to get valid slug from request", "err", err.Error())
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusBadRequest,
 			Message:    "invalid service client slug",
@@ -275,7 +267,7 @@ func (h *clientHandler) handlePutClient(w http.ResponseWriter, r *http.Request) 
 	// get s2s token for s2s service
 	s2sToken, err := h.provider.GetServiceToken(ctx, util.ServiceS2s)
 	if err != nil {
-		logger.Error("failed to get s2s token", "err", err.Error())
+		log.Error("failed to get s2s token", "err", err.Error())
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusInternalServerError,
 			Message:    "internal service error",
@@ -287,7 +279,7 @@ func (h *clientHandler) handlePutClient(w http.ResponseWriter, r *http.Request) 
 	// get request body
 	var cmd ServiceClientCmd
 	if err := json.NewDecoder(r.Body).Decode(&cmd); err != nil {
-		logger.Error(fmt.Sprintf("failed to decode json in put /client/%s request body", slug), "err", err.Error())
+		log.Error(fmt.Sprintf("failed to decode json in put /client/%s request body", slug), "err", err.Error())
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusBadRequest,
 			Message:    "improperly formatted json",
@@ -298,7 +290,7 @@ func (h *clientHandler) handlePutClient(w http.ResponseWriter, r *http.Request) 
 
 	// validate client request
 	if err := cmd.ValidateCmd(); err != nil {
-		logger.Error("invalide client update request", "err", err.Error())
+		log.Error("invalide client update request", "err", err.Error())
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusUnprocessableEntity,
 			Message:    err.Error(),
@@ -309,7 +301,7 @@ func (h *clientHandler) handlePutClient(w http.ResponseWriter, r *http.Request) 
 
 	// validate csrf token
 	if valid, err := h.session.IsValidCsrf(session, cmd.Csrf); !valid {
-		h.logger.Error("invalid csrf token", "err", err.Error())
+		log.Error("invalid csrf token", "err", err.Error())
 		h.session.HandleSessionErr(err, w)
 		return
 	}
@@ -337,12 +329,12 @@ func (h *clientHandler) handlePutClient(w http.ResponseWriter, r *http.Request) 
 		updated,
 	)
 	if err != nil {
-		logger.Error(fmt.Sprintf("failed to update client %s", slug), "err", err.Error())
+		log.Error(fmt.Sprintf("failed to update client %s", slug), "err", err.Error())
 		h.s2s.RespondUpstreamError(err, w)
 		return
 	}
 
-	logger.Info(fmt.Sprintf("successfully updated client %s", slug))
+	log.Info(fmt.Sprintf("successfully updated client %s", slug))
 
 	// respond with updated client to ui
 	w.Header().Set("Content-Type", "application/json")
@@ -359,19 +351,15 @@ func (h *clientHandler) handlePutClient(w http.ResponseWriter, r *http.Request) 
 }
 
 // handlePostClient handles a POST request from the client by submitting it against the s2s service clients/{slug} endpoint.
-func (h *clientHandler) handlePostClient(w http.ResponseWriter, r *http.Request) {
-
-	// generate telemetry
-	telemetry := connect.NewTelemetry(r)
-	logger := h.logger.With(telemetry.TelemetryFields()...)
+func (h *clientHandler) handlePostClient(w http.ResponseWriter, r *http.Request, tel *connect.Telemetry, log *slog.Logger) {
 
 	// add telemetry to context for downstream calls
-	ctx := context.WithValue(r.Context(), connect.TelemetryKey, telemetry)
+	ctx := context.WithValue(r.Context(), connect.TelemetryKey, tel)
 
 	// get the url slug from the request
 	slug := r.PathValue("slug")
 	if slug != "register" {
-		logger.Error("only POST requests to /clients/register are allowed")
+		log.Error("only POST requests to /clients/register are allowed")
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusBadRequest,
 			Message:    "only POST requests to /clients/register are allowed",
@@ -383,7 +371,7 @@ func (h *clientHandler) handlePostClient(w http.ResponseWriter, r *http.Request)
 	// get the user's session token from the request
 	session, err := connect.GetSessionToken(r)
 	if err != nil {
-		logger.Error("failed to get session from request", "err", err.Error())
+		log.Error("failed to get session from request", "err", err.Error())
 		h.session.HandleSessionErr(err, w)
 		return
 	}
@@ -391,7 +379,7 @@ func (h *clientHandler) handlePostClient(w http.ResponseWriter, r *http.Request)
 	// validate session token and get access token
 	accessToken, err := h.session.GetAccessToken(ctx, session)
 	if err != nil {
-		logger.Error("failed to exchange session token for access token", "err", err.Error())
+		log.Error("failed to exchange session token for access token", "err", err.Error())
 		h.session.HandleSessionErr(err, w)
 		return
 	}
@@ -399,7 +387,7 @@ func (h *clientHandler) handlePostClient(w http.ResponseWriter, r *http.Request)
 	// get s2s token for s2s service
 	s2sToken, err := h.provider.GetServiceToken(ctx, util.ServiceS2s)
 	if err != nil {
-		logger.Error("failed to get s2s token", "err", err.Error())
+		log.Error("failed to get s2s token", "err", err.Error())
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusInternalServerError,
 			Message:    "internal service error",
@@ -411,7 +399,7 @@ func (h *clientHandler) handlePostClient(w http.ResponseWriter, r *http.Request)
 	// decode the request body
 	var cmd RegisterClientCmd
 	if err := json.NewDecoder(r.Body).Decode(&cmd); err != nil {
-		logger.Error("failed to decode json in post /clients/register request body", "err", err.Error())
+		log.Error("failed to decode json in post /clients/register request body", "err", err.Error())
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusBadRequest,
 			Message:    "failed to decode json for client registration request",
@@ -422,7 +410,7 @@ func (h *clientHandler) handlePostClient(w http.ResponseWriter, r *http.Request)
 
 	// validate the request body
 	if err := cmd.ValidateCmd(); err != nil {
-		logger.Error("invalid client registration request body", "err", err.Error())
+		log.Error("invalid client registration request body", "err", err.Error())
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusUnprocessableEntity,
 			Message:    err.Error(),
@@ -433,7 +421,7 @@ func (h *clientHandler) handlePostClient(w http.ResponseWriter, r *http.Request)
 
 	// validate csrf token
 	if valid, err := h.session.IsValidCsrf(session, cmd.Csrf); !valid {
-		logger.Error("invalid csrf token", "err", err.Error())
+		log.Error("invalid csrf token", "err", err.Error())
 		h.session.HandleSessionErr(err, w)
 		return
 	}
@@ -453,7 +441,7 @@ func (h *clientHandler) handlePostClient(w http.ResponseWriter, r *http.Request)
 		cmd,
 	)
 	if err != nil {
-		logger.Error("failed to register client with s2s service", "err", err.Error())
+		log.Error("failed to register client with s2s service", "err", err.Error())
 		h.s2s.RespondUpstreamError(err, w)
 		return
 	}
@@ -462,14 +450,14 @@ func (h *clientHandler) handlePostClient(w http.ResponseWriter, r *http.Request)
 	registered.Password = ""
 	registered.ConfirmPassword = ""
 
-	logger.Info(fmt.Sprintf("successfully registered client %s", registered.Name))
+	log.Info(fmt.Sprintf("successfully registered client %s", registered.Name))
 
 	// respond 201 + registered client to ui
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	if err := json.NewEncoder(w).Encode(registered); err != nil {
 		// returning successfully registered service client data is a convenience only, omit on error
-		logger.Error("failed to encode registered client to json", "err", err.Error())
+		log.Error("failed to encode registered client to json", "err", err.Error())
 		return
 	}
 }

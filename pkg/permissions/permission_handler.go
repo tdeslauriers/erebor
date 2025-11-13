@@ -22,14 +22,11 @@ type Handler interface {
 
 	// HandlePermissions is a method that handles requests against the /permissions endpoint.
 	HandlePermissions(w http.ResponseWriter, r *http.Request)
-
-	// HandlePermission is a method that handles requests against the /permissions/{slug} endpoint.
-	HandlePermission(w http.ResponseWriter, r *http.Request)
 }
 
 // NewHandler creates a new instance of a permissions handler interface
 // returning an underlying concrete implementation.
-func NewHandler(ux uxsession.Service, p provider.S2sTokenProvider, t, g connect.S2sCaller) Handler {
+func NewHandler(ux uxsession.Service, p provider.S2sTokenProvider, t, g *connect.S2sCaller) Handler {
 	return &handler{
 		session: ux,
 		token:   p,
@@ -49,25 +46,43 @@ var _ Handler = (*handler)(nil)
 type handler struct {
 	session uxsession.Service
 	token   provider.S2sTokenProvider
-	tasks   connect.S2sCaller
-	gallery connect.S2sCaller
+	tasks   *connect.S2sCaller
+	gallery *connect.S2sCaller
 
 	logger *slog.Logger
 }
 
 // HandlePermissions is the concret implementation of the a method
-// that handles requests against the /permissions endpoint.
+// that handles requests against the /permissions/{slug...} endpoint.
 func (h *handler) HandlePermissions(w http.ResponseWriter, r *http.Request) {
+
+		// generate telemetry
+	telemetry := connect.NewTelemetry(r)
+	logger := h.logger.With(telemetry.TelemetryFields()...)
 
 	switch r.Method {
 	case http.MethodGet:
-		h.getAllPermissions(w, r)
+
+		// ckeck for a slug to determine if this is a request for all permissions or a specific permission
+		// get the slug from the path if it exists
+		slug := r.PathValue("slug")
+		if slug == "" {
+
+			h.getAllPermissions(w, r)
+			return
+		} else {
+
+			h.getPermissionBySlug(w, r)
+			return
+		}
+	case http.MethodPut:
+		h.updatePermission(w, r)
 		return
 	case http.MethodPost:
 		h.createPermission(w, r)
 		return
 	default:
-		h.logger.Error(fmt.Sprintf("unsupported method %s for endpoint %s", r.Method, r.URL.Path))
+		logger.Error(fmt.Sprintf("unsupported method %s for endpoint %s", r.Method, r.URL.Path))
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusMethodNotAllowed,
 			Message:    fmt.Sprintf("unsupported method %s for endpoint %s", r.Method, r.URL.Path),
@@ -77,26 +92,6 @@ func (h *handler) HandlePermissions(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// HandlePermission is the concret implementation of the a method
-// that handles requests against the /permissions/{slug} endpoint.
-func (h *handler) HandlePermission(w http.ResponseWriter, r *http.Request) {
-
-	switch r.Method {
-	case http.MethodGet:
-		h.getPermissionBySlug(w, r)
-		return
-	case http.MethodPut:
-		h.updatePermission(w, r)
-	default:
-		h.logger.Error(fmt.Sprintf("unsupported method %s for endpoint %s", r.Method, r.URL.Path))
-		e := connect.ErrorHttp{
-			StatusCode: http.StatusMethodNotAllowed,
-			Message:    fmt.Sprintf("unsupported method %s for endpoint %s", r.Method, r.URL.Path),
-		}
-		e.SendJsonErr(w)
-		return
-	}
-}
 
 // getAllPermissions is a helper method which  handles the GET request to the /permissions endpoint,
 // retrieving and collating/combining all permissions records from

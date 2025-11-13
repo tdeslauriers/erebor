@@ -22,7 +22,7 @@ type PermissionsHandler interface {
 }
 
 // NewPermissionsHandler creates a new instance of PermissionsHandler, returning a pointer to the concrete implementation.
-func NewPermissionsHandler(ux uxsession.Service, p provider.S2sTokenProvider, g connect.S2sCaller) PermissionsHandler {
+func NewPermissionsHandler(ux uxsession.Service, p provider.S2sTokenProvider, g *connect.S2sCaller) PermissionsHandler {
 	return &permissionsHandler{
 		ux:      ux,
 		tkn:     p,

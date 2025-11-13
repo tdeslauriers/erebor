@@ -244,8 +244,7 @@ func (g *gateway) Run() error {
 
 	// permissions
 	pm := permissions.NewHandler(g.uxSession, g.tknProvider, g.task, g.gallery)
-	mux.HandleFunc("/permissions", pm.HandlePermissions)
-	mux.HandleFunc("/permissions/", pm.HandlePermission) // trailing slash required for /permissions/{slug}
+	mux.HandleFunc("/permissions/{slug...}", pm.HandlePermissions) 
 
 	// clients/s2s
 	client := clients.NewHandler(g.uxSession, g.tknProvider, g.s2s)
