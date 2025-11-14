@@ -244,7 +244,7 @@ func (g *gateway) Run() error {
 
 	// permissions
 	pm := permissions.NewHandler(g.uxSession, g.tknProvider, g.task, g.gallery)
-	mux.HandleFunc("/permissions/{slug...}", pm.HandlePermissions) 
+	mux.HandleFunc("/permissions/{slug...}", pm.HandlePermissions)
 
 	// clients/s2s
 	client := clients.NewHandler(g.uxSession, g.tknProvider, g.s2s)
@@ -265,9 +265,8 @@ func (g *gateway) Run() error {
 
 	// gallery/images/pics
 	glry := gallery.NewHandler(g.uxSession, g.tknProvider, g.gallery, g.pat)
-	mux.HandleFunc("/albums", glry.HandleAlbums)
-	mux.HandleFunc("/albums/", glry.HandleAlbum) // trailing slash required for /albums/{slug}
-	mux.HandleFunc("/images/", glry.HandleImage) // trailing slash required for /images/{slug}
+	mux.HandleFunc("/albums/{slug...}", glry.HandleAlbums)
+	mux.HandleFunc("/images/{slug}", glry.HandleImage)
 	mux.HandleFunc("/images/notify/upload", glry.HandleImageUploadNotification)
 	mux.HandleFunc("/images/permissions", glry.HandlePermissions)
 

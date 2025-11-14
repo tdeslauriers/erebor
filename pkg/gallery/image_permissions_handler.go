@@ -1,6 +1,7 @@
 package gallery
 
 import (
+	"context"
 	"encoding/json"
 	"erebor/internal/util"
 	"erebor/pkg/authentication/uxsession"
@@ -41,7 +42,7 @@ var _ PermissionsHandler = (*permissionsHandler)(nil)
 type permissionsHandler struct {
 	ux      uxsession.Service
 	tkn     provider.S2sTokenProvider
-	gallery connect.S2sCaller
+	gallery *connect.S2sCaller
 
 	logger *slog.Logger
 }
@@ -49,12 +50,17 @@ type permissionsHandler struct {
 // HandlePermissions in the concrete implementation of the interface method which handles requests to
 // the permissions/slug endpoint and forwards them to the permissions service if necessary.
 func (h *permissionsHandler) HandlePermissions(w http.ResponseWriter, r *http.Request) {
+
+	// generate telemetry
+	tel := connect.NewTelemetry(r)
+	log := h.logger.With(tel.TelemetryFields()...)
+
 	switch r.Method {
 	case http.MethodGet:
-		h.getPermissionsData(w, r)
+		h.getPermissionsData(w, r, tel, log)
 		return
 	default:
-		h.logger.Error("unsupported method for /images/permissions endpoint")
+		log.Error("unsupported method for /images/permissions endpoint")
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusMethodNotAllowed,
 			Message:    "method not allowed",
@@ -64,51 +70,62 @@ func (h *permissionsHandler) HandlePermissions(w http.ResponseWriter, r *http.Re
 	}
 }
 
-func (h *permissionsHandler) getPermissionsData(w http.ResponseWriter, r *http.Request) {
+func (h *permissionsHandler) getPermissionsData(w http.ResponseWriter, r *http.Request, tel *connect.Telemetry, log *slog.Logger) {
 
+	// add telemetry to context for downstream calls + service functions
+	ctx := context.WithValue(r.Context(), connect.TelemetryKey, tel)
 	// get the session token
 	session, err := connect.GetSessionToken(r)
 	if err != nil {
-		h.logger.Error(fmt.Sprintf("failed to get session token: %v", err))
+		log.Error("failed to get session token from request", "err", err.Error())
 		h.ux.HandleSessionErr(err, w)
 		return
 	}
 
 	// get access token
-	accessToken, err := h.ux.GetAccessToken(session)
+	accessToken, err := h.ux.GetAccessToken(ctx, session)
 	if err != nil {
-		h.logger.Error(fmt.Sprintf("failed to get access token: %v", err))
+		log.Error("failed to exchange session token for access token", "err", err.Error())
 		h.ux.HandleSessionErr(err, w)
 		return
 	}
 
 	// get s2s token
-	s2sToken, err := h.tkn.GetServiceToken(util.ServiceGallery)
+	s2sToken, err := h.tkn.GetServiceToken(ctx, util.ServiceGallery)
 	if err != nil {
-		h.logger.Error(fmt.Sprintf("failed to get service token: %v", err))
+		log.Error("failed to get service token for gallery service", "err", err.Error())
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusInternalServerError,
-			Message:    "failed to get service token",
+			Message:    "internal server error",
 		}
 		e.SendJsonErr(w)
 		return
 	}
 
-	var permissions []permissions.Permission
-	if err := h.gallery.GetServiceData("/permissions", s2sToken, accessToken, &permissions); err != nil {
-		h.logger.Error(fmt.Sprintf("failed to get permissions data: %v", err))
+	// call the gallery service for permissions data
+	permissions, err := connect.GetServiceData[[]permissions.Permission](
+		ctx,
+		h.gallery,
+		"/permissions",
+		s2sToken,
+		accessToken,
+	)
+	if err != nil {
+		log.Error("failed to get permissions data from gallery service", "err", err.Error())
 		h.gallery.RespondUpstreamError(err, w)
 		return
 	}
+
+	log.Info(fmt.Sprintf("successfully retrieved %d permissions from gallery", len(permissions)))
 
 	// respond with the permissions data to the client
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(permissions); err != nil {
-		h.logger.Error(fmt.Sprintf("failed to encode permissions data: %v", err))
+		log.Error("failed to encode permissions data to JSON", "err", err.Error())
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusInternalServerError,
-			Message:    "failed to encode permissions data",
+			Message:    "failed to encode permissions data to json",
 		}
 		e.SendJsonErr(w)
 		return

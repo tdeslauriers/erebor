@@ -36,7 +36,7 @@ func NewHandler(ux uxsession.Service, p provider.S2sTokenProvider, t, g *connect
 
 		logger: slog.Default().
 			With(slog.String(util.ServiceKey, util.ServiceGateway)).
-			With(slog.String(util.ComponentKey, util.ComponentPermissionsHandler)).
+			With(slog.String(util.ComponentKey, util.ComponentPermissions)).
 			With(slog.String(util.PackageKey, util.PackagePermissions)),
 	}
 }
