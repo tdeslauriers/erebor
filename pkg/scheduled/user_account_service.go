@@ -1,6 +1,7 @@
 package scheduled
 
 import (
+	"context"
 	"erebor/internal/util"
 	"fmt"
 	"log/slog"
@@ -57,6 +58,15 @@ func (s *userAccountService) ReconcileGalleryAccounts() {
 	go func() {
 		for {
 
+			// generate telemetry -> in this case just a trace parent for web calls
+			telemetry := &connect.Telemetry{
+				Traceparent: *connect.GenerateTraceParent(),
+			}
+			log := s.logger.With(telemetry.TelemetryFields()...)
+
+			// add telemetry to context for downstream calls
+			ctx := context.WithValue(context.Background(), connect.TelemetryKey, telemetry)
+
 			// using local time to make sure in low traffic conditions
 			now := time.Now()
 
@@ -71,39 +81,56 @@ func (s *userAccountService) ReconcileGalleryAccounts() {
 			next = next.Add(jitter)
 
 			duration := time.Until(next)
-			s.logger.Info(fmt.Sprintf("next identity -> gallery user account reconcile will run at %s", next.Format(time.RFC3339)))
+			log.Info(fmt.Sprintf("next identity -> gallery user account reconcile will run at %s", next.Format(time.RFC3339)))
 
 			timer := time.NewTimer(duration)
 			<-timer.C
 
 			// get users from identity service
-			s2sIamToken, err := s.token.GetServiceToken(util.ServiceIdentity)
+			s2sIamToken, err := s.token.GetServiceToken(ctx, util.ServiceIdentity)
 			if err != nil {
-				s.logger.Error(fmt.Sprintf("failed to get service token for identity service: %s", err.Error()))
+				log.Error("failed to get service token for identity service", "err", err.Error())
 				continue
 			}
 
-			var users []profile.User
-			if err := s.identity.GetServiceData("/s2s/users", s2sIamToken, "", &users); err != nil {
-				s.logger.Error(fmt.Sprintf("failed to get users from identity service: %s", err.Error()))
+			// get users from identity service
+			users, err := connect.GetServiceData[[]profile.User](
+				ctx,
+				s.identity,
+				"/s2s/users",
+				s2sIamToken,
+				"",
+			)
+			if err != nil {
+				log.Error("failed to get users from identity service", "err", err.Error())
 				continue
 			}
 
-			s.logger.Info(fmt.Sprintf("reconciling %d gallery accounts", len(users)))
+			log.Info(fmt.Sprintf("reconciling %d gallery accounts", len(users)))
 			for _, user := range users {
+
 				// create ghost account in gallery service
-				s2sGalleryToken, err := s.token.GetServiceToken(util.ServiceGallery)
+				s2sGalleryToken, err := s.token.GetServiceToken(ctx, util.ServiceGallery)
 				if err != nil {
-					s.logger.Error(fmt.Sprintf("failed to get service token for gallery service: %s", err.Error()))
+					log.Error("failed to get service token for gallery service", "err", err.Error())
 					continue
 				}
 
-				if err := s.gallery.PostToService("/s2s/patrons/register", s2sGalleryToken, "", patron.PatronRegisterCmd{Username: user.Username}, nil); err != nil {
-					s.logger.Error(fmt.Sprintf("failed to create gallery patron for user %s: %s", user.Username, err.Error()))
+				// post to gallery service to create patron ghost account for user
+				_, err = connect.PostToService[patron.PatronRegisterCmd, patron.Patron](
+					ctx,
+					s.gallery,
+					"/s2s/patrons/register",
+					s2sGalleryToken,
+					"",
+					patron.PatronRegisterCmd{Username: user.Username},
+				)
+				if err != nil {
+					log.Error(fmt.Sprintf("failed to create gallery patron for user %s", user.Username), "err", err.Error())
 					continue
 				}
 
-				s.logger.Info(fmt.Sprintf("gallery patron account successfully created for user %s", user.Username))
+				log.Info(fmt.Sprintf("gallery patron account successfully created for user %s", user.Username))
 			}
 		}
 	}()
