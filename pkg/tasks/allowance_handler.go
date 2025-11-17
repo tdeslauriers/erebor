@@ -257,7 +257,6 @@ func (h *allowanceHandler) HandleAllowances(w http.ResponseWriter, r *http.Reque
 
 	switch r.Method {
 	case http.MethodGet:
-
 		// check for a slug -> get all vs get one
 		// get slug if it exists
 		slug := r.PathValue("slug")

@@ -1,6 +1,7 @@
 package user
 
 import (
+	"context"
 	"encoding/json"
 	"erebor/internal/util"
 	"erebor/pkg/authentication/uxsession"
@@ -22,15 +23,16 @@ type ResetHandler interface {
 }
 
 // NewResetHandler returns a pointer to the concrete implementation of the ResetHandler interface.
-func NewResetHandler(ux uxsession.Service, p provider.S2sTokenProvider, c connect.S2sCaller) ResetHandler {
+func NewResetHandler(ux uxsession.Service, p provider.S2sTokenProvider, iam *connect.S2sCaller) ResetHandler {
 	return &resetHandler{
 		session:  ux,
 		provider: p,
-		identity: c,
+		identity: iam,
 
 		logger: slog.Default().
 			With(slog.String(util.PackageKey, util.PackageUser)).
-			With(slog.String(util.ComponentKey, util.ComponentResetUser)),
+			With(slog.String(util.ComponentKey, util.ComponentResetUser)).
+			With(slog.String(util.ServiceKey, util.ServiceGateway)),
 	}
 }
 
@@ -39,13 +41,20 @@ var _ ResetHandler = (*resetHandler)(nil)
 type resetHandler struct {
 	session  uxsession.Service
 	provider provider.S2sTokenProvider
-	identity connect.S2sCaller
+	identity *connect.S2sCaller
 
 	logger *slog.Logger
 }
 
 // HandleReset is the concrete implementation of the interface function that handles the password reset request where a user knows their current password.
 func (h *resetHandler) HandleReset(w http.ResponseWriter, r *http.Request) {
+
+	// generate telemetry
+	tel := connect.NewTelemetry(r)
+	log := h.logger.With(tel.TelemetryFields()...)
+
+	// add telemetry to context for downstream calls + service functions
+	ctx := context.WithValue(r.Context(), connect.TelemetryKey, tel)
 
 	if r.Method != "POST" {
 		h.logger.Error("only POST requests are allowed to /reset endpoint")
@@ -60,7 +69,7 @@ func (h *resetHandler) HandleReset(w http.ResponseWriter, r *http.Request) {
 	// validate the user has an active, authenticated session
 	session, err := connect.GetSessionToken(r)
 	if err != nil {
-		h.logger.Error("failed to retrieve session token from request", "err", err.Error())
+		log.Error("failed to retrieve session token from request", "err", err.Error())
 		h.session.HandleSessionErr(err, w)
 		return
 	}
@@ -71,9 +80,9 @@ func (h *resetHandler) HandleReset(w http.ResponseWriter, r *http.Request) {
 	// This will validated by the identity service when the request is made, ie, the identity service
 	// will only attempt to update the password of the access token subject IF that access token is valid.
 	// The user has no ability to determine or target password changes for any user, not even themselves.
-	accessToken, err := h.session.GetAccessToken(session)
+	accessToken, err := h.session.GetAccessToken(ctx, session)
 	if err != nil {
-		h.logger.Error("failed to retrieve access token from session", "err", err.Error())
+		log.Error("failed to retrieve access token from session", "err", err.Error())
 		h.session.HandleSessionErr(err, w)
 		return
 	}
@@ -81,7 +90,7 @@ func (h *resetHandler) HandleReset(w http.ResponseWriter, r *http.Request) {
 	// decode the request body
 	var cmd profile.ResetCmd
 	if err := json.NewDecoder(r.Body).Decode(&cmd); err != nil {
-		h.logger.Error("failed to decode json in user reset request body", "err", err.Error())
+		log.Error("failed to decode json in user reset request body", "err", err.Error())
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusBadRequest,
 			Message:    "improperly formatted json",
@@ -92,7 +101,7 @@ func (h *resetHandler) HandleReset(w http.ResponseWriter, r *http.Request) {
 
 	// input validation of the reset request
 	if err := cmd.ValidateCmd(); err != nil {
-		h.logger.Error("invalid reset request", "err", err.Error())
+		log.Error("invalid reset request", "err", err.Error())
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusBadRequest,
 			Message:    err.Error(),
@@ -103,7 +112,7 @@ func (h *resetHandler) HandleReset(w http.ResponseWriter, r *http.Request) {
 
 	// validate the csrf token
 	if valid, err := h.session.IsValidCsrf(session, cmd.Csrf); !valid {
-		h.logger.Error("invalid csrf token", "err", err.Error())
+		log.Error("invalid csrf token", "err", err.Error())
 		h.session.HandleSessionErr(err, w)
 		return
 	}
@@ -112,22 +121,14 @@ func (h *resetHandler) HandleReset(w http.ResponseWriter, r *http.Request) {
 	cmd.Csrf = ""
 
 	// get s2s token for the identity service
-	s2sToken, err := h.provider.GetServiceToken(util.ServiceIdentity)
+	s2sToken, err := h.provider.GetServiceToken(ctx, util.ServiceIdentity)
 	if err != nil {
-		h.logger.Error("failed to retrieve s2s token", "err", err.Error())
+		h.logger.Error("failed to retrieve s2s token for iam service", "err", err.Error())
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusInternalServerError,
-			Message:    "password reset unsuccessful: internal server error",
+			Message:    "internal server error",
 		}
 		e.SendJsonErr(w)
-		return
-	}
-
-	// send the request to the identity service to update the password
-	// there will be no response body, only a status code -> identity will not return password data
-	if err := h.identity.PostToService("/reset", s2sToken, accessToken, cmd, nil); err != nil {
-		h.logger.Error("call to identity service reset endpoint failed", "err", err.Error())
-		h.identity.RespondUpstreamError(err, w)
 		return
 	}
 
@@ -137,6 +138,27 @@ func (h *resetHandler) HandleReset(w http.ResponseWriter, r *http.Request) {
 		// no error needed since this is a convenience function
 	}
 
-	h.logger.Info(fmt.Sprintf("user %s password reset successful", jot.Claims.Subject))
+	// send the request to the identity service to update the password
+	// there will be no response body, only a status code -> identity will not return password data
+	_, err = connect.PutToService[profile.ResetCmd, struct{}](
+		ctx,
+		h.identity,
+		"/reset",
+		s2sToken,
+		accessToken,
+		cmd,
+	)
+	if err != nil {
+		log.Error("failed to reset user password in identity service", "username", jot.Claims.Subject, "err", err.Error())
+		h.identity.RespondUpstreamError(err, w)
+		return
+	}
+	// if err := h.identity.PostToService("/reset", s2sToken, accessToken, cmd, nil); err != nil {
+	// 	h.logger.Error("call to identity service reset endpoint failed", "err", err.Error())
+	// 	h.identity.RespondUpstreamError(err, w)
+	// 	return
+	// }
+
+	h.logger.Info(fmt.Sprintf("user password reset successful", "username", jot.Claims.Subject))
 	w.WriteHeader(http.StatusNoContent)
 }
