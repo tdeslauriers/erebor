@@ -45,7 +45,7 @@ func (h *handler) HandleGetSession(w http.ResponseWriter, r *http.Request) {
 	telemetry := connect.NewTelemetry(r)
 	logger := h.logger.With(telemetry.TelemetryFields()...)
 
-	if r.Method != "GET" {
+	if r.Method != http.MethodGet {
 		logger.Error("only GET requests are allowed")
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusMethodNotAllowed,

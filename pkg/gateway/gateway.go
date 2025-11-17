@@ -238,9 +238,7 @@ func (g *gateway) Run() error {
 
 	// scopes
 	scope := scopes.NewHandler(g.uxSession, g.tknProvider, g.s2s)
-	mux.HandleFunc("/scopes", scope.HandleScopes)
-	mux.HandleFunc("/scopes/add", scope.HandleAdd)
-	mux.HandleFunc("/scopes/", scope.HandleScope) // trailing slash required for /scopes/{slug}
+	mux.HandleFunc("/scopes/{slug...}", scope.HandleScopes)
 
 	// permissions
 	pm := permissions.NewHandler(g.uxSession, g.tknProvider, g.task, g.gallery)
@@ -256,11 +254,8 @@ func (g *gateway) Run() error {
 	// tasks/allowances
 	task := tasks.NewHandler(g.uxSession, g.tknProvider, g.iam, g.task)
 	mux.HandleFunc("/account", task.HandleAccount)
-	mux.HandleFunc("/allowances", task.HandleAllowances) // POST is account creation
-	mux.HandleFunc("/allowances/", task.HandleAllowance) // trailing slash required for /allowances/{slug}
-	mux.HandleFunc("/templates/assignees", task.HandleGetAssignees)
-	mux.HandleFunc("/templates", task.HandleTemplates)
-	mux.HandleFunc("/templates/", task.HandleTemplate) // trailing slash required for /templates/{slug}
+	mux.HandleFunc("/allowances/{slug...}", task.HandleAllowances) 
+	mux.HandleFunc("/templates/{slug...}", task.HandleTemplates)
 	mux.HandleFunc("/tasks", task.HandleTasks)
 
 	// gallery/images/pics
