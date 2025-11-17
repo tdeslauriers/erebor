@@ -231,8 +231,7 @@ func (g *gateway) Run() error {
 	accounts := user.NewHandler(g.uxSession, g.tknProvider, g.iam, g.task, g.gallery)
 	mux.HandleFunc("/profile", accounts.HandleProfile)
 	mux.HandleFunc("/reset", accounts.HandleReset)
-	mux.HandleFunc("/users", accounts.HandleUsers)
-	mux.HandleFunc("/users/", accounts.HandleUser) // trailing slash required for /users/{slug}
+	mux.HandleFunc("/users/{slug...}", accounts.HandleUsers)
 	mux.HandleFunc("/users/scopes", accounts.HandleScopes)
 	mux.HandleFunc("/users/permissions", accounts.HandlePermissions)
 

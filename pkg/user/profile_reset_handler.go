@@ -153,12 +153,7 @@ func (h *resetHandler) HandleReset(w http.ResponseWriter, r *http.Request) {
 		h.identity.RespondUpstreamError(err, w)
 		return
 	}
-	// if err := h.identity.PostToService("/reset", s2sToken, accessToken, cmd, nil); err != nil {
-	// 	h.logger.Error("call to identity service reset endpoint failed", "err", err.Error())
-	// 	h.identity.RespondUpstreamError(err, w)
-	// 	return
-	// }
 
-	h.logger.Info(fmt.Sprintf("user password reset successful", "username", jot.Claims.Subject))
+	h.logger.Info("user password reset successful", "username", jot.Claims.Subject)
 	w.WriteHeader(http.StatusNoContent)
 }

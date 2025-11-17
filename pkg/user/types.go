@@ -22,7 +22,7 @@ type Handler interface {
 	UserHandler
 }
 
-func NewHandler(ux uxsession.Service, p provider.S2sTokenProvider, iam, task, g connect.S2sCaller) Handler {
+func NewHandler(ux uxsession.Service, p provider.S2sTokenProvider, iam, task, g *connect.S2sCaller) Handler {
 	return &handler{
 		PermissionsHandler: NewPermissionsHandler(ux, p, iam, task, g),
 		ProfileHandler:     NewProfileHandler(ux, p, iam),

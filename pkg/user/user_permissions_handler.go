@@ -1,6 +1,7 @@
 package user
 
 import (
+	"context"
 	"encoding/json"
 	"erebor/internal/util"
 	"erebor/pkg/authentication/uxsession"
@@ -24,7 +25,7 @@ type PermissionsHandler interface {
 }
 
 // NewPermissionsHandler returns a pointer to the concrete implementation of the PermissionsHandler interface.
-func NewPermissionsHandler(ux uxsession.Service, p provider.S2sTokenProvider, iam, task, g connect.S2sCaller) PermissionsHandler {
+func NewPermissionsHandler(ux uxsession.Service, p provider.S2sTokenProvider, iam, task, g *connect.S2sCaller) PermissionsHandler {
 	return &permissionsHandler{
 		session:  ux,
 		provider: p,
@@ -45,9 +46,9 @@ var _ PermissionsHandler = (*permissionsHandler)(nil)
 type permissionsHandler struct {
 	session  uxsession.Service
 	provider provider.S2sTokenProvider
-	identity connect.S2sCaller
-	tasks    connect.S2sCaller
-	gallery  connect.S2sCaller
+	identity *connect.S2sCaller
+	tasks    *connect.S2sCaller
+	gallery  *connect.S2sCaller
 
 	logger *slog.Logger
 }
@@ -55,18 +56,19 @@ type permissionsHandler struct {
 // HandlePermissions is the concrete implementation of the interface function that handles a request from the client by submitting it against the user permissions service.
 func (h *permissionsHandler) HandlePermissions(w http.ResponseWriter, r *http.Request) {
 
-	switch r.Method {
-	// case http.MethodGet:
+	// generate telemetry
+	tel := connect.NewTelemetry(r)
+	log := h.logger.With(tel.TelemetryFields()...)
 
-	// 	return
+	switch r.Method {
 	case http.MethodPut:
-		h.updateUserPermissions(w, r)
+		h.updateUserPermissions(w, r, tel, log)
 		return
 	default:
-		h.logger.Error("unsupported method for /user/permissions endpoint")
+		log.Error(fmt.Sprintf("unsupported method %s for endpoint %s", r.Method, r.URL.Path))
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusMethodNotAllowed,
-			Message:    "unsupported method for /user/permissions endpoint",
+			Message:    fmt.Sprintf("unsupported method %s for endpoint %s", r.Method, r.URL.Path),
 		}
 		e.SendJsonErr(w)
 		return
@@ -74,20 +76,23 @@ func (h *permissionsHandler) HandlePermissions(w http.ResponseWriter, r *http.Re
 }
 
 // updateUserPermissions is a helper method which handles the request to update user permissions.
-func (h *permissionsHandler) updateUserPermissions(w http.ResponseWriter, r *http.Request) {
+func (h *permissionsHandler) updateUserPermissions(w http.ResponseWriter, r *http.Request, tel *connect.Telemetry, log *slog.Logger) {
+
+	// add telemetry to context for downstream calls + service functions
+	ctx := context.WithValue(r.Context(), connect.TelemetryKey, tel)
 
 	// get session
 	session, err := connect.GetSessionToken(r)
 	if err != nil {
-		h.logger.Error("failed to get session token", slog.String("error", err.Error()))
+		log.Error("failed to get session token", slog.String("err", err.Error()))
 		h.session.HandleSessionErr(err, w)
 		return
 	}
 
 	// get access token tied to the session
-	accessToken, err := h.session.GetAccessToken(session)
+	accessToken, err := h.session.GetAccessToken(ctx, session)
 	if err != nil {
-		h.logger.Error("failed to get access token from session token", slog.String("error", err.Error()))
+		log.Error("failed to get access token from session token", slog.String("err", err.Error()))
 		h.session.HandleSessionErr(err, w)
 		return
 	}
@@ -95,11 +100,10 @@ func (h *permissionsHandler) updateUserPermissions(w http.ResponseWriter, r *htt
 	// decode the request body into a permissions command
 	var cmd permissions.UpdatePermissionsCmd
 	if err := json.NewDecoder(r.Body).Decode(&cmd); err != nil {
-		errMsg := "failed to decode json in user permissions request body: " + err.Error()
-		h.logger.Error(errMsg)
+		log.Error("failed to decode json in user permissions update command request body", slog.String("err", err.Error()))
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusBadRequest,
-			Message:    errMsg,
+			Message:    err.Error(),
 		}
 		e.SendJsonErr(w)
 		return
@@ -107,11 +111,10 @@ func (h *permissionsHandler) updateUserPermissions(w http.ResponseWriter, r *htt
 
 	// validate the request body
 	if err := cmd.Validate(); err != nil {
-		errMsg := "invalid user permissions request: " + err.Error()
-		h.logger.Error(errMsg)
+		log.Error("invalid user permissions update command request body", slog.String("err", err.Error()))
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusUnprocessableEntity,
-			Message:    errMsg,
+			Message:    err.Error(),
 		}
 		e.SendJsonErr(w)
 		return
@@ -119,32 +122,37 @@ func (h *permissionsHandler) updateUserPermissions(w http.ResponseWriter, r *htt
 
 	// validate the csrf token
 	if valid, err := h.session.IsValidCsrf(session, cmd.Csrf); !valid {
-		h.logger.Error(fmt.Sprintf("invalid csrf token: %s", err.Error()))
+		log.Error("invalid csrf token in user permissions update command request body", slog.String("err", err.Error()))
 		h.session.HandleSessionErr(err, w)
 		return
 	}
 
 	// fetch the user name from iam service
 	// downstream services need the user name to update permissions
-	s2sIamTkn, err := h.provider.GetServiceToken(util.ServiceIdentity)
+	s2sIamTkn, err := h.provider.GetServiceToken(ctx, util.ServiceIdentity)
 	if err != nil {
-		errMsg := fmt.Sprintf("failed to get s2s token for identity service: %s", err.Error())
-		h.logger.Error(errMsg)
+		log.Error("failed to get service token for identity service", slog.String("err", err.Error()))
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusInternalServerError,
-			Message:    "user permissions request failed: internal server error",
+			Message:    "internal server error",
 		}
 		e.SendJsonErr(w)
 		return
 	}
 
-	var user profile.User
-	if err := h.identity.GetServiceData(fmt.Sprintf("/s2s/users/%s", cmd.EntitySlug), s2sIamTkn, "", &user); err != nil {
-		errMsg := fmt.Sprintf("failed to get user data from identity service: %s", err.Error())
-		h.logger.Error(errMsg)
+	// get user data from identity service to get the username
+	user, err := connect.GetServiceData[profile.User](
+		ctx,
+		h.identity,
+		fmt.Sprintf("/s2s/users/%s", cmd.EntitySlug),
+		s2sIamTkn,
+		accessToken,
+	)
+	if err != nil {
+		log.Error("failed to get user data from identity service", slog.String("err", err.Error()))
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusInternalServerError,
-			Message:    errMsg,
+			Message:    "internal server error",
 		}
 		e.SendJsonErr(w)
 		return
@@ -190,14 +198,22 @@ func (h *permissionsHandler) updateUserPermissions(w http.ResponseWriter, r *htt
 		}
 
 		// get service token for gallery service
-		galleryToken, err := h.provider.GetServiceToken(util.ServiceGallery)
+		galleryToken, err := h.provider.GetServiceToken(ctx, util.ServiceGallery)
 		if err != nil {
 			eChan <- fmt.Errorf("failed to get service token for gallery service: %s", err.Error())
 			return
 		}
 
 		// make request to the gallery service
-		if err := h.gallery.PostToService("/patrons/permissions", galleryToken, accessToken, galleryCmd, nil); err != nil {
+		_, err = connect.PutToService[exo.UpdatePermissionsCmd, struct{}](
+			ctx,
+			h.gallery,
+			"/permissions",
+			galleryToken,
+			accessToken,
+			galleryCmd,
+		)
+		if err != nil {
 			eChan <- fmt.Errorf("failed to update gallery permissions: %s", err.Error())
 			return
 		}
@@ -213,14 +229,22 @@ func (h *permissionsHandler) updateUserPermissions(w http.ResponseWriter, r *htt
 		}
 
 		// get service token for tasks service
-		tasksToken, err := h.provider.GetServiceToken(util.ServiceTasks)
+		tasksToken, err := h.provider.GetServiceToken(ctx, util.ServiceTasks)
 		if err != nil {
 			eChan <- fmt.Errorf("failed to get service token for tasks service: %s", err.Error())
 			return
 		}
 
 		// make request to the tasks service
-		if err := h.tasks.PostToService("/allowances/permissions", tasksToken, accessToken, tasksCmd, nil); err != nil {
+		_, err = connect.PutToService[exo.UpdatePermissionsCmd, struct{}](
+			ctx,
+			h.tasks,
+			"/permissions",
+			tasksToken,
+			accessToken,
+			tasksCmd,
+		)
+		if err != nil {
 			eChan <- fmt.Errorf("failed to update tasks permissions: %s", err.Error())
 			return
 		}
@@ -239,13 +263,13 @@ func (h *permissionsHandler) updateUserPermissions(w http.ResponseWriter, r *htt
 		h.logger.Error(errMsg)
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusInternalServerError,
-			Message:    errMsg,
+			Message:    "failed to update permissions",
 		}
 		e.SendJsonErr(w)
 		return
 	}
 
 	// no response is expected from the identity service --> 204 No Content
-	h.logger.Info(fmt.Sprintf("user permissions updated for user %s", user.Username))
+	h.logger.Info(fmt.Sprintf("permissions updated for user %s", user.Slug))
 	w.WriteHeader(http.StatusNoContent)
 }

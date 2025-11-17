@@ -79,12 +79,7 @@ func (h *albumHandler) HandleAlbums(w http.ResponseWriter, r *http.Request) {
 	// 	h.deleteAlbum(w, r)
 	// 	return
 	default:
-		log.Error(fmt.Sprintf("unsupported method %s for endpoint %s", r.Method, r.URL.Path))
-		e := connect.ErrorHttp{
-			StatusCode: http.StatusMethodNotAllowed,
-			Message:    fmt.Sprintf("unsupported method %s for endpoint %s", r.Method, r.URL.Path),
-		}
-		e.SendJsonErr(w)
+
 		return
 	}
 }
