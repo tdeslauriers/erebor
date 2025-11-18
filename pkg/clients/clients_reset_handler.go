@@ -49,7 +49,7 @@ type resetHandler struct {
 func (h *resetHandler) HandleReset(w http.ResponseWriter, r *http.Request) {
 
 	// build/collect telemetry and add fields to the logger
-	telemetry := connect.NewTelemetry(r)
+	telemetry := connect.NewTelemetry(r, h.logger)
 	logger := h.logger.With(telemetry.TelemetryFields()...)
 
 	// add telemetry to context for downstream calls

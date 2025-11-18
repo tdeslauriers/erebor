@@ -62,7 +62,7 @@ type allowanceHandler struct {
 func (h *allowanceHandler) HandleAccount(w http.ResponseWriter, r *http.Request) {
 
 	// build/collect telemetry and add fields to the logger
-	tel := connect.NewTelemetry(r)
+	tel := connect.NewTelemetry(r, h.logger)
 	log := h.logger.With(tel.TelemetryFields()...)
 
 	switch r.Method {
@@ -252,7 +252,7 @@ func (h *allowanceHandler) handleUpdateAccount(w http.ResponseWriter, r *http.Re
 func (h *allowanceHandler) HandleAllowances(w http.ResponseWriter, r *http.Request) {
 
 	// generate telemetry
-	tel := connect.NewTelemetry(r)
+	tel := connect.NewTelemetry(r, h.logger)
 	log := h.logger.With(tel.TelemetryFields()...)
 
 	switch r.Method {

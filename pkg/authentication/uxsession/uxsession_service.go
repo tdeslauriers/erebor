@@ -522,7 +522,7 @@ func (s *service) removeOauthFlow(sessionId string, errChan chan error, wg *sync
 		go func(id string, ch chan error, wg *sync.WaitGroup) {
 			defer wg.Done()
 
-			qry := "DELETE FROM oauthflow WHERE id = ?"
+			qry := "DELETE FROM oauthflow WHERE uuid = ?"
 			if err := s.db.DeleteRecord(qry, id); err != nil {
 				ch <- fmt.Errorf("%s id %s: %v", ErrDeleteOauthExchange, id, err)
 				return

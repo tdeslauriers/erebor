@@ -5,7 +5,7 @@ go 1.24.0
 toolchain go1.24.4
 
 require (
-	github.com/tdeslauriers/carapace v0.1.95
+	github.com/tdeslauriers/carapace v0.1.98
 	github.com/tdeslauriers/pixie v0.1.5
 	github.com/tdeslauriers/ran v0.0.3
 )

@@ -58,7 +58,7 @@ type handler struct {
 func (h *handler) HandlePermissions(w http.ResponseWriter, r *http.Request) {
 
 	// generate telemetry
-	telemetry := connect.NewTelemetry(r)
+	telemetry := connect.NewTelemetry(r, h.logger)
 	logger := h.logger.With(telemetry.TelemetryFields()...)
 
 	switch r.Method {

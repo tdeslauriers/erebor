@@ -54,7 +54,7 @@ type clientHandler struct {
 func (h *clientHandler) HandleClients(w http.ResponseWriter, r *http.Request) {
 
 	// generate telemetry
-	telemetry := connect.NewTelemetry(r)
+	telemetry := connect.NewTelemetry(r, h.logger)
 	logger := h.logger.With(telemetry.TelemetryFields()...)
 
 	switch r.Method {
@@ -466,7 +466,7 @@ func (h *clientHandler) handlePostClient(w http.ResponseWriter, r *http.Request,
 func (h *clientHandler) HandleGeneratePat(w http.ResponseWriter, r *http.Request) {
 
 	// generate telemetry
-	telemetry := connect.NewTelemetry(r)
+	telemetry := connect.NewTelemetry(r, h.logger)
 	logger := h.logger.With(telemetry.TelemetryFields()...)
 
 	// add telemetry to context for downstream calls

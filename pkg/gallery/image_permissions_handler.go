@@ -52,7 +52,7 @@ type permissionsHandler struct {
 func (h *permissionsHandler) HandlePermissions(w http.ResponseWriter, r *http.Request) {
 
 	// generate telemetry
-	tel := connect.NewTelemetry(r)
+	tel := connect.NewTelemetry(r, h.logger)
 	log := h.logger.With(tel.TelemetryFields()...)
 
 	switch r.Method {

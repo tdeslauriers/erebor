@@ -50,7 +50,7 @@ type handler struct {
 func (h *handler) HandleScopes(w http.ResponseWriter, r *http.Request) {
 
 	// generate telemetry
-	tel := connect.NewTelemetry(r)
+	tel := connect.NewTelemetry(r, h.logger)
 	log := h.logger.With(tel.TelemetryFields()...)
 
 	// get slug if exists

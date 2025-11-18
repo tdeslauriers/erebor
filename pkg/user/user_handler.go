@@ -37,7 +37,8 @@ func NewUserHandler(ux uxsession.Service, p provider.S2sTokenProvider, i, t, g *
 
 		logger: slog.Default().
 			With(slog.String(util.PackageKey, util.PackageUser)).
-			With(slog.String(util.ComponentKey, util.ComponentUser)),
+			With(slog.String(util.ComponentKey, util.ComponentUser)).
+			With(slog.String(util.ServiceKey, util.ServiceGateway)),
 	}
 }
 
@@ -56,7 +57,7 @@ type userHandler struct {
 func (h *userHandler) HandleUsers(w http.ResponseWriter, r *http.Request) {
 
 	// generate telemetry
-	tel := connect.NewTelemetry(r)
+	tel := connect.NewTelemetry(r, h.logger)
 	log := h.logger.With(tel.TelemetryFields()...)
 
 	switch r.Method {
@@ -64,7 +65,7 @@ func (h *userHandler) HandleUsers(w http.ResponseWriter, r *http.Request) {
 
 		// get slug if exists
 		slug := r.PathValue("slug")
-		if slug != "" {
+		if slug == "" {
 			h.getAllUsers(w, r, tel, log)
 			return
 		} else {

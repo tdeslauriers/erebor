@@ -40,10 +40,10 @@ func (s *service) GetAccessToken(ctx context.Context, session string) (string, e
 	// get telemetry from context -> set up logger
 	logger := s.logger
 	telemetry, ok := ctx.Value(connect.TelemetryKey).(*connect.Telemetry)
-	if !ok {
-		s.logger.Warn("missing telemetry in context for GetAccessToken function")
+	if ok && telemetry != nil {
+		logger = logger.With(telemetry.TelemetryFields()...)
 	} else {
-		logger = s.logger.With(telemetry.TelemetryFields()...)
+		logger.Warn("failed to retrieve telemetry from context for GetAccessToken")
 	}
 
 	// lightweight input validation: redundant, but good practice

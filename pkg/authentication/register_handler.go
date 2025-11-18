@@ -58,7 +58,7 @@ type registrationHandler struct {
 func (h *registrationHandler) HandleRegistration(w http.ResponseWriter, r *http.Request) {
 
 	// build/collect telemetry and add fields to the logger
-	telemetry := connect.NewTelemetry(r)
+	telemetry := connect.NewTelemetry(r, h.logger)
 	telemetryLogger := h.logger.With(telemetry.TelemetryFields()...)
 
 	// add telemetry to context for downstream calls
