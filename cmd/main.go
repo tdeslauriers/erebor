@@ -17,11 +17,12 @@ func main() {
 	jsonHandler := slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
 	})
-	slog.SetDefault(slog.New(jsonHandler))
+	slog.SetDefault(slog.New(jsonHandler).With(
+		slog.String(util.ServiceKey, util.ServiceGateway),
+	))
 
 	// set up logger for main
 	logger := slog.Default().
-		With(slog.String(util.ServiceKey, util.ServiceGateway)).
 		With(slog.String(util.PackageKey, util.PackageMain)).
 		With(slog.String(util.ComponentKey, util.ComponentMain))
 

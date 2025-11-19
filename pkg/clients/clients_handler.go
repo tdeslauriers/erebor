@@ -24,8 +24,7 @@ func NewClientHandler(ux uxsession.Service, p provider.S2sTokenProvider, c *conn
 
 		logger: slog.Default().
 			With(slog.String(util.PackageKey, util.PackageClients)).
-			With(slog.String(util.ComponentKey, util.ComponentClients)).
-			With(slog.String(util.ServiceKey, util.ServiceGateway)),
+			With(slog.String(util.ComponentKey, util.ComponentClients)),
 	}
 }
 

@@ -37,8 +37,7 @@ func NewUserHandler(ux uxsession.Service, p provider.S2sTokenProvider, i, t, g *
 
 		logger: slog.Default().
 			With(slog.String(util.PackageKey, util.PackageUser)).
-			With(slog.String(util.ComponentKey, util.ComponentUser)).
-			With(slog.String(util.ServiceKey, util.ServiceGateway)),
+			With(slog.String(util.ComponentKey, util.ComponentUser)),
 	}
 }
 

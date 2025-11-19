@@ -34,8 +34,7 @@ func NewCallbackHandler(p provider.S2sTokenProvider, iam *connect.S2sCaller, o o
 
 		logger: slog.Default().
 			With(slog.String(util.PackageKey, util.PackageAuth)).
-			With(slog.String(util.ComponentKey, util.ComponentCallback)).
-			With(slog.String(util.ServiceKey, util.ServiceGateway)),
+			With(slog.String(util.ComponentKey, util.ComponentCallback)),
 	}
 }
 

@@ -29,8 +29,7 @@ func NewResetHandler(ux uxsession.Service, p provider.S2sTokenProvider, c *conne
 
 		logger: slog.Default().
 			With(slog.String(util.PackageKey, util.PackageClients)).
-			With(slog.String(util.ComponentKey, util.ComponentResetClient)).
-			With(slog.String(util.ServiceKey, util.ServiceGateway)),
+			With(slog.String(util.ComponentKey, util.ComponentResetClient)),
 	}
 
 }

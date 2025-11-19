@@ -31,7 +31,6 @@ func NewTaskHandler(ux uxsession.Service, p provider.S2sTokenProvider, task *con
 		task: task,
 
 		logger: slog.Default().
-			With(slog.String(util.ServiceKey, util.ServiceGateway)).
 			With(slog.String(util.PackageKey, util.PackageTasks)).
 			With(slog.String(util.ComponentKey, util.ComponentTasks)),
 	}

@@ -31,8 +31,7 @@ func NewUserAccountService(tkn provider.S2sTokenProvider, iam, g *connect.S2sCal
 
 		logger: slog.Default().
 			With(slog.String(util.PackageKey, util.PackageScheduled)).
-			With(slog.String(util.ComponentKey, util.ComponentScheduledUserAccount)).
-			With(slog.String(util.ServiceKey, util.ServiceGateway)),
+			With(slog.String(util.ComponentKey, util.ComponentScheduledUserAccount)),
 	}
 }
 

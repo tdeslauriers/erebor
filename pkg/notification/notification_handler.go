@@ -32,7 +32,6 @@ func NewHandler(p provider.S2sTokenProvider, g *connect.S2sCaller, pat pat.Verif
 		pat:     pat,
 
 		logger: slog.Default().
-			With(slog.String(util.ServiceKey, util.ServiceGateway)).
 			With(slog.String(util.PackageKey, util.PackageNotification)).
 			With(slog.String(util.ComponentKey, util.ComponentNotification)),
 	}

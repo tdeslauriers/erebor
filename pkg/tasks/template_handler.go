@@ -30,7 +30,6 @@ func NewTemplateHandler(ux uxsession.Service, p provider.S2sTokenProvider, task 
 		task: task,
 
 		logger: slog.Default().
-			With(slog.String(util.ServiceKey, util.ServiceGateway)).
 			With(slog.String(util.PackageKey, util.PackageTasks)).
 			With(slog.String(util.ComponentKey, util.ComponentTemplate)),
 	}

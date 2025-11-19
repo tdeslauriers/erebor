@@ -32,8 +32,7 @@ func NewProfileHandler(ux uxsession.Service, p provider.S2sTokenProvider, iam *c
 
 		logger: slog.Default().
 			With(slog.String(util.PackageKey, util.PackageUser)).
-			With(slog.String(util.ComponentKey, util.ComponentProfile)).
-			With(slog.String(util.ServiceKey, util.ServiceGateway)),
+			With(slog.String(util.ComponentKey, util.ComponentProfile)),
 	}
 }
 

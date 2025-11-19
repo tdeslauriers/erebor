@@ -75,8 +75,7 @@ func NewService(
 
 		logger: slog.Default().
 			With(slog.String(util.PackageKey, util.PackageSession)).
-			With(slog.String(util.ComponentKey, util.ComponentSession)).
-			With(slog.String(util.ServiceKey, util.ServiceGateway)),
+			With(slog.String(util.ComponentKey, util.ComponentSession)),
 	}
 }
 
