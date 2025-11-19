@@ -169,10 +169,10 @@ type gateway struct {
 	serverTls   *tls.Config
 	repository  data.SqlRepository
 	tknProvider provider.S2sTokenProvider
-	s2s         connect.S2sCaller
-	iam         connect.S2sCaller
-	task        connect.S2sCaller
-	gallery     connect.S2sCaller
+	s2s         *connect.S2sCaller
+	iam         *connect.S2sCaller
+	task        *connect.S2sCaller
+	gallery     *connect.S2sCaller
 	uxSession   uxsession.Service
 	oAuth       oauth.Service
 	verifier    jwt.Verifier
@@ -231,45 +231,36 @@ func (g *gateway) Run() error {
 	accounts := user.NewHandler(g.uxSession, g.tknProvider, g.iam, g.task, g.gallery)
 	mux.HandleFunc("/profile", accounts.HandleProfile)
 	mux.HandleFunc("/reset", accounts.HandleReset)
-	mux.HandleFunc("/users", accounts.HandleUsers)
-	mux.HandleFunc("/users/", accounts.HandleUser) // trailing slash required for /users/{slug}
+	mux.HandleFunc("/users/{slug...}", accounts.HandleUsers)
 	mux.HandleFunc("/users/scopes", accounts.HandleScopes)
 	mux.HandleFunc("/users/permissions", accounts.HandlePermissions)
 
 	// scopes
 	scope := scopes.NewHandler(g.uxSession, g.tknProvider, g.s2s)
-	mux.HandleFunc("/scopes", scope.HandleScopes)
-	mux.HandleFunc("/scopes/add", scope.HandleAdd)
-	mux.HandleFunc("/scopes/", scope.HandleScope) // trailing slash required for /scopes/{slug}
+	mux.HandleFunc("/scopes/{slug...}", scope.HandleScopes)
 
 	// permissions
 	pm := permissions.NewHandler(g.uxSession, g.tknProvider, g.task, g.gallery)
-	mux.HandleFunc("/permissions", pm.HandlePermissions)
-	mux.HandleFunc("/permissions/", pm.HandlePermission) // trailing slash required for /permissions/{slug}
+	mux.HandleFunc("/permissions/{slug...}", pm.HandlePermissions)
 
 	// clients/s2s
 	client := clients.NewHandler(g.uxSession, g.tknProvider, g.s2s)
-	mux.HandleFunc("/clients", client.HandleClients)
+	mux.HandleFunc("/clients/{slug...}", client.HandleClients) // POST is /clients/register
 	mux.HandleFunc("/clients/reset", client.HandleReset)
-	mux.HandleFunc("/clients/", client.HandleClient) // trailing slash required for /clients/{slug}; POST is /clients/register
 	mux.HandleFunc("/clients/scopes", client.HandleScopes)
 	mux.HandleFunc("/clients/generate/pat", client.HandleGeneratePat)
 
 	// tasks/allowances
 	task := tasks.NewHandler(g.uxSession, g.tknProvider, g.iam, g.task)
 	mux.HandleFunc("/account", task.HandleAccount)
-	mux.HandleFunc("/allowances", task.HandleAllowances) // POST is account creation
-	mux.HandleFunc("/allowances/", task.HandleAllowance) // trailing slash required for /allowances/{slug}
-	mux.HandleFunc("/templates/assignees", task.HandleGetAssignees)
-	mux.HandleFunc("/templates", task.HandleTemplates)
-	mux.HandleFunc("/templates/", task.HandleTemplate) // trailing slash required for /templates/{slug}
+	mux.HandleFunc("/allowances/{slug...}", task.HandleAllowances) 
+	mux.HandleFunc("/templates/{slug...}", task.HandleTemplates)
 	mux.HandleFunc("/tasks", task.HandleTasks)
 
 	// gallery/images/pics
 	glry := gallery.NewHandler(g.uxSession, g.tknProvider, g.gallery, g.pat)
-	mux.HandleFunc("/albums", glry.HandleAlbums)
-	mux.HandleFunc("/albums/", glry.HandleAlbum) // trailing slash required for /albums/{slug}
-	mux.HandleFunc("/images/", glry.HandleImage) // trailing slash required for /images/{slug}
+	mux.HandleFunc("/albums/{slug...}", glry.HandleAlbums)
+	mux.HandleFunc("/images/{slug}", glry.HandleImage)
 	mux.HandleFunc("/images/notify/upload", glry.HandleImageUploadNotification)
 	mux.HandleFunc("/images/permissions", glry.HandlePermissions)
 

@@ -17,7 +17,7 @@ type Handler interface {
 }
 
 // NewHandler creates a new instance of Handler, returning a pointer to the concrete implementation(s).
-func NewHandler(ux uxsession.Service, p provider.S2sTokenProvider, iam, task connect.S2sCaller) Handler {
+func NewHandler(ux uxsession.Service, p provider.S2sTokenProvider, iam, task *connect.S2sCaller) Handler {
 	return &handler{
 		AllowanceHandler: NewAllowanceHandler(ux, p, iam, task),
 		TemplateHandler:  NewTemplateHandler(ux, p, task),

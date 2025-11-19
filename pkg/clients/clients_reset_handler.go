@@ -1,6 +1,7 @@
 package clients
 
 import (
+	"context"
 	"encoding/json"
 	"erebor/internal/util"
 	"erebor/pkg/authentication/uxsession"
@@ -20,7 +21,7 @@ type ResetHandler interface {
 	HandleReset(w http.ResponseWriter, r *http.Request)
 }
 
-func NewResetHandler(ux uxsession.Service, p provider.S2sTokenProvider, c connect.S2sCaller) ResetHandler {
+func NewResetHandler(ux uxsession.Service, p provider.S2sTokenProvider, c *connect.S2sCaller) ResetHandler {
 	return &resetHandler{
 		session:  ux,
 		provider: p,
@@ -28,7 +29,7 @@ func NewResetHandler(ux uxsession.Service, p provider.S2sTokenProvider, c connec
 
 		logger: slog.Default().
 			With(slog.String(util.PackageKey, util.PackageClients)).
-			With(slog.String(util.ComponentKey, util.ComponentClients)).
+			With(slog.String(util.ComponentKey, util.ComponentResetClient)).
 			With(slog.String(util.ServiceKey, util.ServiceGateway)),
 	}
 
@@ -39,7 +40,7 @@ var _ ResetHandler = (*resetHandler)(nil)
 type resetHandler struct {
 	session  uxsession.Service
 	provider provider.S2sTokenProvider
-	s2s      connect.S2sCaller
+	s2s      *connect.S2sCaller
 
 	logger *slog.Logger
 }
@@ -47,8 +48,15 @@ type resetHandler struct {
 // HandleReset is the concrete implementation of the interface function that handles the password reset request for client services.
 func (h *resetHandler) HandleReset(w http.ResponseWriter, r *http.Request) {
 
+	// build/collect telemetry and add fields to the logger
+	telemetry := connect.NewTelemetry(r, h.logger)
+	logger := h.logger.With(telemetry.TelemetryFields()...)
+
+	// add telemetry to context for downstream calls
+	ctx := context.WithValue(r.Context(), connect.TelemetryKey, telemetry)
+
 	if r.Method != "POST" {
-		h.logger.Error("only POST requests are allowed to /reset endpoint")
+		logger.Error("only POST requests are allowed")
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusMethodNotAllowed,
 			Message:    "only POST requests are allowed",
@@ -60,15 +68,15 @@ func (h *resetHandler) HandleReset(w http.ResponseWriter, r *http.Request) {
 	// validate the user has an active, authenticated session
 	session, err := connect.GetSessionToken(r)
 	if err != nil {
-		h.logger.Error(fmt.Sprintf("failed to get session token from request: %s", err.Error()))
+		logger.Error("failed to get session token from request", "err", err.Error())
 		h.session.HandleSessionErr(err, w)
 		return
 	}
 
 	// get access token tied to the session
-	accessToken, err := h.session.GetAccessToken(session)
+	accessToken, err := h.session.GetAccessToken(ctx, session)
 	if err != nil {
-		h.logger.Error(fmt.Sprintf("failed to get access token from session token: %s", err.Error()))
+		logger.Error("failed to get access token from session token", "err", err.Error())
 		h.session.HandleSessionErr(err, w)
 		return
 	}
@@ -76,11 +84,10 @@ func (h *resetHandler) HandleReset(w http.ResponseWriter, r *http.Request) {
 	// decode the request body
 	var cmd profile.ResetCmd
 	if err := json.NewDecoder(r.Body).Decode(&cmd); err != nil {
-		errMsg := fmt.Sprintf("failed to decode json in client scopes request body: %s", err.Error())
-		h.logger.Error(errMsg)
+		logger.Error("failed to decode json in request body", "err", err.Error())
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusBadRequest,
-			Message:    errMsg,
+			Message:    "failed to decode json in request body",
 		}
 		e.SendJsonErr(w)
 		return
@@ -88,11 +95,11 @@ func (h *resetHandler) HandleReset(w http.ResponseWriter, r *http.Request) {
 
 	// validate the request body
 	if err := cmd.ValidateCmd(); err != nil {
-		errMsg := fmt.Sprintf("error validating request body: %s", err.Error())
-		h.logger.Error(errMsg)
+
+		logger.Error("failed to validate reset command fields in request body", "err", err.Error())
 		e := connect.ErrorHttp{
-			StatusCode: http.StatusBadRequest,
-			Message:    errMsg,
+			StatusCode: http.StatusUnprocessableEntity,
+			Message:    err.Error(),
 		}
 		e.SendJsonErr(w)
 		return
@@ -100,7 +107,7 @@ func (h *resetHandler) HandleReset(w http.ResponseWriter, r *http.Request) {
 
 	// validate the csrf token
 	if valid, err := h.session.IsValidCsrf(session, cmd.Csrf); !valid {
-		h.logger.Error(fmt.Sprintf("invalid csrf token: %s", err.Error()))
+		logger.Error("invalid csrf token", "err", err.Error())
 		h.session.HandleSessionErr(err, w)
 		return
 	}
@@ -108,9 +115,9 @@ func (h *resetHandler) HandleReset(w http.ResponseWriter, r *http.Request) {
 	// csrf token no longer needed, set to empty string
 	cmd.Csrf = ""
 
-	s2sToken, err := h.provider.GetServiceToken(util.ServiceS2s)
+	s2sToken, err := h.provider.GetServiceToken(ctx, util.ServiceS2s)
 	if err != nil {
-		h.logger.Error(fmt.Sprintf("failed to get s2s token for s2s service: %s", err.Error()))
+		logger.Error("failed to get s2s token for s2s service", "err", err.Error())
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusInternalServerError,
 			Message:    "service client password reset unsuccessful: internal server error",
@@ -121,12 +128,20 @@ func (h *resetHandler) HandleReset(w http.ResponseWriter, r *http.Request) {
 
 	// make the request to the s2s service
 	// there will be no response body, only a status code -> s2s will not return password data
-	if err := h.s2s.PostToService("/clients/reset", s2sToken, accessToken, cmd, nil); err != nil {
-		h.logger.Error(fmt.Sprintf("error calling service client reset endpoint on s2s service: %s", err.Error()))
+	_, err = connect.PostToService[profile.ResetCmd, struct{}](
+		ctx,
+		h.s2s,
+		"/clients/reset",
+		s2sToken,
+		accessToken,
+		cmd,
+	)
+	if err != nil {
+		logger.Error("failed to post reset cmd to s2s service", "err", err.Error())
 		h.s2s.RespondUpstreamError(err, w)
 		return
 	}
 
-	h.logger.Info(fmt.Sprintf("service client %s password reset successful", cmd.ResourceId))
+	logger.Info(fmt.Sprintf("service client %s password reset successful", cmd.ResourceId))
 	w.WriteHeader(http.StatusNoContent)
 }

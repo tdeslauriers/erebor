@@ -16,7 +16,7 @@ type Service interface {
 
 // NewService returns a new instance of Service, which is an aggregate interface
 // that combines the methods from exo.Cleanup and ScheduledService.
-func NewService(sql data.SqlRepository, tkn provider.S2sTokenProvider, iam, g connect.S2sCaller) Service {
+func NewService(sql data.SqlRepository, tkn provider.S2sTokenProvider, iam, g *connect.S2sCaller) Service {
 	return &service{
 		Cleanup:            exo.NewCleanup(sql),
 		UserAccountService: NewUserAccountService(tkn, iam, g),

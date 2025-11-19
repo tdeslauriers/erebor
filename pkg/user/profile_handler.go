@@ -1,6 +1,7 @@
 package user
 
 import (
+	"context"
 	"encoding/json"
 	"erebor/internal/util"
 	"erebor/pkg/authentication/uxsession"
@@ -23,15 +24,16 @@ type ProfileHandler interface {
 }
 
 // NewProfileHandler returns a pointer to a concrete implementation of the ProfileHandler interface.
-func NewProfileHandler(ux uxsession.Service, p provider.S2sTokenProvider, c connect.S2sCaller) ProfileHandler {
+func NewProfileHandler(ux uxsession.Service, p provider.S2sTokenProvider, iam *connect.S2sCaller) ProfileHandler {
 	return &profileHandler{
 		session:  ux,
 		provider: p,
-		identity: c,
+		identity: iam,
 
 		logger: slog.Default().
 			With(slog.String(util.PackageKey, util.PackageUser)).
-			With(slog.String(util.ComponentKey, util.ComponentProfile)),
+			With(slog.String(util.ComponentKey, util.ComponentProfile)).
+			With(slog.String(util.ServiceKey, util.ServiceGateway)),
 	}
 }
 
@@ -41,7 +43,7 @@ var _ ProfileHandler = (*profileHandler)(nil)
 type profileHandler struct {
 	session  uxsession.Service
 	provider provider.S2sTokenProvider
-	identity connect.S2sCaller
+	identity *connect.S2sCaller
 	// profile connect.S2sCaller: silhoutte service, ie, non-identity data that is part of user profile, address, phone, preferences, etc
 
 	logger *slog.Logger
@@ -51,20 +53,24 @@ type profileHandler struct {
 // Note: this is for a user's profile only, and is not meant handle admin-level (any)user requests.
 func (h *profileHandler) HandleProfile(w http.ResponseWriter, r *http.Request) {
 
+	// generate telemetry
+	tel := connect.NewTelemetry(r, h.logger)
+	log := h.logger.With(tel.TelemetryFields()...)
+
 	switch r.Method {
-	case "GET":
+	case http.MethodGet:
 		// get user profile
-		h.handleGet(w, r)
+		h.handleGet(w, r, tel, log)
 		return
-	case "PUT":
+	case http.MethodPut:
 		// update user profile
-		h.handlePut(w, r)
+		h.handlePut(w, r, tel, log)
 		return
 	default:
-		h.logger.Error("only GET and PUT requests are allowed to /profile endpoint")
+		log.Error(fmt.Sprintf("unsupported method %s for endpoint %s", r.Method, r.URL.Path))
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusMethodNotAllowed,
-			Message:    "only GET and PUT requests are allowed",
+			Message:    fmt.Sprintf("unsupported method %s for endpoint %s", r.Method, r.URL.Path),
 		}
 		e.SendJsonErr(w)
 		return
@@ -72,28 +78,31 @@ func (h *profileHandler) HandleProfile(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleGet handles the GET request for a user's profile.
-func (h *profileHandler) handleGet(w http.ResponseWriter, r *http.Request) {
+func (h *profileHandler) handleGet(w http.ResponseWriter, r *http.Request, tel *connect.Telemetry, log *slog.Logger) {
+
+	// add telemetry to context for downstream calls + service functions
+	ctx := context.WithValue(r.Context(), connect.TelemetryKey, tel)
 
 	// validate the user has an active, authenticated session
 	session, err := connect.GetSessionToken(r)
 	if err != nil {
-		h.logger.Error(fmt.Sprintf("failed to get session token from request: %s", err.Error()))
+		log.Error("failed to get session token from request", "err", err.Error())
 		h.session.HandleSessionErr(err, w)
 		return
 	}
 
 	// get user access token from session
-	accessToken, err := h.session.GetAccessToken(session)
+	accessToken, err := h.session.GetAccessToken(ctx, session)
 	if err != nil {
-		h.logger.Error(fmt.Sprintf("failed to get access token from session token: %s", err.Error()))
+		log.Error("failed to exchage session token for access token", "err", err.Error())
 		h.session.HandleSessionErr(err, w)
 		return
 	}
 
 	// get s2s token for identity service
-	s2sToken, err := h.provider.GetServiceToken(util.ServiceIdentity)
+	s2sToken, err := h.provider.GetServiceToken(ctx, util.ServiceIdentity)
 	if err != nil {
-		h.logger.Error(fmt.Sprintf("failed to get s2s token for call to identity service: %s", err.Error()))
+		log.Error("failed to get s2s token for call to iam profile service", "err", err.Error())
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusInternalServerError,
 			Message:    "internl service error",
@@ -103,9 +112,15 @@ func (h *profileHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// get user data from identity service
-	var user profile.User
-	if err := h.identity.GetServiceData("/profile", s2sToken, accessToken, &user); err != nil {
-		h.logger.Error(fmt.Sprintf("failed to get user profile from identity service: %s", err.Error()))
+	user, err := connect.GetServiceData[profile.User](
+		ctx,
+		h.identity,
+		"/profile",
+		s2sToken,
+		accessToken,
+	)
+	if err != nil {
+		log.Error("failed to get user profile from identity service", "err", err.Error())
 		h.identity.RespondUpstreamError(err, w)
 		return
 	}
@@ -131,7 +146,7 @@ func (h *profileHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 	if user.BirthDate != "" {
 		dob, err := time.Parse("2006-01-02", user.BirthDate)
 		if err != nil {
-			h.logger.Error("failed to parse user birthdate", "err", err.Error())
+			log.Error("failed to parse user birthdate", "err", err.Error())
 			e := connect.ErrorHttp{
 				StatusCode: http.StatusInternalServerError,
 				Message:    "failed to parse user birthdate",
@@ -148,7 +163,7 @@ func (h *profileHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(profile); err != nil {
-		h.logger.Error("failed to encode user profile to json", "err", err.Error())
+		log.Error("failed to encode user profile to json", "err", err.Error())
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusInternalServerError,
 			Message:    "failed to encode user profile to json",
@@ -158,20 +173,23 @@ func (h *profileHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (h *profileHandler) handlePut(w http.ResponseWriter, r *http.Request) {
+func (h *profileHandler) handlePut(w http.ResponseWriter, r *http.Request, tel *connect.Telemetry, log *slog.Logger) {
+
+	// add telemetry to context for downstream calls + service functions
+	ctx := context.WithValue(r.Context(), connect.TelemetryKey, tel)
 
 	// validate the user has an active, authenticated session
 	session, err := connect.GetSessionToken(r)
 	if err != nil {
-		h.logger.Error("failed to get session token from request", "err", err.Error())
+		log.Error("failed to get session token from request", "err", err.Error())
 		h.session.HandleSessionErr(err, w)
 		return
 	}
 
 	// get user access token from session
-	accessToken, err := h.session.GetAccessToken(session)
+	accessToken, err := h.session.GetAccessToken(ctx, session)
 	if err != nil {
-		h.logger.Error("failed to get access token from session", "err", err.Error())
+		log.Error("failed to exchage session token for access token", "err", err.Error())
 		h.session.HandleSessionErr(err, w)
 		return
 	}
@@ -179,7 +197,7 @@ func (h *profileHandler) handlePut(w http.ResponseWriter, r *http.Request) {
 	// get request body
 	var cmd ProfileCmd
 	if err := json.NewDecoder(r.Body).Decode(&cmd); err != nil {
-		h.logger.Error("failed to decode json in user profile request body", "err", err.Error())
+		log.Error("failed to decode json in user profile request body", "err", err.Error())
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusBadRequest,
 			Message:    "improperly formatted json",
@@ -190,7 +208,7 @@ func (h *profileHandler) handlePut(w http.ResponseWriter, r *http.Request) {
 
 	// input validation of the profile request
 	if err := cmd.ValidateCmd(); err != nil {
-		h.logger.Error("invalid profile request", "err", err.Error())
+		log.Error("invalid profile request", "err", err.Error())
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusBadRequest,
 			Message:    err.Error(),
@@ -201,7 +219,7 @@ func (h *profileHandler) handlePut(w http.ResponseWriter, r *http.Request) {
 
 	// validate csrf token
 	if valid, err := h.session.IsValidCsrf(session, cmd.Csrf); !valid {
-		h.logger.Error("invalid csrf token", "err", err.Error())
+		log.Error("invalid csrf token", "err", err.Error())
 		h.session.HandleSessionErr(err, w)
 		return
 	}
@@ -225,12 +243,10 @@ func (h *profileHandler) handlePut(w http.ResponseWriter, r *http.Request) {
 		AccountLocked:  cmd.AccountLocked,  // passed, but dropped upstream because user not allowed to change account locked status
 	}
 
-	// access token retrieved above to validate session
-
 	// get s2s token for identity service
-	s2sToken, err := h.provider.GetServiceToken(util.ServiceIdentity)
+	s2sToken, err := h.provider.GetServiceToken(ctx, util.ServiceIdentity)
 	if err != nil {
-		h.logger.Error("failed to get s2s token for call to profile service", "err", err.Error())
+		log.Error("failed to get s2s token for call to iam profile service", "err", err.Error())
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusInternalServerError,
 			Message:    "internl service error",
@@ -240,9 +256,16 @@ func (h *profileHandler) handlePut(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// update user data in identity service
-	var updated profile.User
-	if err := h.identity.PostToService("/profile", s2sToken, accessToken, user, &updated); err != nil {
-		h.logger.Error("failed to update user profile", "err", err.Error())
+	updated, err := connect.PutToService[profile.User, profile.User](
+		ctx,
+		h.identity,
+		"/profile",
+		s2sToken,
+		accessToken,
+		user,
+	)
+	if err != nil {
+		log.Error("failed to update user profile in identity service", "err", err.Error())
 		h.identity.RespondUpstreamError(err, w)
 		return
 	}
@@ -266,7 +289,7 @@ func (h *profileHandler) handlePut(w http.ResponseWriter, r *http.Request) {
 	if updated.BirthDate != "" {
 		birthdate, err := time.Parse("2006-01-02", updated.BirthDate)
 		if err != nil {
-			h.logger.Error("failed to parse user birthdate returned from identity service", "err", err.Error())
+			log.Error("failed to parse user birthdate returned from identity service", "err", err.Error())
 			h.identity.RespondUpstreamError(err, w)
 			return
 		}
@@ -280,7 +303,7 @@ func (h *profileHandler) handlePut(w http.ResponseWriter, r *http.Request) {
 	// TODO: replace used csrf with new one
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(profile); err != nil {
-		h.logger.Error("failed to encode user profile to json", "err", err.Error())
+		log.Error("failed to encode user profile to json", "err", err.Error())
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusInternalServerError,
 			Message:    "failed to encode user profile to json",

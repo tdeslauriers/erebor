@@ -1,6 +1,7 @@
 package user
 
 import (
+	"context"
 	"encoding/json"
 	"erebor/internal/util"
 	"erebor/pkg/authentication/uxsession"
@@ -21,14 +22,12 @@ import (
 
 // UserHandler is an interface for handling user requests
 type UserHandler interface {
-	// HandleUsers returns a list of users by forwarding the request to the identity service.
+	// HandleUsers handles all requests to the identity service gateway endpoints
+	// once initial validation is done in the gateway, the request is forwarded to the identity service
 	HandleUsers(w http.ResponseWriter, r *http.Request)
-
-	// HandleUser handles a request from the client by submitting it against the user identity service and user profile service.
-	HandleUser(w http.ResponseWriter, r *http.Request)
 }
 
-func NewUserHandler(ux uxsession.Service, p provider.S2sTokenProvider, i, t, g connect.S2sCaller) UserHandler {
+func NewUserHandler(ux uxsession.Service, p provider.S2sTokenProvider, i, t, g *connect.S2sCaller) UserHandler {
 	return &userHandler{
 		session:  ux,
 		provider: p,
@@ -38,7 +37,8 @@ func NewUserHandler(ux uxsession.Service, p provider.S2sTokenProvider, i, t, g c
 
 		logger: slog.Default().
 			With(slog.String(util.PackageKey, util.PackageUser)).
-			With(slog.String(util.ComponentKey, util.ComponentUser)),
+			With(slog.String(util.ComponentKey, util.ComponentUser)).
+			With(slog.String(util.ServiceKey, util.ServiceGateway)),
 	}
 }
 
@@ -47,66 +47,99 @@ var _ UserHandler = (*userHandler)(nil)
 type userHandler struct {
 	session  uxsession.Service
 	provider provider.S2sTokenProvider
-	identity connect.S2sCaller
-	tasks    connect.S2sCaller
-	gallery  connect.S2sCaller
+	identity *connect.S2sCaller
+	tasks    *connect.S2sCaller
+	gallery  *connect.S2sCaller
 
 	logger *slog.Logger
 }
 
 func (h *userHandler) HandleUsers(w http.ResponseWriter, r *http.Request) {
 
-	if r.Method != "GET" {
-		h.logger.Error("only GET requests are allowed to /users endpoint")
+	// generate telemetry
+	tel := connect.NewTelemetry(r, h.logger)
+	log := h.logger.With(tel.TelemetryFields()...)
+
+	switch r.Method {
+	case http.MethodGet:
+
+		// get slug if exists
+		slug := r.PathValue("slug")
+		if slug == "" {
+			h.getAllUsers(w, r, tel, log)
+			return
+		} else {
+			h.getUser(w, r, tel, log)
+			return
+		}
+	case http.MethodPut:
+		h.putUser(w, r, tel, log)
+		return
+	default:
+		log.Error(fmt.Sprintf("unsupported method %s for endpoint %s", r.Method, r.URL.Path))
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusMethodNotAllowed,
-			Message:    "only GET requests are allowed",
+			Message:    fmt.Sprintf("unsupported method %s for endpoint %s", r.Method, r.URL.Path),
 		}
 		e.SendJsonErr(w)
 		return
 	}
+}
+
+func (h *userHandler) getAllUsers(w http.ResponseWriter, r *http.Request, tel *connect.Telemetry, log *slog.Logger) {
+
+	// add telemetry to context for downstream calls + service functions
+	ctx := context.WithValue(r.Context(), connect.TelemetryKey, tel)
 
 	// get the user token from the request
 	session, err := connect.GetSessionToken(r)
 	if err != nil {
-		h.logger.Error(fmt.Sprintf("failed to get session token from request: %s", err.Error()))
+		log.Error("failed to retrieve session token from request", "err", err.Error())
 		h.session.HandleSessionErr(err, w)
 		return
 	}
 
 	// get access token
-	accessToken, err := h.session.GetAccessToken(session)
+	accessToken, err := h.session.GetAccessToken(ctx, session)
 	if err != nil {
-		h.logger.Error(fmt.Sprintf("failed to get access token from session token: %s", err.Error()))
+		log.Error("failed to exchange session token for access token", "err", err.Error())
 		h.session.HandleSessionErr(err, w)
 		return
 	}
 
 	// get s2s token for identity service
-	s2sToken, err := h.provider.GetServiceToken(util.ServiceIdentity)
+	s2sToken, err := h.provider.GetServiceToken(ctx, util.ServiceIdentity)
 	if err != nil {
-		h.logger.Error(fmt.Sprintf("failed to get s2s token for identity service: %s", err.Error()))
+		log.Error("failed to get s2s token for identity service", "err", err.Error())
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusInternalServerError,
-			Message:    "failed to get s2s token for identity service",
+			Message:    "internal service error",
 		}
 		e.SendJsonErr(w)
 		return
 	}
 
 	// get users from identity service
-	var users []profile.User
-	if err := h.identity.GetServiceData("/users", s2sToken, accessToken, &users); err != nil {
-		h.logger.Error(fmt.Sprintf("failed to get /users from identity service: %s", err.Error()))
+	users, err := connect.GetServiceData[[]profile.User](
+		ctx,
+		h.identity,
+		"/users",
+		s2sToken,
+		accessToken,
+	)
+	if err != nil {
+		log.Error("failed to get users from identity service", "err", err.Error())
 		h.identity.RespondUpstreamError(err, w)
 		return
 	}
+
+	log.Info(fmt.Sprintf("successfully retrieved %d users from identity service", len(users)))
 
 	// respond with users to client
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(users); err != nil {
-		h.logger.Error(fmt.Sprintf("failed to encode users to json: %s", err.Error()))
+		log.Error("failed to encode users to json", "err", err.Error())
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusInternalServerError,
 			Message:    "failed to encode users to json",
@@ -116,42 +149,31 @@ func (h *userHandler) HandleUsers(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (h *userHandler) HandleUser(w http.ResponseWriter, r *http.Request) {
+func (h *userHandler) getUser(w http.ResponseWriter, r *http.Request, tel *connect.Telemetry, log *slog.Logger) {
 
-	switch r.Method {
-	case http.MethodGet:
-		h.handleGetUser(w, r)
-		return
-	case http.MethodPut:
-		h.handlePutUser(w, r)
-		return
-	default:
-		h.logger.Error("only GET and PUT requests are allowed to /users/{slug} endpoint")
-	}
-}
-
-func (h *userHandler) handleGetUser(w http.ResponseWriter, r *http.Request) {
+	// add telemetry to context for downstream calls + service functions
+	ctx := context.WithValue(r.Context(), connect.TelemetryKey, tel)
 
 	// get the user token from the request
 	session, err := connect.GetSessionToken(r)
 	if err != nil {
-		h.logger.Error("failed to retrieve session token from request", "err", err.Error())
+		log.Error("failed to retrieve session token from request", "err", err.Error())
 		h.session.HandleSessionErr(err, w)
 		return
 	}
 
 	// validate session token; get access token
-	accessToken, err := h.session.GetAccessToken(session)
+	accessToken, err := h.session.GetAccessToken(ctx, session)
 	if err != nil {
-		h.logger.Error(fmt.Sprintf("failed to get access token from session token for get /users/slug request: %s", err.Error()))
+		log.Error("failed to exchange session token for access token", "err", err.Error())
 		h.session.HandleSessionErr(err, w)
 		return
 	}
 
 	// get s2s token for identity service
-	s2sToken, err := h.provider.GetServiceToken(util.ServiceIdentity)
+	s2sToken, err := h.provider.GetServiceToken(ctx, util.ServiceIdentity)
 	if err != nil {
-		h.logger.Error(fmt.Sprintf("failed to get s2s token for identity service for get /users/slug request: %s", err.Error()))
+		log.Error("failed to get s2s token for identity service", "err", err.Error())
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusInternalServerError,
 			Message:    "internal service error",
@@ -163,7 +185,7 @@ func (h *userHandler) handleGetUser(w http.ResponseWriter, r *http.Request) {
 	// get the url slug from the request
 	slug, err := connect.GetValidSlug(r)
 	if err != nil {
-		h.logger.Error(fmt.Sprintf("failed to get valid slug from request: %s", err.Error()))
+		log.Error("failed to get valid slug from request", "err", err.Error())
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusBadRequest,
 			Message:    "invalid service client slug",
@@ -173,19 +195,27 @@ func (h *userHandler) handleGetUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// get user from identity service
-	var user profile.User
-	if err := h.identity.GetServiceData(fmt.Sprintf("/users/%s", slug), s2sToken, accessToken, &user); err != nil {
-		h.logger.Error(fmt.Sprintf("failed to get /users/%s from identity service: %s", slug, err.Error()))
+	user, err := connect.GetServiceData[profile.User](
+		ctx,
+		h.identity,
+		fmt.Sprintf("/users/%s", slug),
+		s2sToken,
+		accessToken,
+	)
+	if err != nil {
+		log.Error(fmt.Sprintf("failed to get user %s from identity service: %s", slug, err.Error()))
 		h.identity.RespondUpstreamError(err, w)
 		return
 	}
 
+	log.Info(fmt.Sprintf("successfully retrieved user %s from identity service", slug))
+
 	// TODO: placeholder for geting silhouette data from silhouette service
 
 	// get permissions for the user from applicable services
-	ps, err := h.getPermissions(user.Username, accessToken)
+	ps, err := h.getPermissions(ctx, user.Username, accessToken)
 	if err != nil {
-		h.logger.Error(fmt.Sprintf("failed to get permissions for user %s: %s", user.Username, err.Error()))
+		log.Error(fmt.Sprintf("failed to get permissions for user %s", user.Slug), "err", err.Error())
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusInternalServerError,
 			Message:    "failed to get permissions for user",
@@ -216,7 +246,7 @@ func (h *userHandler) handleGetUser(w http.ResponseWriter, r *http.Request) {
 	if user.BirthDate != "" {
 		dob, err := time.Parse("2006-01-02", user.BirthDate)
 		if err != nil {
-			h.logger.Error("failed to parse user birthdate", "err", err.Error())
+			log.Error("failed to parse user birthdate", "err", err.Error())
 			e := connect.ErrorHttp{
 				StatusCode: http.StatusInternalServerError,
 				Message:    "failed to parse user birthdate",
@@ -233,31 +263,33 @@ func (h *userHandler) handleGetUser(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(profile); err != nil {
-		errMsg := fmt.Sprintf("failed to encode user %s profile to json: %s", user.Username, err.Error())
-		h.logger.Error(errMsg)
+		log.Error(fmt.Sprintf("failed to encode user %s profile to json: %s", user.Slug, err.Error()))
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusInternalServerError,
-			Message:    errMsg,
+			Message:    "failed to encode user profile to json",
 		}
 		e.SendJsonErr(w)
 		return
 	}
 }
 
-func (h *userHandler) handlePutUser(w http.ResponseWriter, r *http.Request) {
+func (h *userHandler) putUser(w http.ResponseWriter, r *http.Request, tel *connect.Telemetry, log *slog.Logger) {
+
+	// add telemetry to context for downstream calls + service functions
+	ctx := context.WithValue(r.Context(), connect.TelemetryKey, tel)
 
 	// get the user token from the request
 	session, err := connect.GetSessionToken(r)
 	if err != nil {
-		h.logger.Error("failed to retrieve session token from request", "err", err.Error())
+		log.Error("failed to retrieve session token from request", "err", err.Error())
 		h.session.HandleSessionErr(err, w)
 		return
 	}
 
 	// validate session token; get access token
-	accessToken, err := h.session.GetAccessToken(session)
+	accessToken, err := h.session.GetAccessToken(ctx, session)
 	if err != nil {
-		h.logger.Error(fmt.Sprintf("failed to get access token from session token for put /users/slug request: %s", err.Error()))
+		log.Error("failed to exchange session token for access token", "err", err.Error())
 		h.session.HandleSessionErr(err, w)
 		return
 	}
@@ -265,7 +297,7 @@ func (h *userHandler) handlePutUser(w http.ResponseWriter, r *http.Request) {
 	// get the url slug from the request
 	slug, err := connect.GetValidSlug(r)
 	if err != nil {
-		h.logger.Error(fmt.Sprintf("failed to get valid slug from request: %s", err.Error()))
+		log.Error("failed to get valid slug from request", "err", err.Error())
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusBadRequest,
 			Message:    "invalid service client slug",
@@ -277,11 +309,10 @@ func (h *userHandler) handlePutUser(w http.ResponseWriter, r *http.Request) {
 	// decode the request body
 	var cmd ProfileCmd
 	if err := json.NewDecoder(r.Body).Decode(&cmd); err != nil {
-		errMsg := fmt.Sprintf("failed to decode json in put /users/%s request: %s", slug, err.Error())
-		h.logger.Error(errMsg)
+		log.Error("failed to decode json in request body update command", "err", err.Error())
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusBadRequest,
-			Message:    errMsg,
+			Message:    err.Error(),
 		}
 		e.SendJsonErr(w)
 		return
@@ -289,11 +320,10 @@ func (h *userHandler) handlePutUser(w http.ResponseWriter, r *http.Request) {
 
 	// validate the request body
 	if err := cmd.ValidateCmd(); err != nil {
-		errMsg := fmt.Sprintf("error validating request body in put /users/%s request: %s", slug, err.Error())
-		h.logger.Error(errMsg)
+		log.Error("invalid user update command in request body", "err", err.Error())
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusUnprocessableEntity,
-			Message:    errMsg,
+			Message:    err.Error(),
 		}
 		e.SendJsonErr(w)
 		return
@@ -301,7 +331,7 @@ func (h *userHandler) handlePutUser(w http.ResponseWriter, r *http.Request) {
 
 	// validate the csrf token
 	if valid, err := h.session.IsValidCsrf(session, cmd.Csrf); !valid {
-		h.logger.Error(fmt.Sprintf("invalid csrf token in put /users/%s request: %s", slug, err.Error()))
+		log.Error("invalid csrf token in user update request command", "err", err.Error())
 		h.session.HandleSessionErr(err, w)
 		return
 	}
@@ -326,12 +356,10 @@ func (h *userHandler) handlePutUser(w http.ResponseWriter, r *http.Request) {
 		AccountLocked:  cmd.AccountLocked,  // passed, but dropped upstream because user not allowed to change account locked status
 	}
 
-	// access token retrieved above to validate session
-
 	// get s2s token for identity service
-	s2sToken, err := h.provider.GetServiceToken(util.ServiceIdentity)
+	s2sToken, err := h.provider.GetServiceToken(ctx, util.ServiceIdentity)
 	if err != nil {
-		h.logger.Error(fmt.Sprintf("failed to get s2s token for identity service for put /users/%s request: %s", slug, err.Error()))
+		log.Error("failed to get s2s token for identity service", "err", err.Error())
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusInternalServerError,
 			Message:    "internal service error",
@@ -340,10 +368,17 @@ func (h *userHandler) handlePutUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// make the update request to the identity service
-	var updated profile.User
-	if err := h.identity.PostToService(fmt.Sprintf("/users/%s", slug), s2sToken, accessToken, user, &updated); err != nil {
-		h.logger.Error(fmt.Sprintf("failed to update user %s in identity service: %s", slug, err.Error()))
+	// forward the update request to the identity service
+	updated, err := connect.PutToService[profile.User, profile.User](
+		ctx,
+		h.identity,
+		fmt.Sprintf("/users/%s", slug),
+		s2sToken,
+		accessToken,
+		user,
+	)
+	if err != nil {
+		log.Error(fmt.Sprintf("failed to update user %s in identity service: %s", slug, err.Error()))
 		h.identity.RespondUpstreamError(err, w)
 		return
 	}
@@ -366,7 +401,7 @@ func (h *userHandler) handlePutUser(w http.ResponseWriter, r *http.Request) {
 	if updated.BirthDate != "" {
 		dob, err := time.Parse("2006-01-02", updated.BirthDate)
 		if err != nil {
-			h.logger.Error("failed to parse user birthdate", "err", err.Error())
+			log.Error("failed to parse user birthdate", "err", err.Error())
 			e := connect.ErrorHttp{
 				StatusCode: http.StatusInternalServerError,
 				Message:    "failed to parse user birthdate",
@@ -382,11 +417,10 @@ func (h *userHandler) handlePutUser(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(profile); err != nil {
-		errMsg := fmt.Sprintf("failed to encode updated user %s profile to json: %s", updated.Username, err.Error())
-		h.logger.Error(errMsg)
+		log.Error(fmt.Sprintf("failed to encode updated user %s profile to json: %s", slug, err.Error()))
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusInternalServerError,
-			Message:    errMsg,
+			Message:    "failed to encode updated user profile to json",
 		}
 		e.SendJsonErr(w)
 		return
@@ -395,7 +429,11 @@ func (h *userHandler) handlePutUser(w http.ResponseWriter, r *http.Request) {
 
 // getPermissions is a helper function which  fetches permissions for a user from multiple services concurrently.
 // it mostly exists to make the code more readable and to avoid code duplication.
-func (h *userHandler) getPermissions(username, accessToken string) ([]permissions.PermissionRecord, error) {
+func (h *userHandler) getPermissions(
+	ctx context.Context,
+	username string,
+	accessToken string,
+) ([]permissions.PermissionRecord, error) {
 
 	// check user scopes to determine which services to call for permissions
 	jot, err := jwt.BuildFromToken(accessToken)
@@ -415,11 +453,11 @@ func (h *userHandler) getPermissions(username, accessToken string) ([]permission
 
 	if hasTasksScope {
 		wg.Add(1)
-		go h.getServicePermissions(username, util.ServiceTasks, accessToken, permCh, errCh, &wg)
+		go h.getServicePermissions(ctx, username, util.ServiceTasks, accessToken, permCh, errCh, &wg)
 	}
 	if hasGalleryScope {
 		wg.Add(1)
-		go h.getServicePermissions(username, util.ServiceGallery, accessToken, permCh, errCh, &wg)
+		go h.getServicePermissions(ctx, username, util.ServiceGallery, accessToken, permCh, errCh, &wg)
 	}
 
 	wg.Wait()
@@ -446,12 +484,19 @@ func (h *userHandler) getPermissions(username, accessToken string) ([]permission
 
 // is a helper method to fetch permissions for a user from a specific service
 // mostly it exists to make the code more readable and to avoid code duplication
-func (h *userHandler) getServicePermissions(username, service, accessToken string, pCh chan<- []permissions.PermissionRecord, errCh chan<- error, wg *sync.WaitGroup) {
+func (h *userHandler) getServicePermissions(
+	ctx context.Context,
+	username string,
+	service string,
+	accessToken string,
+	pCh chan<- []permissions.PermissionRecord,
+	errCh chan<- error, wg *sync.WaitGroup,
+) {
 
 	defer wg.Done()
 
 	// get service token for the service
-	token, err := h.provider.GetServiceToken(service)
+	token, err := h.provider.GetServiceToken(ctx, service)
 	if err != nil {
 		errCh <- fmt.Errorf("failed to get service token for %s service: %s", service, err.Error())
 		return
@@ -459,16 +504,28 @@ func (h *userHandler) getServicePermissions(username, service, accessToken strin
 
 	switch service {
 	case util.ServiceTasks:
-		var permissions []permissions.PermissionRecord
-		if err := h.tasks.GetServiceData(fmt.Sprintf("/allowances/permissions?username=%s", username), token, accessToken, &permissions); err != nil {
+		permissions, err := connect.GetServiceData[[]permissions.PermissionRecord](
+			ctx,
+			h.tasks,
+			fmt.Sprintf("/allowances/permissions?username=%s", username),
+			token,
+			accessToken,
+		)
+		if err != nil {
 			errCh <- fmt.Errorf("failed to get permissions from %s service: %s", service, err.Error())
 			return
 		}
 		pCh <- permissions
 		return
 	case util.ServiceGallery:
-		var permissions []permissions.PermissionRecord
-		if err := h.gallery.GetServiceData(fmt.Sprintf("/patrons/permissions?username=%s", username), token, accessToken, &permissions); err != nil {
+		permissions, err := connect.GetServiceData[[]permissions.PermissionRecord](
+			ctx,
+			h.gallery,
+			fmt.Sprintf("/permissions?username=%s", username),
+			token,
+			accessToken,
+		)
+		if err != nil {
 			errCh <- fmt.Errorf("failed to get permissions from %s service: %s", service, err.Error())
 			return
 		}

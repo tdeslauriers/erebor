@@ -1,6 +1,7 @@
 package user
 
 import (
+	"context"
 	"encoding/json"
 	"erebor/internal/util"
 	"erebor/pkg/authentication/uxsession"
@@ -19,7 +20,7 @@ type ScopesHandler interface {
 }
 
 // NewScopesHandler returns a pointer to the concrete implementation of the ScopesHandler interface.
-func NewScopesHandler(ux uxsession.Service, p provider.S2sTokenProvider, c connect.S2sCaller) ScopesHandler {
+func NewScopesHandler(ux uxsession.Service, p provider.S2sTokenProvider, c *connect.S2sCaller) ScopesHandler {
 	return &scopesHandler{
 		session:  ux,
 		provider: p,
@@ -38,7 +39,7 @@ var _ ScopesHandler = (*scopesHandler)(nil)
 type scopesHandler struct {
 	session  uxsession.Service
 	provider provider.S2sTokenProvider
-	identity connect.S2sCaller
+	identity *connect.S2sCaller
 
 	logger *slog.Logger
 }
@@ -46,11 +47,18 @@ type scopesHandler struct {
 // HandleScopes is the concrete implementation of the interface function that handles the request to update a user's assigned scopes.
 func (h *scopesHandler) HandleScopes(w http.ResponseWriter, r *http.Request) {
 
+	// generate telemetry
+	tel := connect.NewTelemetry(r, h.logger)
+	log := h.logger.With(tel.TelemetryFields()...)
+
+	// add telemetry to context for downstream calls + service functions
+	ctx := context.WithValue(r.Context(), connect.TelemetryKey, tel)
+
 	if r.Method != "PUT" {
-		h.logger.Error("only PUT requests are allowed to /user/scopes endpoint")
+		log.Error("failed to update scopes", "err", "only PUT requests are allowed")
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusMethodNotAllowed,
-			Message:    "only PUT requests are allowed to /user/scopes endpoint",
+			Message:    "only PUT requests are allowed",
 		}
 		e.SendJsonErr(w)
 		return
@@ -59,15 +67,15 @@ func (h *scopesHandler) HandleScopes(w http.ResponseWriter, r *http.Request) {
 	// validate the user has an active, authenticated session
 	session, err := connect.GetSessionToken(r)
 	if err != nil {
-		h.logger.Error(fmt.Sprintf("failed to get session token: %s", err.Error()))
+		log.Error("failed to get session token from request", "err", err.Error())
 		h.session.HandleSessionErr(err, w)
 		return
 	}
 
 	// get access token tied to the session
-	accessToken, err := h.session.GetAccessToken(session)
+	accessToken, err := h.session.GetAccessToken(ctx, session)
 	if err != nil {
-		h.logger.Error(fmt.Sprintf("failed to get access token from session token: %s", err.Error()))
+		log.Error("failed to get access token from session", "err", err.Error())
 		h.session.HandleSessionErr(err, w)
 		return
 	}
@@ -75,11 +83,10 @@ func (h *scopesHandler) HandleScopes(w http.ResponseWriter, r *http.Request) {
 	// decode the request body
 	var cmd UserScopesCmd
 	if err := json.NewDecoder(r.Body).Decode(&cmd); err != nil {
-		errMsg := fmt.Sprintf("failed to decode json in user scopes request body: %s", err.Error())
-		h.logger.Error(errMsg)
+		log.Error("failed to decode json in user scopes update command request body", "err", err.Error())
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusBadRequest,
-			Message:    errMsg,
+			Message:    err.Error(),
 		}
 		e.SendJsonErr(w)
 		return
@@ -87,11 +94,10 @@ func (h *scopesHandler) HandleScopes(w http.ResponseWriter, r *http.Request) {
 
 	// validate the request body
 	if err := cmd.ValidateCmd(); err != nil {
-		errMsg := fmt.Sprintf("invalid user scopes request: %s", err.Error())
-		h.logger.Error(errMsg)
+		log.Error("invalid user scopes update command request body", "err", err.Error())
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusUnprocessableEntity,
-			Message:    errMsg,
+			Message:    err.Error(),
 		}
 		e.SendJsonErr(w)
 		return
@@ -99,7 +105,7 @@ func (h *scopesHandler) HandleScopes(w http.ResponseWriter, r *http.Request) {
 
 	// validate the csrf token
 	if valid, err := h.session.IsValidCsrf(session, cmd.Csrf); !valid {
-		h.logger.Error(fmt.Sprintf("invalid csrf token: %s", err.Error()))
+		log.Error("invalid csrf token in user scopes update command request body", "err", err.Error())
 		h.session.HandleSessionErr(err, w)
 		return
 	}
@@ -108,12 +114,12 @@ func (h *scopesHandler) HandleScopes(w http.ResponseWriter, r *http.Request) {
 	cmd.Csrf = ""
 
 	// get service token
-	s2sToken, err := h.provider.GetServiceToken(util.ServiceIdentity)
+	s2sToken, err := h.provider.GetServiceToken(ctx, util.ServiceIdentity)
 	if err != nil {
-		h.logger.Error(fmt.Sprintf("failed to get s2s token for identity service: %s", err.Error()))
+		log.Error("failed to get service token for identity service", "err", err.Error())
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusInternalServerError,
-			Message:    "user scopes request failed: internal server error",
+			Message:    "internal server error",
 		}
 		e.SendJsonErr(w)
 		return
@@ -121,12 +127,21 @@ func (h *scopesHandler) HandleScopes(w http.ResponseWriter, r *http.Request) {
 
 	// make request to the identity service
 	// no response is expected from the identity service --> 204 No Content
-	if err := h.identity.PostToService("/users/scopes", s2sToken, accessToken, cmd, nil); err != nil {
-		h.logger.Error(fmt.Sprintf("failed to update user scopes: %s", err.Error()))
+	_, err = connect.PutToService[UserScopesCmd, struct{}](
+		ctx,
+		h.identity,
+		"/users/scopes",
+		s2sToken,
+		accessToken,
+		cmd,
+	)
+	if err != nil {
+		log.Error("failed to update user scopes in identity service", "err", err.Error())
 		h.identity.RespondUpstreamError(err, w)
 		return
 	}
 
-	h.logger.Info(fmt.Sprintf("user scopes updated for user slug: %s", cmd.UserSlug))
+	log.Info(fmt.Sprintf("successfully updated scopes for user slug: %s", cmd.UserSlug))
+
 	w.WriteHeader(http.StatusNoContent)
 }

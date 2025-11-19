@@ -1,6 +1,7 @@
 package authentication
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -21,7 +22,13 @@ type RegistrationHandler interface {
 	HandleRegistration(w http.ResponseWriter, r *http.Request)
 }
 
-func NewRegistrationHandler(o config.OauthRedirect, s uxsession.Service, p provider.S2sTokenProvider, iam, g connect.S2sCaller) RegistrationHandler {
+func NewRegistrationHandler(
+	o config.OauthRedirect,
+	s uxsession.Service,
+	p provider.S2sTokenProvider,
+	iam *connect.S2sCaller,
+	g *connect.S2sCaller,
+) RegistrationHandler {
 	return &registrationHandler{
 		oAuth:     o,
 		uxSession: s,
@@ -42,16 +49,23 @@ type registrationHandler struct {
 	oAuth     config.OauthRedirect
 	uxSession uxsession.Service
 	s2sToken  provider.S2sTokenProvider
-	identity  connect.S2sCaller
-	gallery   connect.S2sCaller
+	identity  *connect.S2sCaller
+	gallery   *connect.S2sCaller
 
 	logger *slog.Logger
 }
 
 func (h *registrationHandler) HandleRegistration(w http.ResponseWriter, r *http.Request) {
 
+	// build/collect telemetry and add fields to the logger
+	telemetry := connect.NewTelemetry(r, h.logger)
+	telemetryLogger := h.logger.With(telemetry.TelemetryFields()...)
+
+	// add telemetry to context for downstream calls
+	ctx := context.WithValue(r.Context(), connect.TelemetryKey, telemetry)
+
 	if r.Method != "POST" {
-		h.logger.Error("only POST requests are allowed to /register endpoint")
+		telemetryLogger.Error("only POST requests are allowed")
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusMethodNotAllowed,
 			Message:    "only POST requests are allowed",
@@ -63,10 +77,10 @@ func (h *registrationHandler) HandleRegistration(w http.ResponseWriter, r *http.
 	var cmd types.UserRegisterCmd
 	err := json.NewDecoder(r.Body).Decode(&cmd)
 	if err != nil {
-		h.logger.Error("failed to decode json in user registration request body", "err", err.Error())
+		telemetryLogger.Error("failed to decode json in user registration request body", "err", err.Error())
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusBadRequest,
-			Message:    "improperly formatted json",
+			Message:    "failed to decode json in user registration request body",
 		}
 		e.SendJsonErr(w)
 		return
@@ -80,7 +94,7 @@ func (h *registrationHandler) HandleRegistration(w http.ResponseWriter, r *http.
 
 	// input validation
 	if err := cmd.ValidateCmd(); err != nil {
-		h.logger.Error("failed to validate fields in registration request body", "err", err.Error())
+		telemetryLogger.Error("failed to validate user registration request body", "err", err.Error())
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusUnprocessableEntity,
 			Message:    err.Error(),
@@ -91,7 +105,7 @@ func (h *registrationHandler) HandleRegistration(w http.ResponseWriter, r *http.
 
 	// check for valid session with valid csrf token
 	if valid, err := h.uxSession.IsValidCsrf(cmd.Session, cmd.Csrf); !valid {
-		h.logger.Error("invalid session or csrf token", "err", err.Error())
+		telemetryLogger.Error("invalid session or csrf token", "err", err.Error())
 		h.uxSession.HandleSessionErr(err, w)
 		return
 	}
@@ -101,49 +115,63 @@ func (h *registrationHandler) HandleRegistration(w http.ResponseWriter, r *http.
 	cmd.Session = ""
 	cmd.Csrf = ""
 
-	// get shaw service token
-	s2sIamToken, err := h.s2sToken.GetServiceToken(util.ServiceIdentity)
+	// get identity service token
+	s2sIamToken, err := h.s2sToken.GetServiceToken(ctx, util.ServiceIdentity)
 	if err != nil {
-		h.logger.Error(err.Error())
+		telemetryLogger.Error("failed to get s2s token for identity service", "err", err.Error())
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusInternalServerError,
-			Message:    "User registration failed due to internal server error.",
+			Message:    "user registration failed due to internal server error.",
 		}
 		e.SendJsonErr(w)
 		return
 	}
 
-	// call identity service with registration request
-	var registered types.UserAccount
-	if err := h.identity.PostToService("/register", s2sIamToken, "", cmd, &registered); err != nil {
-		h.logger.Error(fmt.Sprintf("failed to register user %s", cmd.Username), "err", err.Error())
-		h.identity.RespondUpstreamError(err, w)
-		return
-	}
+	// post registration request to identity service
+	registered, err := connect.PostToService[types.UserRegisterCmd, types.UserAccount](
+		ctx,
+		h.identity,
+		"/register",
+		s2sIamToken,
+		"",
+		cmd,
+	)
+	if err != nil {
+		telemetryLogger.Error(fmt.Sprintf("failed to register user %s", cmd.Username), "err", err.Error())
 
-	h.logger.Info(fmt.Sprintf("user %s successfully registered", registered.Username))
+	}
 
 	// ghost account creation in downstream services
 	// concurrent so can return immediately --> ghost account creation abstracted from user
 	// gallery account creation
 	go func(username string) {
 
-		s2sGalleryToken, err := h.s2sToken.GetServiceToken(util.ServiceGallery)
+		s2sGalleryToken, err := h.s2sToken.GetServiceToken(ctx, util.ServiceGallery)
 		if err != nil {
 			// logging only, not returning error --> hidden/abstracted from user
-			h.logger.Error(fmt.Sprintf("failed to get s2s token for gallery service: %s", err.Error()))
+			telemetryLogger.Error(fmt.Sprintf("failed to get s2s token for gallery service: %s", err.Error()))
 			return
 		}
 
-		if err := h.gallery.PostToService("/s2s/patrons/register", s2sGalleryToken, "", patron.PatronRegisterCmd{Username: username}, nil); err != nil {
+		_, err = connect.PostToService[patron.PatronRegisterCmd, struct{}](
+			ctx,
+			h.gallery,
+			"/s2s/patrons/register",
+			s2sGalleryToken,
+			"",
+			patron.PatronRegisterCmd{Username: username},
+		)
+		if err != nil {
 			// logging only, not returning error --> hidden/abstracted from user
-			h.logger.Error(fmt.Sprintf("failed to create gallery patron for user %s: %s", registered.Username, err.Error()))
+			telemetryLogger.Error(fmt.Sprintf("failed to create gallery patron for user %s", username), "err", err.Error())
 			return
 		}
 
-		h.logger.Info(fmt.Sprintf("gallery patron account successfully created for user %s", username))
+		telemetryLogger.Info(fmt.Sprintf("successfully created patron account for user %s", username))
 
 	}(cmd.Username)
+
+	telemetryLogger.Info(fmt.Sprintf("user %s successfully registered", registered.Username))
 
 	// respond 201 + registered user
 	w.Header().Set("Content-Type", "application/json")
@@ -151,7 +179,7 @@ func (h *registrationHandler) HandleRegistration(w http.ResponseWriter, r *http.
 
 	if err := json.NewEncoder(w).Encode(registered); err != nil {
 		// returning successfully registered user data is a convenience only, omit on error
-		h.logger.Error("unable to marshal/send user registration response body", "err", err.Error())
+		telemetryLogger.Error("unable to marshal/send user registration response body", "err", err.Error())
 		return
 	}
 }

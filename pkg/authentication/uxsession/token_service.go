@@ -1,6 +1,7 @@
 package uxsession
 
 import (
+	"context"
 	"database/sql"
 	"erebor/internal/util"
 	"errors"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/tdeslauriers/carapace/pkg/connect"
 	"github.com/tdeslauriers/carapace/pkg/session/provider"
 	"github.com/tdeslauriers/carapace/pkg/session/types"
 )
@@ -17,10 +19,11 @@ import (
 // TokenService is performs build and persistance operations on access tokens,
 // particularly in relation to the authenticated uxsession.
 type TokenService interface {
+
 	// GetAccessToken retrieves the access token record from the database, decrypts the access and refresh tokens,
 	// and returns the struct.  If the access token is expired, it will use an active refesh token to retrieve a new access token.
 	// Note: will return an error if the provided session is not found, not authenticated, or revoked.
-	GetAccessToken(session string) (string, error)
+	GetAccessToken(ctx context.Context, session string) (string, error)
 
 	// PeristToken creates a new AccessToken record, performs field level encryption for db record,
 	// persists it to the database, and returns the struct.
@@ -32,7 +35,16 @@ type TokenService interface {
 
 // GetAccessToken retrieves the access token record from the database, decrypts the access and refresh tokens,
 // and returns the struct.  If the access token is expired, it will use an active refesh token to retrieve a new access token.
-func (s *service) GetAccessToken(session string) (string, error) {
+func (s *service) GetAccessToken(ctx context.Context, session string) (string, error) {
+
+	// get telemetry from context -> set up logger
+	logger := s.logger
+	telemetry, ok := ctx.Value(connect.TelemetryKey).(*connect.Telemetry)
+	if ok && telemetry != nil {
+		logger = logger.With(telemetry.TelemetryFields()...)
+	} else {
+		logger.Warn("failed to retrieve telemetry from context for GetAccessToken")
+	}
 
 	// lightweight input validation: redundant, but good practice
 	if len(session) < 16 || len(session) > 64 {
@@ -42,7 +54,7 @@ func (s *service) GetAccessToken(session string) (string, error) {
 	// re generate session index
 	index, err := s.indexer.ObtainBlindIndex(session)
 	if err != nil {
-		return "", fmt.Errorf("%s from provided session token xxxxxx-%s: %v", ErrGenIndex, session[len(session)-6:], err)
+		return "", fmt.Errorf("%s from provided session token: %v", ErrGenIndex, err)
 	}
 
 	// look up uxSession from db by index
@@ -69,22 +81,22 @@ func (s *service) GetAccessToken(session string) (string, error) {
 	var tokens []UxsessionAccesstoken
 	if err := s.db.SelectRecords(qry, &tokens, index); err != nil {
 		if err == sql.ErrNoRows {
-			return "", fmt.Errorf("%s - session token xxxxxx-%s: %v", ErrSessionNotFound, session[len(session)-6:], err)
+			return "", fmt.Errorf("%s: %v", ErrSessionNotFound, err)
 		}
-		return "", fmt.Errorf("failed to retrieve access token records for session token xxxxxx-%s: %v", session[len(session)-6:], err)
+		return "", fmt.Errorf("failed to retrieve access token records for session token: %v", err)
 	}
 
 	// if there are no tokens, return an error
 	// this should be caught above, but good practice to check
 	if len(tokens) == 0 {
-		return "", fmt.Errorf("%s - session token xxxxxx-%s", ErrSessionNotFound, session[len(session)-6:])
+		return "", errors.New(ErrSessionNotFound)
 	}
 
 	// if there is only one session returned, check for empty/default values in access token fields
 	// this means the session is not authenticated or has no access token records, ie, fields were null.
 	if len(tokens) == 1 {
 		if tokens[0].AccessToken == "" || tokens[0].RefreshToken == "" {
-			return "", fmt.Errorf("%s - session token xxxxxx-%s", ErrAccessTokenNotFound, session[len(session)-6:])
+			return "", errors.New(ErrAccessTokenNotFound)
 		}
 	}
 
@@ -94,35 +106,35 @@ func (s *service) GetAccessToken(session string) (string, error) {
 		// session checks are returns not continues because same value in all records
 		// check if session listed as authenticated: this is a convenience value only, but should not be false
 		if !token.SessionAuthenticated {
-			return "", fmt.Errorf("%s - session token xxxxxx-%s", ErrSessionNotAuthenticated, session[len(session)-6:])
+			return "", errors.New(ErrSessionNotAuthenticated)
 		}
 
 		// check if session is revoked
 		if token.SessionRevoked {
-			return "", fmt.Errorf("%s - session token xxxxxx-%s", ErrSessionRevoked, session[len(session)-6:])
+			return "", errors.New(ErrSessionRevoked)
 		}
 
 		// chcek if session token is expired
 		if token.SessionCreatedAt.Add(1 * time.Hour).Before(time.Now().UTC()) {
-			return "", fmt.Errorf("%s - session token xxxxxx-%s", ErrAccessTokenExpired, session[len(session)-6:])
+			return "", errors.New(ErrAccessTokenExpired)
 		}
 
 		// token checks are continues because not unique
 		// check if null access token due to empty xref == session has no attached access token records
 		if token.AccessToken == "" {
-			s.logger.Error(fmt.Sprintf("%s - session token xxxxx-%s", ErrAccessTokenNotFound, session[len(session)-6:]))
+			logger.Error(ErrAccessTokenNotFound)
 			continue
 		}
 
 		// check if access token is revoked
 		if token.AccessRevoked {
-			s.logger.Error(fmt.Sprintf("%s - %s tied to session token xxxxx-%s", ErrAccessTokenRevoked, token.AccessTokenId, session[len(session)-6:]))
+			logger.Error(ErrAccessTokenRevoked)
 			continue
 		}
 
 		// check if access token is expired
 		if token.AccessExpires.Before(time.Now().UTC()) {
-			s.logger.Error(fmt.Sprintf("%s - accesstoken uuid %s, session token xxxxx-%s", ErrAccessTokenExpired, token.AccessTokenId, session[len(session)-6:]))
+			logger.Error(ErrAccessTokenExpired)
 			continue
 		}
 
@@ -130,39 +142,39 @@ func (s *service) GetAccessToken(session string) (string, error) {
 		access, err := s.cryptor.DecryptServiceData(token.AccessToken)
 		if err != nil {
 			// this failure needs to be a continue, because possible for other access tokens to be decrypted successfully
-			s.logger.Error(fmt.Sprintf("%s (uuid %s) tied to session token xxxxx-%s", ErrDecryptAccessToken, token.AccessTokenId, session[len(session)-6:]), "err", err.Error())
+			logger.Error(ErrDecryptAccessToken, "err", err.Error())
 			continue
 		}
 
 		return string(access), nil
 	}
 
-	s.logger.Info(fmt.Sprintf("session token xxxxxx-%s has no valid access tokens: attempting refresh", session[len(session)-6:]))
+	logger.Info("session token has no valid access tokens: attempting refresh")
 
 	// look for a valid refresh token and retrieve a new access token
 	for _, token := range tokens {
 
 		// check if null refresh token due to empty xref == session has no attached access token records
 		if token.RefreshToken == "" {
-			s.logger.Error(fmt.Sprintf("%s for session token xxxxx-%s", ErrRefreshNotFound, session[len(session)-6:]))
+			logger.Error(ErrRefreshNotFound)
 			continue
 		}
 
 		// check if refresh token is revoked
 		if token.RefreshRevoked {
-			s.logger.Error(fmt.Sprintf("%s (uuid %s) tied to session token xxxxx-%s", ErrAccessTokenRevoked, token.AccessTokenId, session[len(session)-6:]))
+			logger.Error(ErrAccessTokenRevoked)
 			continue
 		}
 
 		// check if refresh token is claimed
 		if token.RefreshClaimed {
-			s.logger.Error(fmt.Sprintf("%s (uuid %s) tied to session token xxxxx-%s", ErrRefreshTokenClaimed, token.AccessTokenId, session[len(session)-6:]))
+			logger.Error(ErrRefreshTokenClaimed)
 			continue
 		}
 
 		// check if refresh token is expired
 		if token.RefreshExpires.Before(time.Now().UTC()) {
-			s.logger.Error(fmt.Sprintf("%s (uuid %s) tied to session token xxxxx-%s", ErrRefreshTokenExpired, token.AccessTokenId, session[len(session)-6:]))
+			logger.Error(ErrRefreshTokenExpired)
 
 			// TODO: opportunistically delete expired refresh token from db
 			continue
@@ -172,14 +184,14 @@ func (s *service) GetAccessToken(session string) (string, error) {
 		refresh, err := s.cryptor.DecryptServiceData(token.RefreshToken)
 		if err != nil {
 			// this failure needs to be a continue, because possible for other refresh tokens to be decrypted successfully
-			s.logger.Error(fmt.Sprintf("%s (uuid %s) tied to session token xxxxx-%s", ErrDecryptRefreshToken, token.AccessTokenId, session[len(session)-6:]), "err", err.Error())
+			logger.Error(ErrDecryptRefreshToken, "err", err.Error())
 			continue
 		}
 
 		// get s2s token for identity service
-		s2sToken, err := s.s2sProvider.GetServiceToken(util.ServiceIdentity)
+		s2sToken, err := s.s2sProvider.GetServiceToken(ctx, util.ServiceIdentity)
 		if err != nil {
-			s.logger.Error("failed to get s2s token for identity service refresh endpoint", "err", err.Error())
+			logger.Error("failed to get s2s token for identity service refresh endpoint", "err", err.Error())
 			continue
 		}
 
@@ -189,9 +201,16 @@ func (s *service) GetAccessToken(session string) (string, error) {
 		}
 
 		// use refresh token to get new access token
-		var access provider.UserAuthorization
-		if err := s.userIdentity.PostToService("/refresh", s2sToken, "", cmd, &access); err != nil {
-			s.logger.Error("call to identity service refresh endpoint failed", "err", err.Error())
+		access, err := connect.PostToService[types.UserRefreshCmd, provider.UserAuthorization](
+			ctx,
+			s.identity,
+			"/refresh",
+			s2sToken,
+			"",
+			cmd,
+		)
+		if err != nil {
+			logger.Error("failed to call identity service refresh endpoint for session token", "err", err.Error())
 			continue
 		}
 
@@ -200,7 +219,7 @@ func (s *service) GetAccessToken(session string) (string, error) {
 		go func() {
 			persist, err := s.PersistToken(&access)
 			if err != nil {
-				s.logger.Error("failed to persist new access token for refresh request", "err", err.Error())
+				logger.Error("failed to persist new access token for refresh request", "err", err.Error())
 				return
 			}
 
@@ -211,24 +230,24 @@ func (s *service) GetAccessToken(session string) (string, error) {
 			}
 
 			if err := s.PersistXref(xref); err != nil {
-				s.logger.Error("failed to persist uxsession_accesstoken xref record for refresh request", "err", err.Error())
+				logger.Error("failed to persist uxsession_accesstoken xref record for refresh request", "err", err.Error())
 				return
 			}
 
-			s.logger.Info(fmt.Sprintf("new access token persisted for session token xxxxx-%s", session[len(session)-6:]))
+			logger.Info(fmt.Sprintf("new access token persisted for session token xxxxx-%s", session[len(session)-6:]))
 		}()
 
 		// delete vs mark as claimed: identity service will not allow a refresh token to be used more than once
 		go func() {
 			qry := "DELETE FROM uxsession_accesstoken WHERE accesstoken_uuid = ?"
 			if err := s.db.DeleteRecord(qry, token.AccessTokenId); err != nil {
-				s.logger.Error(fmt.Sprintf("failed to delete xref for claimed refresh (uuid %s) tied to session (uuid %s ) xxxxx-%s", token.AccessTokenId, token.UxsessionId, session[len(session)-6:]), "err", err.Error())
+				logger.Error("failed to delete xref for claimed refresh token", "err", err.Error())
 				return
 			}
 
 			qry = "DELETE FROM accesstoken WHERE uuid = ?"
 			if err := s.db.DeleteRecord(qry, token.AccessTokenId); err != nil {
-				s.logger.Error(fmt.Sprintf("failed to delete access token for claimed refresh (uuid %s) tied to session (uuid %s ) xxxxx-%s", token.AccessTokenId, token.UxsessionId, session[len(session)-6:]), "err", err.Error())
+				logger.Error("failed to delete access token for claimed refresh token", "err", err.Error())
 				return
 			}
 		}()
@@ -236,7 +255,7 @@ func (s *service) GetAccessToken(session string) (string, error) {
 		return access.AccessToken, nil
 	}
 
-	return "", fmt.Errorf("%s for session token xxxxxx-%s", ErrAccessRefreshNotFound, session[len(session)-6:])
+	return "", errors.New(ErrAccessRefreshNotFound)
 }
 
 // PeristToken creates a new AccessToken record, performs field level encryption for db record,
@@ -343,7 +362,7 @@ func (s *service) PersistXref(xref SessionAccessXref) error {
 
 	qry := `INSERT INTO uxsession_accesstoken (id, uxsession_uuid, accesstoken_uuid) VALUES (?, ?, ?)`
 	if err := s.db.InsertRecord(qry, xref); err != nil {
-		return fmt.Errorf("failed to persist uxsession_accesstoken xref (uxsession id: %s - accesstoken id: %s ): %v", xref.UxsessionId, xref.AccessTokenId, err)
+		return fmt.Errorf("failed to persist uxsession_accesstoken xref: %v", err)
 	}
 
 	return nil

@@ -18,7 +18,7 @@ type Handler interface {
 }
 
 // NewHandler creates a new instance of Handler, returning a pointer to the concrete implementation(s).
-func NewHandler(ux uxsession.Service, p provider.S2sTokenProvider, g connect.S2sCaller, pat pat.Verifier) Handler {
+func NewHandler(ux uxsession.Service, p provider.S2sTokenProvider, g *connect.S2sCaller, pat pat.Verifier) Handler {
 	return &handler{
 		AlbumHandler:       NewAlbumHandler(ux, p, g),
 		ImageHandler:       NewImageHandler(ux, p, g),
