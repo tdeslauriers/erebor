@@ -85,7 +85,7 @@ func (h *allowanceHandler) HandleAccount(w http.ResponseWriter, r *http.Request)
 // handleGetAccount handles the GET request to get a users allowance account when requested from /allowance endpoint.
 func (h *allowanceHandler) handleGetAccount(w http.ResponseWriter, r *http.Request, tel *connect.Telemetry, log *slog.Logger) {
 
-	// add telemetry to context for downstream calls + service functions
+	// add telemetry to context for call stack + service functions
 	ctx := context.WithValue(r.Context(), connect.TelemetryKey, tel)
 
 	// get session token from the request header

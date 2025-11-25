@@ -53,7 +53,7 @@ func (h *scopesHandler) HandleScopes(w http.ResponseWriter, r *http.Request) {
 	// add telemetry to context for downstream calls + service functions
 	ctx := context.WithValue(r.Context(), connect.TelemetryKey, tel)
 
-	if r.Method != "PUT" {
+	if r.Method != http.MethodPut {
 		log.Error("failed to update scopes", "err", "only PUT requests are allowed")
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusMethodNotAllowed,

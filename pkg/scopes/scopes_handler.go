@@ -11,7 +11,7 @@ import (
 
 	"github.com/tdeslauriers/carapace/pkg/connect"
 	"github.com/tdeslauriers/carapace/pkg/session/provider"
-	"github.com/tdeslauriers/carapace/pkg/session/types"
+	"github.com/tdeslauriers/ran/pkg/scopes"
 )
 
 // Handler is an interface for calls to the gateway /scopes/{slug...} endpoint.
@@ -130,7 +130,7 @@ func (h *handler) handleGetAll(w http.ResponseWriter, r *http.Request, tel *conn
 	}
 
 	// get all scopes from s2s service
-	scopes, err := connect.GetServiceData[[]types.Scope](
+	scopes, err := connect.GetServiceData[[]scopes.Scope](
 		ctx,
 		h.s2s,
 		"/scopes",
@@ -227,7 +227,7 @@ func (h *handler) HandleAdd(w http.ResponseWriter, r *http.Request, tel *connect
 	}
 
 	// prepare data
-	add := types.Scope{
+	add := scopes.Scope{
 		ServiceName: cmd.ServiceName,
 		Scope:       cmd.Scope,
 		Name:        cmd.Name,
@@ -236,7 +236,7 @@ func (h *handler) HandleAdd(w http.ResponseWriter, r *http.Request, tel *connect
 	}
 
 	// add scope in s2s service
-	response, err := connect.PostToService[types.Scope, types.Scope](
+	response, err := connect.PostToService[scopes.Scope, scopes.Scope](
 		ctx,
 		h.s2s,
 		"/scopes/add",
@@ -311,7 +311,7 @@ func (h *handler) handleGet(w http.ResponseWriter, r *http.Request, tel *connect
 	}
 
 	// get scope from s2s service
-	scope, err := connect.GetServiceData[types.Scope](
+	scope, err := connect.GetServiceData[scopes.Scope](
 		ctx,
 		h.s2s,
 		fmt.Sprintf("/scopes/%s", slug),
@@ -405,7 +405,7 @@ func (h *handler) handlePut(w http.ResponseWriter, r *http.Request, tel *connect
 	}
 
 	// prepare data
-	updated := types.Scope{
+	updated := scopes.Scope{
 		ServiceName: cmd.ServiceName,
 		Scope:       cmd.Scope,
 		Name:        cmd.Name,
@@ -427,7 +427,7 @@ func (h *handler) handlePut(w http.ResponseWriter, r *http.Request, tel *connect
 	}
 
 	// update scope in s2s service
-	response, err := connect.PutToService[types.Scope, types.Scope](
+	response, err := connect.PutToService[scopes.Scope, scopes.Scope](
 		ctx,
 		h.s2s,
 		fmt.Sprintf("/scopes/%s", slug),

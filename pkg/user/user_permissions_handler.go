@@ -14,8 +14,8 @@ import (
 
 	"github.com/tdeslauriers/carapace/pkg/connect"
 	exo "github.com/tdeslauriers/carapace/pkg/permissions"
-	"github.com/tdeslauriers/carapace/pkg/profile"
 	"github.com/tdeslauriers/carapace/pkg/session/provider"
+	"github.com/tdeslauriers/shaw/pkg/user"
 )
 
 // PermissionsHandler defines the interface for handling user permissions requests.
@@ -139,8 +139,8 @@ func (h *permissionsHandler) updateUserPermissions(w http.ResponseWriter, r *htt
 		return
 	}
 
-	// get user data from identity service to get the username
-	user, err := connect.GetServiceData[profile.User](
+	// get u data from identity service to get the username
+	u, err := connect.GetServiceData[user.User](
 		ctx,
 		h.identity,
 		fmt.Sprintf("/s2s/users/%s", cmd.EntitySlug),
@@ -192,7 +192,7 @@ func (h *permissionsHandler) updateUserPermissions(w http.ResponseWriter, r *htt
 		defer wg.Done()
 
 		galleryCmd := exo.UpdatePermissionsCmd{
-			Entity:      user.Username,
+			Entity:      u.Username,
 			Permissions: galleryPermissions,
 		}
 
@@ -223,7 +223,7 @@ func (h *permissionsHandler) updateUserPermissions(w http.ResponseWriter, r *htt
 		defer wg.Done()
 
 		tasksCmd := exo.UpdatePermissionsCmd{
-			Entity:      user.Username,
+			Entity:      u.Username,
 			Permissions: tasksPermissions,
 		}
 
@@ -269,6 +269,6 @@ func (h *permissionsHandler) updateUserPermissions(w http.ResponseWriter, r *htt
 	}
 
 	// no response is expected from the identity service --> 204 No Content
-	h.logger.Info(fmt.Sprintf("permissions updated for user %s", user.Slug))
+	h.logger.Info(fmt.Sprintf("permissions updated for user %s", u.Slug))
 	w.WriteHeader(http.StatusNoContent)
 }

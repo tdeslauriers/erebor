@@ -10,8 +10,8 @@ import (
 	"net/http"
 
 	"github.com/tdeslauriers/carapace/pkg/connect"
-	"github.com/tdeslauriers/carapace/pkg/profile"
 	"github.com/tdeslauriers/carapace/pkg/session/provider"
+	"github.com/tdeslauriers/ran/pkg/clients"
 	"github.com/tdeslauriers/ran/pkg/pat"
 )
 
@@ -125,7 +125,7 @@ func (h *clientHandler) handleGetAllClients(w http.ResponseWriter, r *http.Reque
 	}
 
 	// get all clients from s2s service
-	clients, err := connect.GetServiceData[[]profile.Client](
+	clients, err := connect.GetServiceData[[]clients.Client](
 		ctx,
 		h.s2s,
 		"/clients",
@@ -200,7 +200,7 @@ func (h *clientHandler) handleGetClient(w http.ResponseWriter, r *http.Request, 
 	}
 
 	// get client from s2s service
-	client, err := connect.GetServiceData[profile.Client](
+	client, err := connect.GetServiceData[clients.Client](
 		ctx,
 		h.s2s,
 		fmt.Sprintf("/clients/%s", slug),
@@ -306,7 +306,7 @@ func (h *clientHandler) handlePutClient(w http.ResponseWriter, r *http.Request, 
 	}
 
 	// prepare data
-	updated := profile.Client{
+	updated := clients.Client{
 		// Id is dropped
 		// CreatedAt is dropped
 		// Slug is dropped
@@ -319,7 +319,7 @@ func (h *clientHandler) handlePutClient(w http.ResponseWriter, r *http.Request, 
 	}
 
 	// send request to s2s service to update client
-	response, err := connect.PutToService[profile.Client, profile.Client](
+	response, err := connect.PutToService[clients.Client, clients.Client](
 		ctx,
 		h.s2s,
 		fmt.Sprintf("/clients/%s", slug),

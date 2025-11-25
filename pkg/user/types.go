@@ -9,8 +9,8 @@ import (
 	"github.com/tdeslauriers/carapace/pkg/data"
 	"github.com/tdeslauriers/carapace/pkg/permissions"
 	"github.com/tdeslauriers/carapace/pkg/session/provider"
-	"github.com/tdeslauriers/carapace/pkg/session/types"
 	"github.com/tdeslauriers/carapace/pkg/validate"
+	"github.com/tdeslauriers/ran/pkg/scopes"
 )
 
 // Handler is the interface for handling user requests from the client.  Aggregates all user handler interfaces.
@@ -60,7 +60,7 @@ type ProfileCmd struct {
 	Enabled        bool                           `json:"enabled"`
 	AccountExpired bool                           `json:"account_expired"`
 	AccountLocked  bool                           `json:"account_locked"`
-	Scopes         []types.Scope                  `json:"scopes,omitempty"`      // will not always be returned: call specific
+	Scopes         []scopes.Scope                 `json:"scopes,omitempty"`      // will not always be returned: call specific
 	Permissions    []permissions.PermissionRecord `json:"permissions,omitempty"` // will not always be returned: call specific
 }
 

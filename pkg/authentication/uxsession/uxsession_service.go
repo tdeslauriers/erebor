@@ -371,7 +371,7 @@ func (s *service) removeAccessTokens(ctx context.Context, sessionId string, errC
 	defer wg.Done()
 
 	// get logger from context
-	telemetryLogger, ok := ctx.Value("telemetryLogger").(*slog.Logger)
+	telemetryLogger, ok := ctx.Value(connect.TelemetryLoggerKey).(*slog.Logger)
 	if !ok {
 		s.logger.Warn("failed to extract telemetryLogger from context of removeAccessTokens call")
 		telemetryLogger = s.logger // set to default logger if not found in context

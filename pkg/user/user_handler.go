@@ -16,8 +16,8 @@ import (
 	"github.com/tdeslauriers/carapace/pkg/connect"
 	"github.com/tdeslauriers/carapace/pkg/jwt"
 	"github.com/tdeslauriers/carapace/pkg/permissions"
-	"github.com/tdeslauriers/carapace/pkg/profile"
 	"github.com/tdeslauriers/carapace/pkg/session/provider"
+	"github.com/tdeslauriers/shaw/pkg/user"
 )
 
 // UserHandler is an interface for handling user requests
@@ -119,7 +119,7 @@ func (h *userHandler) getAllUsers(w http.ResponseWriter, r *http.Request, tel *c
 	}
 
 	// get users from identity service
-	users, err := connect.GetServiceData[[]profile.User](
+	users, err := connect.GetServiceData[[]user.User](
 		ctx,
 		h.identity,
 		"/users",
@@ -194,7 +194,7 @@ func (h *userHandler) getUser(w http.ResponseWriter, r *http.Request, tel *conne
 	}
 
 	// get user from identity service
-	user, err := connect.GetServiceData[profile.User](
+	user, err := connect.GetServiceData[user.User](
 		ctx,
 		h.identity,
 		fmt.Sprintf("/users/%s", slug),
@@ -342,7 +342,7 @@ func (h *userHandler) putUser(w http.ResponseWriter, r *http.Request, tel *conne
 	}
 
 	// prep data for identity service
-	user := profile.User{
+	u := user.User{
 		Id:             cmd.Id,       // possibly "", but doesnt matter because it is not used in the update
 		Username:       cmd.Username, // possibly "", but dropped from update cmd upstream: usename/subject will be taken from token
 		Firstname:      cmd.Firstname,
@@ -368,13 +368,13 @@ func (h *userHandler) putUser(w http.ResponseWriter, r *http.Request, tel *conne
 	}
 
 	// forward the update request to the identity service
-	updated, err := connect.PutToService[profile.User, profile.User](
+	updated, err := connect.PutToService[user.User, user.User](
 		ctx,
 		h.identity,
 		fmt.Sprintf("/users/%s", slug),
 		s2sToken,
 		accessToken,
-		user,
+		u,
 	)
 	if err != nil {
 		log.Error(fmt.Sprintf("failed to update user %s in identity service: %s", slug, err.Error()))

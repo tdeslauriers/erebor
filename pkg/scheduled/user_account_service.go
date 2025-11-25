@@ -9,9 +9,9 @@ import (
 	"time"
 
 	"github.com/tdeslauriers/carapace/pkg/connect"
-	"github.com/tdeslauriers/carapace/pkg/profile"
 	"github.com/tdeslauriers/carapace/pkg/session/provider"
 	"github.com/tdeslauriers/pixie/pkg/patron"
+	"github.com/tdeslauriers/shaw/pkg/user"
 )
 
 // UserAccountService is an interface that defines the methods available for scheduled tasks.
@@ -93,7 +93,7 @@ func (s *userAccountService) ReconcileGalleryAccounts() {
 			}
 
 			// get users from identity service
-			users, err := connect.GetServiceData[[]profile.User](
+			users, err := connect.GetServiceData[[]user.User](
 				ctx,
 				s.identity,
 				"/s2s/users",

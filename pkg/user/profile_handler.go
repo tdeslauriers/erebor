@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"github.com/tdeslauriers/carapace/pkg/connect"
-	"github.com/tdeslauriers/carapace/pkg/profile"
 	"github.com/tdeslauriers/carapace/pkg/session/provider"
+	shaw "github.com/tdeslauriers/shaw/pkg/user"
 )
 
 // ProfileHandler is the interface for handling profile requests from the client.
@@ -111,7 +111,7 @@ func (h *profileHandler) handleGet(w http.ResponseWriter, r *http.Request, tel *
 	}
 
 	// get user data from identity service
-	user, err := connect.GetServiceData[profile.User](
+	user, err := connect.GetServiceData[shaw.User](
 		ctx,
 		h.identity,
 		"/profile",
@@ -229,7 +229,7 @@ func (h *profileHandler) handlePut(w http.ResponseWriter, r *http.Request, tel *
 		dob = fmt.Sprintf("%d-%02d-%02d", cmd.BirthYear, cmd.BirthMonth, cmd.BirthDay)
 	}
 
-	user := profile.User{
+	user := shaw.User{
 		Id:             cmd.Id,       // possibly "", but doesnt matter because it is not used in the update
 		Username:       cmd.Username, // possibly "", but dropped from update cmd upstream: usename/subject will be taken from token
 		Firstname:      cmd.Firstname,
@@ -255,7 +255,7 @@ func (h *profileHandler) handlePut(w http.ResponseWriter, r *http.Request, tel *
 	}
 
 	// update user data in identity service
-	updated, err := connect.PutToService[profile.User, profile.User](
+	updated, err := connect.PutToService[shaw.User, shaw.User](
 		ctx,
 		h.identity,
 		"/profile",
