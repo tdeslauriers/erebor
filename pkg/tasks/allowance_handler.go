@@ -9,9 +9,9 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/tdeslauriers/apprentice/pkg/allowances"
 	"github.com/tdeslauriers/carapace/pkg/connect"
 	"github.com/tdeslauriers/carapace/pkg/session/provider"
-	"github.com/tdeslauriers/carapace/pkg/tasks"
 )
 
 // AllowanceHandler is an interface for handling requests for allowances.
@@ -119,7 +119,7 @@ func (h *allowanceHandler) handleGetAccount(w http.ResponseWriter, r *http.Reque
 	}
 
 	// forward request to allowance account service
-	allowance, err := connect.GetServiceData[tasks.Allowance](
+	allowance, err := connect.GetServiceData[allowances.Allowance](
 		ctx,
 		h.task,
 		"/account",
@@ -171,7 +171,7 @@ func (h *allowanceHandler) handleUpdateAccount(w http.ResponseWriter, r *http.Re
 	}
 
 	// decode the request body
-	var cmd tasks.UpdateAllowanceCmd
+	var cmd allowances.UpdateAllowanceCmd
 	if err := json.NewDecoder(r.Body).Decode(&cmd); err != nil {
 		log.Error("failed to decode json in /account request body", "err", err.Error())
 		e := connect.ErrorHttp{
@@ -217,7 +217,7 @@ func (h *allowanceHandler) handleUpdateAccount(w http.ResponseWriter, r *http.Re
 	}
 
 	// forward request to allowance account service
-	allowance, err := connect.PostToService[tasks.UpdateAllowanceCmd, tasks.Allowance](
+	allowance, err := connect.PostToService[allowances.UpdateAllowanceCmd, allowances.Allowance](
 		ctx,
 		h.task,
 		"/account",
@@ -322,7 +322,7 @@ func (h *allowanceHandler) handleGetAll(w http.ResponseWriter, r *http.Request, 
 	}
 
 	// forward request to allowance account service
-	allowances, err := connect.GetServiceData[[]tasks.Allowance](
+	allowances, err := connect.GetServiceData[[]allowances.Allowance](
 		ctx,
 		h.task,
 		"/allowances",
@@ -400,7 +400,7 @@ func (h *allowanceHandler) handleGetAllowance(w http.ResponseWriter, r *http.Req
 	}
 
 	// forward request to allowance account service
-	allowance, err := connect.GetServiceData[tasks.Allowance](
+	allowance, err := connect.GetServiceData[allowances.Allowance](
 		ctx,
 		h.task,
 		fmt.Sprintf("/allowances/%s", slug),
@@ -498,7 +498,7 @@ func (h *allowanceHandler) handleCreate(w http.ResponseWriter, r *http.Request, 
 	cmd.Csrf = ""
 
 	// post request to allowance service
-	allowance, err := connect.PostToService[CreateAllowanceCmd, tasks.Allowance](
+	allowance, err := connect.PostToService[CreateAllowanceCmd, allowances.Allowance](
 		ctx,
 		h.task,
 		"/allowances",
@@ -577,7 +577,7 @@ func (h *allowanceHandler) handleUpdateAllowance(w http.ResponseWriter, r *http.
 	}
 
 	// decode the request body
-	var cmd tasks.UpdateAllowanceCmd
+	var cmd allowances.UpdateAllowanceCmd
 	if err := json.NewDecoder(r.Body).Decode(&cmd); err != nil {
 		log.Error("failed to decode json in /allowances/{slug} request body", "err", err.Error())
 		e := connect.ErrorHttp{
@@ -610,7 +610,7 @@ func (h *allowanceHandler) handleUpdateAllowance(w http.ResponseWriter, r *http.
 	cmd.Csrf = ""
 
 	// forward request to allowance account service
-	allowance, err := connect.PostToService[tasks.UpdateAllowanceCmd, tasks.Allowance](
+	allowance, err := connect.PostToService[allowances.UpdateAllowanceCmd, allowances.Allowance](
 		ctx,
 		h.task,
 		fmt.Sprintf("/allowances/%s", slug),

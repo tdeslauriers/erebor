@@ -5,14 +5,13 @@ import (
 	"encoding/json"
 	"erebor/internal/util"
 	"erebor/pkg/authentication/uxsession"
-
 	"fmt"
 	"log/slog"
 	"net/http"
 
+	"github.com/tdeslauriers/apprentice/pkg/templates"
 	"github.com/tdeslauriers/carapace/pkg/connect"
 	"github.com/tdeslauriers/carapace/pkg/session/provider"
-	"github.com/tdeslauriers/carapace/pkg/tasks"
 )
 
 // TemplateHandler is an interface that handles template related requests.
@@ -124,7 +123,7 @@ func (h *templateHandler) getAssignees(w http.ResponseWriter, r *http.Request, t
 	}
 
 	// get assignees from the tasks service
-	assignees, err := connect.GetServiceData[[]tasks.Assignee](
+	assignees, err := connect.GetServiceData[[]templates.Assignee](
 		ctx,
 		h.task,
 		"/templates/assignees",
@@ -188,7 +187,7 @@ func (h *templateHandler) getTemplates(w http.ResponseWriter, r *http.Request, t
 	}
 
 	// get templates from the tasks service
-	templates, err := connect.GetServiceData[[]tasks.Template](
+	templates, err := connect.GetServiceData[[]templates.Template](
 		ctx,
 		h.task,
 		"/templates",
@@ -240,7 +239,7 @@ func (h *templateHandler) createTemplate(w http.ResponseWriter, r *http.Request,
 	}
 
 	// decode the request body
-	var cmd tasks.TemplateCmd
+	var cmd templates.TemplateCmd
 	if err := json.NewDecoder(r.Body).Decode(&cmd); err != nil {
 		log.Error("failed to decode json in template request body command", "err", err.Error())
 		e := connect.ErrorHttp{
@@ -285,7 +284,7 @@ func (h *templateHandler) createTemplate(w http.ResponseWriter, r *http.Request,
 	}
 
 	// post template to the tasks service
-	template, err := connect.PostToService[tasks.TemplateCmd, tasks.Template](
+	template, err := connect.PostToService[templates.TemplateCmd, templates.Template](
 		ctx,
 		h.task,
 		"/templates",
@@ -363,7 +362,7 @@ func (h *templateHandler) getTemplate(w http.ResponseWriter, r *http.Request, te
 	}
 
 	// get template from the tasks service
-	template, err := connect.GetServiceData[tasks.Template](
+	template, err := connect.GetServiceData[templates.Template](
 		ctx,
 		h.task,
 		fmt.Sprintf("/templates/%s", slug),
@@ -427,7 +426,7 @@ func (h *templateHandler) updateTemplate(w http.ResponseWriter, r *http.Request,
 	}
 
 	// decode the request body
-	var cmd tasks.TemplateCmd
+	var cmd templates.TemplateCmd
 	if err := json.NewDecoder(r.Body).Decode(&cmd); err != nil {
 		log.Error("failed to decode json in template update request body command", "err", err.Error())
 		e := connect.ErrorHttp{
@@ -472,7 +471,7 @@ func (h *templateHandler) updateTemplate(w http.ResponseWriter, r *http.Request,
 	}
 
 	// update template in the tasks service
-	template, err := connect.PutToService[tasks.TemplateCmd, tasks.Template](
+	template, err := connect.PutToService[templates.TemplateCmd, templates.Template](
 		ctx,
 		h.task,
 		fmt.Sprintf("/templates/%s", slug),

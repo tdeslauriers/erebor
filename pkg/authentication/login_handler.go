@@ -13,6 +13,7 @@ import (
 	"github.com/tdeslauriers/carapace/pkg/connect"
 	"github.com/tdeslauriers/carapace/pkg/session/provider"
 	"github.com/tdeslauriers/carapace/pkg/session/types"
+	"github.com/tdeslauriers/shaw/pkg/login"
 )
 
 // LoginHandler is the interface for handling login requests from the client.
@@ -67,7 +68,7 @@ func (h *loginHandler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var cmd types.UserLoginCmd
+	var cmd login.UserLoginCmd
 	err := json.NewDecoder(r.Body).Decode(&cmd)
 	if err != nil {
 		telemetryLogger.Error("failed to decode json in user login request body", "err", err.Error())
@@ -111,7 +112,7 @@ func (h *loginHandler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// post creds to user auth identity service
-	authCode, err := connect.PostToService[types.UserLoginCmd, types.AuthCodeExchange](
+	authCode, err := connect.PostToService[login.UserLoginCmd, types.AuthCodeExchange](
 		ctx,
 		h.iam,
 		"/login",

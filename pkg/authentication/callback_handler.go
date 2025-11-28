@@ -17,7 +17,7 @@ import (
 	"github.com/tdeslauriers/carapace/pkg/connect"
 	"github.com/tdeslauriers/carapace/pkg/jwt"
 	"github.com/tdeslauriers/carapace/pkg/session/provider"
-	callback "github.com/tdeslauriers/carapace/pkg/session/types"
+	shaw "github.com/tdeslauriers/shaw/pkg/oauth"
 )
 
 type CallbackHandler interface {
@@ -69,7 +69,7 @@ func (h *callbackHandler) HandleCallback(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	// decode json body into struct
-	var cmd callback.AuthCodeCmd
+	var cmd oauth.AuthCodeCmd
 	err := json.NewDecoder(r.Body).Decode(&cmd)
 	if err != nil {
 		logger.Error("failed to decode json in user callback request body", "err", err.Error())
@@ -112,15 +112,15 @@ func (h *callbackHandler) HandleCallback(w http.ResponseWriter, r *http.Request)
 	}
 
 	// build the access token request cmd
-	payload := callback.AccessTokenCmd{
-		Grant:       callback.AuthorizationCode,
+	payload := shaw.AccessTokenCmd{
+		Grant:       shaw.AuthorizationCode,
 		AuthCode:    cmd.AuthCode,
 		ClientId:    cmd.ClientId,
 		RedirectUrl: cmd.Redirect,
 	}
 
 	// post request to identity service to get access, request, and id tokens
-	access, err := connect.PostToService[callback.AccessTokenCmd, provider.UserAuthorization](
+	access, err := connect.PostToService[shaw.AccessTokenCmd, provider.UserAuthorization](
 		ctx,
 		h.iam,
 		"/callback",

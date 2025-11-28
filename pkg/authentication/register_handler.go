@@ -15,6 +15,7 @@ import (
 	"github.com/tdeslauriers/carapace/pkg/session/provider"
 	"github.com/tdeslauriers/carapace/pkg/session/types"
 	"github.com/tdeslauriers/pixie/pkg/patron"
+	"github.com/tdeslauriers/shaw/pkg/user"
 )
 
 type RegistrationHandler interface {
@@ -127,7 +128,7 @@ func (h *registrationHandler) HandleRegistration(w http.ResponseWriter, r *http.
 	}
 
 	// post registration request to identity service
-	registered, err := connect.PostToService[types.UserRegisterCmd, types.UserAccount](
+	registered, err := connect.PostToService[types.UserRegisterCmd, user.UserAccount](
 		ctx,
 		h.identity,
 		"/register",

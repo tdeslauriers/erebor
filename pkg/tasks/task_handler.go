@@ -11,9 +11,9 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/tdeslauriers/apprentice/pkg/tasks"
 	"github.com/tdeslauriers/carapace/pkg/connect"
 	"github.com/tdeslauriers/carapace/pkg/session/provider"
-	"github.com/tdeslauriers/carapace/pkg/tasks"
 )
 
 // TaskHandler is an interface that defines the methods for handling tasks.

@@ -132,3 +132,5 @@ type UxsessionAccesstoken struct {
 	RefreshRevoked bool            `json:"refresh_revoked" db:"refresh_revoked"`
 	RefreshClaimed bool            `json:"refresh_claimed" db:"refresh_claimed"`
 }
+
+

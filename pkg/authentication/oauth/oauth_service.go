@@ -49,7 +49,7 @@ type OauthService interface {
 
 	// Valiadate validates the oauth exchange variables returned from the client to the callback url
 	// against the values stored in the database to ensure the exchange is valid/untampered
-	Validate(oauth types.AuthCodeCmd) error
+	Validate(oauth AuthCodeCmd) error
 }
 
 type OauthErrService interface {
@@ -373,7 +373,7 @@ func (s *service) build() (*OauthExchange, error) {
 }
 
 // Valiadate implementation of the OauthService interface
-func (s *service) Validate(cmd types.AuthCodeCmd) error {
+func (s *service) Validate(cmd AuthCodeCmd) error {
 
 	// input validation -> redundant because also performed by handler
 	if err := cmd.ValidateCmd(); err != nil {
