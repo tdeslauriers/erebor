@@ -17,6 +17,7 @@ import (
 
 // NewClientHandler returns a new Handler.
 func NewClientHandler(ux uxsession.Service, p provider.S2sTokenProvider, c *connect.S2sCaller) ClientHandler {
+
 	return &clientHandler{
 		session:  ux,
 		provider: p,
@@ -52,10 +53,6 @@ type clientHandler struct {
 // It is the concrete implementation of the ClientHandler interface.
 func (h *clientHandler) HandleClients(w http.ResponseWriter, r *http.Request) {
 
-	// generate telemetry
-	telemetry := connect.NewTelemetry(r, h.logger)
-	logger := h.logger.With(telemetry.TelemetryFields()...)
-
 	switch r.Method {
 	case http.MethodGet:
 
@@ -64,21 +61,25 @@ func (h *clientHandler) HandleClients(w http.ResponseWriter, r *http.Request) {
 		slug := r.PathValue("slug")
 		if slug == "" {
 
-			h.handleGetAllClients(w, r, telemetry, logger)
+			h.handleGetAllClients(w, r)
 			return
 		} else {
 
-			h.handleGetClient(w, r, telemetry, logger)
+			h.handleGetClient(w, r)
 			return
 		}
 	case http.MethodPut:
-		h.handlePutClient(w, r, telemetry, logger)
+		h.handlePutClient(w, r)
 		return
 	case http.MethodPost:
 		// this is used for the register service client use case/business logic, it will reject all other post requests
-		h.handlePostClient(w, r, telemetry, logger)
+		h.handlePostClient(w, r)
 		return
 	default:
+		// generate telemetry
+		telemetry := connect.NewTelemetry(r, h.logger)
+		logger := h.logger.With(telemetry.TelemetryFields()...)
+
 		logger.Error(fmt.Sprintf("unsupported method %s for endpoint %s", r.Method, r.URL.Path))
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusMethodNotAllowed,
@@ -91,7 +92,13 @@ func (h *clientHandler) HandleClients(w http.ResponseWriter, r *http.Request) {
 
 // handleGetAllClients is a helper function which handles a request /clients by submitting it against
 // the s2s service clients endpoint.
-func (h *clientHandler) handleGetAllClients(w http.ResponseWriter, r *http.Request, tel *connect.Telemetry, log *slog.Logger) {
+func (h *clientHandler) handleGetAllClients(w http.ResponseWriter, r *http.Request) {
+
+
+	// generate telemetry
+	tel:= connect.NewTelemetry(r, h.logger)
+	log := h.logger.With(tel.TelemetryFields()...)
+
 
 	// add telemetry to context for downstream calls
 	ctx := context.WithValue(r.Context(), connect.TelemetryKey, tel)
@@ -154,7 +161,11 @@ func (h *clientHandler) handleGetAllClients(w http.ResponseWriter, r *http.Reque
 }
 
 // handleGetClient handles a GET request from the client by submitting it against the s2s service clients/{slug} endpoint.
-func (h *clientHandler) handleGetClient(w http.ResponseWriter, r *http.Request, tel *connect.Telemetry, log *slog.Logger) {
+func (h *clientHandler) handleGetClient(w http.ResponseWriter, r *http.Request) {
+
+	// generate telemetry
+	tel:= connect.NewTelemetry(r, h.logger)
+	log := h.logger.With(tel.TelemetryFields()...)
 
 	// add telemetry to context for downstream calls
 	ctx := context.WithValue(r.Context(), connect.TelemetryKey, tel)
@@ -230,7 +241,11 @@ func (h *clientHandler) handleGetClient(w http.ResponseWriter, r *http.Request, 
 }
 
 // handlePutClient handles a PUT request from the client by submitting it against the s2s service clients/{slug} endpoint.\
-func (h *clientHandler) handlePutClient(w http.ResponseWriter, r *http.Request, tel *connect.Telemetry, log *slog.Logger) {
+func (h *clientHandler) handlePutClient(w http.ResponseWriter, r *http.Request) {
+
+	// generate telemetry
+	tel:= connect.NewTelemetry(r, h.logger)
+	log := h.logger.With(tel.TelemetryFields()...)
 
 	// add telemetry to context for downstream calls
 	ctx := context.WithValue(r.Context(), connect.TelemetryKey, tel)
@@ -350,7 +365,11 @@ func (h *clientHandler) handlePutClient(w http.ResponseWriter, r *http.Request, 
 }
 
 // handlePostClient handles a POST request from the client by submitting it against the s2s service clients/{slug} endpoint.
-func (h *clientHandler) handlePostClient(w http.ResponseWriter, r *http.Request, tel *connect.Telemetry, log *slog.Logger) {
+func (h *clientHandler) handlePostClient(w http.ResponseWriter, r *http.Request) {
+
+	// generate telemetry
+	tel:= connect.NewTelemetry(r, h.logger)
+	log := h.logger.With(tel.TelemetryFields()...)
 
 	// add telemetry to context for downstream calls
 	ctx := context.WithValue(r.Context(), connect.TelemetryKey, tel)

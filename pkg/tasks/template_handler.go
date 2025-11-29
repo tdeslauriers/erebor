@@ -48,10 +48,6 @@ type templateHandler struct {
 // HandleTemplates is the concrete implementation of the interface  method that handles requests to the templates endpoint.
 func (h *templateHandler) HandleTemplates(w http.ResponseWriter, r *http.Request) {
 
-	// generate telemetry
-	tel := connect.NewTelemetry(r, h.logger)
-	log := h.logger.With(tel.TelemetryFields()...)
-
 	switch r.Method {
 	case http.MethodGet:
 		// check for a slug -> get all vs get one
@@ -59,23 +55,27 @@ func (h *templateHandler) HandleTemplates(w http.ResponseWriter, r *http.Request
 		slug := r.PathValue("slug")
 		switch slug {
 		case "":
-			h.getTemplates(w, r, tel, log)
+			h.getTemplates(w, r)
 			return
 		case "assignees":
-			h.getAssignees(w, r, tel, log)
+			h.getAssignees(w, r)
 			return
 		default:
 			// this will handle slugs that are not well formed.
-			h.getTemplate(w, r, tel, log)
+			h.getTemplate(w, r)
 			return
 		}
 	case http.MethodPost:
-		h.createTemplate(w, r, tel, log)
+		h.createTemplate(w, r)
 		return
 	case http.MethodPut:
-		h.updateTemplate(w, r, tel, log)
+		h.updateTemplate(w, r)
 		return
 	default:
+		// generate telemetry
+		tel := connect.NewTelemetry(r, h.logger)
+		log := h.logger.With(tel.TelemetryFields()...)
+
 		log.Error(fmt.Sprintf("unsupported method %s for endpoint %s", r.Method, r.URL.Path))
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusMethodNotAllowed,
@@ -87,7 +87,11 @@ func (h *templateHandler) HandleTemplates(w http.ResponseWriter, r *http.Request
 }
 
 // HandleGetAssignees is a method that handles the request to get assignees.
-func (h *templateHandler) getAssignees(w http.ResponseWriter, r *http.Request, tel *connect.Telemetry, log *slog.Logger) {
+func (h *templateHandler) getAssignees(w http.ResponseWriter, r *http.Request) {
+
+	// build/collect telemetry and add fields to the logger
+	tel := connect.NewTelemetry(r, h.logger)
+	log := h.logger.With(tel.TelemetryFields()...)
 
 	// add telemetry to context for downstream calls + service functions
 	ctx := context.WithValue(r.Context(), connect.TelemetryKey, tel)
@@ -152,7 +156,11 @@ func (h *templateHandler) getAssignees(w http.ResponseWriter, r *http.Request, t
 }
 
 // getTemplates is a concrete implementation of the interface method that handles the request to get templates.
-func (h *templateHandler) getTemplates(w http.ResponseWriter, r *http.Request, tel *connect.Telemetry, log *slog.Logger) {
+func (h *templateHandler) getTemplates(w http.ResponseWriter, r *http.Request) {
+
+	// build/collect telemetry and add fields to the logger
+	tel := connect.NewTelemetry(r, h.logger)
+	log := h.logger.With(tel.TelemetryFields()...)
 
 	// add telemetry to context for downstream calls + service functions
 	ctx := context.WithValue(r.Context(), connect.TelemetryKey, tel)
@@ -216,7 +224,11 @@ func (h *templateHandler) getTemplates(w http.ResponseWriter, r *http.Request, t
 }
 
 // createTemplate is a method that handles the request to create a new template.
-func (h *templateHandler) createTemplate(w http.ResponseWriter, r *http.Request, tel *connect.Telemetry, log *slog.Logger) {
+func (h *templateHandler) createTemplate(w http.ResponseWriter, r *http.Request) {
+
+	// build/collect telemetry and add fields to the logger
+	tel := connect.NewTelemetry(r, h.logger)
+	log := h.logger.With(tel.TelemetryFields()...)
 
 	// add telemetry to context for downstream calls + service functions
 	ctx := context.WithValue(r.Context(), connect.TelemetryKey, tel)
@@ -315,7 +327,11 @@ func (h *templateHandler) createTemplate(w http.ResponseWriter, r *http.Request,
 }
 
 // getTemplate is a method that handles the request to get a template.
-func (h *templateHandler) getTemplate(w http.ResponseWriter, r *http.Request, tel *connect.Telemetry, log *slog.Logger) {
+func (h *templateHandler) getTemplate(w http.ResponseWriter, r *http.Request) {
+
+	// build/collect telemetry and add fields to the logger
+	tel := connect.NewTelemetry(r, h.logger)
+	log := h.logger.With(tel.TelemetryFields()...)
 
 	// add telemetry to context for downstream calls + service functions
 	ctx := context.WithValue(r.Context(), connect.TelemetryKey, tel)
@@ -391,7 +407,11 @@ func (h *templateHandler) getTemplate(w http.ResponseWriter, r *http.Request, te
 }
 
 // updateTemplate is a method that handles the request to update a template.
-func (h *templateHandler) updateTemplate(w http.ResponseWriter, r *http.Request, tel *connect.Telemetry, log *slog.Logger) {
+func (h *templateHandler) updateTemplate(w http.ResponseWriter, r *http.Request) {
+
+	// build/collect telemetry and add fields to the logger
+	tel := connect.NewTelemetry(r, h.logger)
+	log := h.logger.With(tel.TelemetryFields()...)
 
 	// add telemetry to context for downstream calls + service functions
 	ctx := context.WithValue(r.Context(), connect.TelemetryKey, tel)

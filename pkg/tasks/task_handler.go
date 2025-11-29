@@ -51,17 +51,18 @@ type taskHandler struct {
 // Includes GET and POST for queries and new tasks respectively.
 func (h *taskHandler) HandleTasks(w http.ResponseWriter, r *http.Request) {
 
-	// generate telemetry
-	tel := connect.NewTelemetry(r, h.logger)
-	log := h.logger.With(tel.TelemetryFields()...)
-
+	
 	switch r.Method {
 	case http.MethodGet:
-		h.handleGetTasks(w, r, tel, log)
+		h.handleGetTasks(w, r)
 		return
 	case http.MethodPatch:
-		h.handlePatchTasks(w, r, tel, log)
+		h.handlePatchTasks(w, r)
 	default:
+		// generate telemetry
+		tel := connect.NewTelemetry(r, h.logger)
+		log := h.logger.With(tel.TelemetryFields()...)
+
 		log.Error(fmt.Sprintf("unsupported method %s for endpoint %s", r.Method, r.URL.Path))
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusMethodNotAllowed,
@@ -75,7 +76,12 @@ func (h *taskHandler) HandleTasks(w http.ResponseWriter, r *http.Request) {
 // handleGetTasks handles GET requests to the /tasks endpoint, including validating query parameters, etc.
 // validates request parameters, including the CSRF token and session, and then forwards
 // the request to the task service.
-func (h *taskHandler) handleGetTasks(w http.ResponseWriter, r *http.Request, tel *connect.Telemetry, log *slog.Logger) {
+func (h *taskHandler) handleGetTasks(w http.ResponseWriter, r *http.Request) {
+
+	// build/collect telemetry and add fields to the logger
+	tel := connect.NewTelemetry(r, h.logger)
+	log := h.logger.With(tel.TelemetryFields()...)
+
 
 	// add telemetry to context for downstream calls + service functions
 	ctx := context.WithValue(r.Context(), connect.TelemetryKey, tel)
@@ -155,7 +161,12 @@ func (h *taskHandler) handleGetTasks(w http.ResponseWriter, r *http.Request, tel
 // handlePatchTasks handles PATCH requests to the /tasks endpoint
 // validates request cmd, including the CSRF token and session, and then forwards
 // the request to the task service.
-func (h *taskHandler) handlePatchTasks(w http.ResponseWriter, r *http.Request, tel *connect.Telemetry, log *slog.Logger) {
+func (h *taskHandler) handlePatchTasks(w http.ResponseWriter, r *http.Request) {
+
+	// build/collect telemetry and add fields to the logger
+	tel := connect.NewTelemetry(r, h.logger)
+	log := h.logger.With(tel.TelemetryFields()...)
+
 
 	// add telemetry to context for downstream calls + service functions
 	ctx := context.WithValue(r.Context(), connect.TelemetryKey, tel)

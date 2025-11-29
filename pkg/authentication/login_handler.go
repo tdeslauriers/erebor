@@ -25,6 +25,7 @@ type LoginHandler interface {
 
 // NewLoginHandler creates a new LoginHandler instance.
 func NewLoginHandler(ux uxsession.Service, p provider.S2sTokenProvider, iam *connect.S2sCaller) LoginHandler {
+	
 	return &loginHandler{
 		uxSession: ux,
 		s2sToken:  p,

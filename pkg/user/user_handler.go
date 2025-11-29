@@ -55,26 +55,26 @@ type userHandler struct {
 
 func (h *userHandler) HandleUsers(w http.ResponseWriter, r *http.Request) {
 
-	// generate telemetry
-	tel := connect.NewTelemetry(r, h.logger)
-	log := h.logger.With(tel.TelemetryFields()...)
-
 	switch r.Method {
 	case http.MethodGet:
 
 		// get slug if exists
 		slug := r.PathValue("slug")
 		if slug == "" {
-			h.getAllUsers(w, r, tel, log)
+			h.getAllUsers(w, r)
 			return
 		} else {
-			h.getUser(w, r, tel, log)
+			h.getUser(w, r)
 			return
 		}
 	case http.MethodPut:
-		h.putUser(w, r, tel, log)
+		h.putUser(w, r)
 		return
 	default:
+		// generate telemetry
+		tel := connect.NewTelemetry(r, h.logger)
+		log := h.logger.With(tel.TelemetryFields()...)
+
 		log.Error(fmt.Sprintf("unsupported method %s for endpoint %s", r.Method, r.URL.Path))
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusMethodNotAllowed,
@@ -85,7 +85,11 @@ func (h *userHandler) HandleUsers(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (h *userHandler) getAllUsers(w http.ResponseWriter, r *http.Request, tel *connect.Telemetry, log *slog.Logger) {
+func (h *userHandler) getAllUsers(w http.ResponseWriter, r *http.Request) {
+
+	// build/collect telemetry and add fields to the logger
+	tel := connect.NewTelemetry(r, h.logger)
+	log := h.logger.With(tel.TelemetryFields()...)
 
 	// add telemetry to context for downstream calls + service functions
 	ctx := context.WithValue(r.Context(), connect.TelemetryKey, tel)
@@ -148,7 +152,11 @@ func (h *userHandler) getAllUsers(w http.ResponseWriter, r *http.Request, tel *c
 	}
 }
 
-func (h *userHandler) getUser(w http.ResponseWriter, r *http.Request, tel *connect.Telemetry, log *slog.Logger) {
+func (h *userHandler) getUser(w http.ResponseWriter, r *http.Request) {
+
+	// build/collect telemetry and add fields to the logger
+	tel := connect.NewTelemetry(r, h.logger)
+	log := h.logger.With(tel.TelemetryFields()...)
 
 	// add telemetry to context for downstream calls + service functions
 	ctx := context.WithValue(r.Context(), connect.TelemetryKey, tel)
@@ -272,7 +280,11 @@ func (h *userHandler) getUser(w http.ResponseWriter, r *http.Request, tel *conne
 	}
 }
 
-func (h *userHandler) putUser(w http.ResponseWriter, r *http.Request, tel *connect.Telemetry, log *slog.Logger) {
+func (h *userHandler) putUser(w http.ResponseWriter, r *http.Request) {
+
+	// build/collect telemetry and add fields to the logger
+	tel := connect.NewTelemetry(r, h.logger)
+	log := h.logger.With(tel.TelemetryFields()...)
 
 	// add telemetry to context for downstream calls + service functions
 	ctx := context.WithValue(r.Context(), connect.TelemetryKey, tel)

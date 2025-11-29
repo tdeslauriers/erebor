@@ -21,6 +21,7 @@ type ScopesHandler interface {
 
 // NewScopesHandler returns a pointer to the concrete implementation of the ScopesHandler interface.
 func NewScopesHandler(ux uxsession.Service, p provider.S2sTokenProvider, c *connect.S2sCaller) ScopesHandler {
+	
 	return &scopesHandler{
 		session:  ux,
 		provider: p,

@@ -33,8 +33,13 @@ type handler struct {
 }
 
 func (h *handler) HandleGetState(w http.ResponseWriter, r *http.Request) {
-	if r.Method != "POST" {
-		h.logger.Error("only POST requests are allowed to /oauth/state endpoint")
+
+	// generate telemetry
+	telemetry := connect.NewTelemetry(r, h.logger)
+	log := h.logger.With(telemetry.TelemetryFields()...)
+
+	if r.Method != http.MethodPost {
+		log.Error("only POST requests are allowed to /oauth/state endpoint")
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusMethodNotAllowed,
 			Message:    "only POST requests are allowed",
@@ -46,7 +51,7 @@ func (h *handler) HandleGetState(w http.ResponseWriter, r *http.Request) {
 	var cmd OauthCmd
 	err := json.NewDecoder(r.Body).Decode(&cmd)
 	if err != nil {
-		h.logger.Error("failed to decode session_token json in the request body", "err", err.Error())
+		log.Error("failed to decode session_token json in the request body", "err", err.Error())
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusBadRequest,
 			Message:    "improperly formatted json for session token",
@@ -56,7 +61,7 @@ func (h *handler) HandleGetState(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := cmd.ValidateCmd(); err != nil {
-		h.logger.Error("failed to validate ouath request cmd in the request body", "err", err.Error())
+		log.Error("failed to validate ouath request cmd in the request body", "err", err.Error())
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusBadRequest,
 			Message:    fmt.Sprintf("invalid oauth request: %s", err.Error()),
@@ -75,7 +80,7 @@ func (h *handler) HandleGetState(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(exchange); err != nil {
-		h.logger.Error("failed to encode oauth exchange to json", "err", err.Error())
+		log.Error("failed to encode oauth exchange to json", "err", err.Error())
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusInternalServerError,
 			Message:    "internal server error",

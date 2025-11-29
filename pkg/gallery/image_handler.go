@@ -50,21 +50,21 @@ type imageHandler struct {
 // the image/slug endpoint and forwards them to the gallery service if necessary.
 func (h *imageHandler) HandleImage(w http.ResponseWriter, r *http.Request) {
 
-	// generate telemetry
-	tel := connect.NewTelemetry(r, h.logger)
-	log := h.logger.With(tel.TelemetryFields()...)
-
 	switch r.Method {
 	case http.MethodGet:
-		h.getImageData(w, r, tel, log)
+		h.getImageData(w, r)
 		return
 	case http.MethodPut: // /images/slug --> slug will be the slug for PUTs
-		h.updateImageData(w, r, tel, log)
+		h.updateImageData(w, r)
 		return
 	case http.MethodPost:
-		h.postImageData(w, r, tel, log)
+		h.postImageData(w, r)
 		return
 	default:
+		// generate telemetry
+		tel := connect.NewTelemetry(r, h.logger)
+		log := h.logger.With(tel.TelemetryFields()...)
+
 		log.Error(fmt.Sprintf("unsupported method %s for endpoint %s", r.Method, r.URL.Path))
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusMethodNotAllowed,
@@ -76,7 +76,11 @@ func (h *imageHandler) HandleImage(w http.ResponseWriter, r *http.Request) {
 }
 
 // getImageData handles the GET request to retrieve image data by slug.
-func (h *imageHandler) getImageData(w http.ResponseWriter, r *http.Request, tel *connect.Telemetry, log *slog.Logger) {
+func (h *imageHandler) getImageData(w http.ResponseWriter, r *http.Request) {
+
+	// generate telemetry
+	tel:= connect.NewTelemetry(r, h.logger)
+	log := h.logger.With(tel.TelemetryFields()...)
 
 	// add telemetry to context for downstream calls + service functions
 	ctx := context.WithValue(r.Context(), connect.TelemetryKey, tel)
@@ -151,7 +155,11 @@ func (h *imageHandler) getImageData(w http.ResponseWriter, r *http.Request, tel 
 }
 
 // updateImageData handles the PUT request to update image data by slug.
-func (h *imageHandler) updateImageData(w http.ResponseWriter, r *http.Request, tel *connect.Telemetry, log *slog.Logger) {
+func (h *imageHandler) updateImageData(w http.ResponseWriter, r *http.Request) {
+
+	// generate telemetry
+	tel:= connect.NewTelemetry(r, h.logger)
+	log := h.logger.With(tel.TelemetryFields()...)
 
 	// add telemetry to context for downstream calls + service functions
 	ctx := context.WithValue(r.Context(), connect.TelemetryKey, tel)
@@ -250,7 +258,11 @@ func (h *imageHandler) updateImageData(w http.ResponseWriter, r *http.Request, t
 }
 
 // postImageData handles the POST request to upload image data.
-func (h *imageHandler) postImageData(w http.ResponseWriter, r *http.Request, tel *connect.Telemetry, log *slog.Logger) {
+func (h *imageHandler) postImageData(w http.ResponseWriter, r *http.Request) {
+
+	// generate telemetry
+	tel:= connect.NewTelemetry(r, h.logger)
+	log := h.logger.With(tel.TelemetryFields()...)
 
 	// add telemetry to context for downstream calls + service functions
 	ctx := context.WithValue(r.Context(), connect.TelemetryKey, tel)

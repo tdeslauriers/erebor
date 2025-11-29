@@ -55,15 +55,15 @@ type permissionsHandler struct {
 // HandlePermissions is the concrete implementation of the interface function that handles a request from the client by submitting it against the user permissions service.
 func (h *permissionsHandler) HandlePermissions(w http.ResponseWriter, r *http.Request) {
 
-	// generate telemetry
-	tel := connect.NewTelemetry(r, h.logger)
-	log := h.logger.With(tel.TelemetryFields()...)
-
 	switch r.Method {
 	case http.MethodPut:
-		h.updateUserPermissions(w, r, tel, log)
+		h.updateUserPermissions(w, r)
 		return
 	default:
+		// generate telemetry
+		tel := connect.NewTelemetry(r, h.logger)
+		log := h.logger.With(tel.TelemetryFields()...)
+
 		log.Error(fmt.Sprintf("unsupported method %s for endpoint %s", r.Method, r.URL.Path))
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusMethodNotAllowed,
@@ -75,7 +75,11 @@ func (h *permissionsHandler) HandlePermissions(w http.ResponseWriter, r *http.Re
 }
 
 // updateUserPermissions is a helper method which handles the request to update user permissions.
-func (h *permissionsHandler) updateUserPermissions(w http.ResponseWriter, r *http.Request, tel *connect.Telemetry, log *slog.Logger) {
+func (h *permissionsHandler) updateUserPermissions(w http.ResponseWriter, r *http.Request) {
+
+	// build/collect telemetry and add fields to the logger
+	tel := connect.NewTelemetry(r, h.logger)
+	log := h.logger.With(tel.TelemetryFields()...)
 
 	// add telemetry to context for downstream calls + service functions
 	ctx := context.WithValue(r.Context(), connect.TelemetryKey, tel)

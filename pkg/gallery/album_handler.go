@@ -50,10 +50,6 @@ type albumHandler struct {
 // the albums endpoint and forwards them to the gallery service if necessary.
 func (h *albumHandler) HandleAlbums(w http.ResponseWriter, r *http.Request) {
 
-	// generate telemetry
-	tel := connect.NewTelemetry(r, h.logger)
-	log := h.logger.With(tel.TelemetryFields()...)
-
 	switch r.Method {
 	case http.MethodGet:
 
@@ -62,29 +58,43 @@ func (h *albumHandler) HandleAlbums(w http.ResponseWriter, r *http.Request) {
 		slug := r.PathValue("slug")
 		if slug == "" {
 
-			h.getAlbums(w, r, tel, log)
+			h.getAlbums(w, r)
 			return
 		} else {
-			h.getAlbum(w, r, tel, log)
+			h.getAlbum(w, r)
 			return
 		}
 	case http.MethodPost:
-		h.postAlbum(w, r, tel, log)
+		h.postAlbum(w, r)
 		return
 	case http.MethodPut:
-		h.updateAlbum(w, r, tel, log)
+		h.updateAlbum(w, r)
 		return
 	// case http.MethodDelete:
 	// 	h.deleteAlbum(w, r)
 	// 	return
 	default:
+		// generate telemetry
+		tel := connect.NewTelemetry(r, h.logger)
+		log := h.logger.With(tel.TelemetryFields()...)
+
+		log.Error(fmt.Sprintf("unsupported method %s for endpoint %s", r.Method, r.URL.Path))
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusMethodNotAllowed,
+			Message:    fmt.Sprintf("unsupported method %s for endpoint %s", r.Method, r.URL.Path),
+		}
+		e.SendJsonErr(w)
 
 		return
 	}
 }
 
 // getAlbums handles the GET request to retrieve albums.
-func (h *albumHandler) getAlbums(w http.ResponseWriter, r *http.Request, tel *connect.Telemetry, log *slog.Logger) {
+func (h *albumHandler) getAlbums(w http.ResponseWriter, r *http.Request) {
+
+	// generate telemetry
+	tel:= connect.NewTelemetry(r, h.logger)
+	log := h.logger.With(tel.TelemetryFields()...)
 
 	// add telemetry to context for downstream calls + service functions
 	ctx := context.WithValue(r.Context(), connect.TelemetryKey, tel)
@@ -148,7 +158,11 @@ func (h *albumHandler) getAlbums(w http.ResponseWriter, r *http.Request, tel *co
 }
 
 // getAlbum handles the GET request to retrieve a specific album by slug.
-func (h *albumHandler) getAlbum(w http.ResponseWriter, r *http.Request, tel *connect.Telemetry, log *slog.Logger) {
+func (h *albumHandler) getAlbum(w http.ResponseWriter, r *http.Request) {
+
+	// generate telemetry
+	tel:= connect.NewTelemetry(r, h.logger)
+	log := h.logger.With(tel.TelemetryFields()...)
 
 	// add telemetry to context for downstream calls + service functions
 	ctx := context.WithValue(r.Context(), connect.TelemetryKey, tel)
@@ -224,7 +238,11 @@ func (h *albumHandler) getAlbum(w http.ResponseWriter, r *http.Request, tel *con
 }
 
 // updateAlbum handles the PUT request to update an existing album.
-func (h *albumHandler) updateAlbum(w http.ResponseWriter, r *http.Request, tel *connect.Telemetry, log *slog.Logger) {
+func (h *albumHandler) updateAlbum(w http.ResponseWriter, r *http.Request) {
+
+	// generate telemetry
+	tel:= connect.NewTelemetry(r, h.logger)
+	log := h.logger.With(tel.TelemetryFields()...)
 
 	// add telemetry to context for downstream calls + service functions
 	ctx := context.WithValue(r.Context(), connect.TelemetryKey, tel)
@@ -325,7 +343,12 @@ func (h *albumHandler) updateAlbum(w http.ResponseWriter, r *http.Request, tel *
 }
 
 // postAlbum handles the POST request to create a new album.
-func (h *albumHandler) postAlbum(w http.ResponseWriter, r *http.Request, tel *connect.Telemetry, log *slog.Logger) {
+func (h *albumHandler) postAlbum(w http.ResponseWriter, r *http.Request) {
+
+	// get telemetry from request
+	// generate telemetry
+	tel:= connect.NewTelemetry(r, h.logger)
+	log := h.logger.With(tel.TelemetryFields()...)
 
 	// add telemetry to context for downstream calls + service functions
 	ctx := context.WithValue(r.Context(), connect.TelemetryKey, tel)

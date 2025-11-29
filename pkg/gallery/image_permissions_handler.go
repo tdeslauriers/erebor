@@ -50,15 +50,15 @@ type permissionsHandler struct {
 // the permissions/slug endpoint and forwards them to the permissions service if necessary.
 func (h *permissionsHandler) HandlePermissions(w http.ResponseWriter, r *http.Request) {
 
-	// generate telemetry
-	tel := connect.NewTelemetry(r, h.logger)
-	log := h.logger.With(tel.TelemetryFields()...)
-
 	switch r.Method {
 	case http.MethodGet:
-		h.getPermissionsData(w, r, tel, log)
+		h.getPermissionsData(w, r)
 		return
 	default:
+		// generate telemetry
+		tel := connect.NewTelemetry(r, h.logger)
+		log := h.logger.With(tel.TelemetryFields()...)
+
 		log.Error("unsupported method for /images/permissions endpoint")
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusMethodNotAllowed,
@@ -69,7 +69,11 @@ func (h *permissionsHandler) HandlePermissions(w http.ResponseWriter, r *http.Re
 	}
 }
 
-func (h *permissionsHandler) getPermissionsData(w http.ResponseWriter, r *http.Request, tel *connect.Telemetry, log *slog.Logger) {
+func (h *permissionsHandler) getPermissionsData(w http.ResponseWriter, r *http.Request) {
+
+	// generate telemetry
+	tel := connect.NewTelemetry(r, h.logger)
+	log := h.logger.With(tel.TelemetryFields()...)
 
 	// add telemetry to context for downstream calls + service functions
 	ctx := context.WithValue(r.Context(), connect.TelemetryKey, tel)

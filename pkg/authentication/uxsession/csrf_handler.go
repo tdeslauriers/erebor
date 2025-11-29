@@ -37,8 +37,14 @@ type csrfHandler struct {
 
 // HandleGetCsrf implements HandleGetCsrf of CsrfHandler interface
 func (h *csrfHandler) HandleGetCsrf(w http.ResponseWriter, r *http.Request) {
-	if r.Method != "GET" {
-		h.logger.Error("only GET requests are allowed to /csrf endpoint")
+
+	// generate telemetry
+	telemetry := connect.NewTelemetry(r, h.logger)
+	log := h.logger.With(telemetry.TelemetryFields()...)
+
+	// validate http method
+	if r.Method != http.MethodGet {
+		log.Error("only GET requests are allowed to /csrf endpoint")
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusMethodNotAllowed,
 			Message:    "only GET requests are allowed",
@@ -57,7 +63,7 @@ func (h *csrfHandler) HandleGetCsrf(w http.ResponseWriter, r *http.Request) {
 
 	// light weight input validation (not checking if session id is valid or well-formed)
 	if len(sessionId) < 16 || len(sessionId) > 64 {
-		h.logger.Error("invalid session id")
+		log.Error("invalid session id")
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusBadRequest,
 			Message:    "invalid session id",
@@ -69,6 +75,7 @@ func (h *csrfHandler) HandleGetCsrf(w http.ResponseWriter, r *http.Request) {
 	// get csrf token
 	uxSession, err := h.csrf.GetCsrf(sessionId)
 	if err != nil {
+		log.Error("failed to get csrf token", "err", err.Error())
 		h.handleServiceErrors(err, w)
 		return
 	}
@@ -77,7 +84,7 @@ func (h *csrfHandler) HandleGetCsrf(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(uxSession); err != nil {
-		h.logger.Error("failed to encode csrf token to json", "err", err.Error())
+		log.Error("failed to encode csrf token to json", "err", err.Error())
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusInternalServerError,
 			Message:    "failed to encode csrf token to json",
@@ -91,7 +98,6 @@ func (h *csrfHandler) HandleGetCsrf(w http.ResponseWriter, r *http.Request) {
 func (h *csrfHandler) handleServiceErrors(err error, w http.ResponseWriter) {
 	switch {
 	case strings.Contains(err.Error(), ErrInvalidSession):
-		h.logger.Error(err.Error())
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusBadRequest,
 			Message:    err.Error(),
@@ -99,7 +105,6 @@ func (h *csrfHandler) handleServiceErrors(err error, w http.ResponseWriter) {
 		e.SendJsonErr(w)
 		return
 	case strings.Contains(err.Error(), ErrSessionRevoked):
-		h.logger.Error(err.Error())
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusUnauthorized,
 			Message:    ErrSessionRevoked,
@@ -107,7 +112,6 @@ func (h *csrfHandler) handleServiceErrors(err error, w http.ResponseWriter) {
 		e.SendJsonErr(w)
 		return
 	case strings.Contains(err.Error(), ErrSessionExpired):
-		h.logger.Error(err.Error())
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusUnauthorized,
 			Message:    ErrSessionExpired,
@@ -115,14 +119,12 @@ func (h *csrfHandler) handleServiceErrors(err error, w http.ResponseWriter) {
 		e.SendJsonErr(w)
 		return
 	case strings.Contains(err.Error(), ErrSessionNotFound):
-		h.logger.Error(err.Error())
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusUnauthorized,
 			Message:    ErrSessionNotFound,
 		}
 		e.SendJsonErr(w)
 	default:
-		h.logger.Error("failed to get csrf token", "err", err.Error())
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusInternalServerError,
 			Message:    "failed to get csrf token",

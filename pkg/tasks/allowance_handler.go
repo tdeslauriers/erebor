@@ -60,18 +60,19 @@ type allowanceHandler struct {
 // when requested from /allowance endpoint.
 func (h *allowanceHandler) HandleAccount(w http.ResponseWriter, r *http.Request) {
 
-	// build/collect telemetry and add fields to the logger
-	tel := connect.NewTelemetry(r, h.logger)
-	log := h.logger.With(tel.TelemetryFields()...)
-
+	
 	switch r.Method {
 	case http.MethodGet:
-		h.handleGetAccount(w, r, tel, log)
+		h.handleGetAccount(w, r)
 		return
 	case http.MethodPut:
-		h.handleUpdateAccount(w, r, tel, log)
+		h.handleUpdateAccount(w, r)
 		return
 	default:
+		// build/collect telemetry and add fields to the logger
+		tel := connect.NewTelemetry(r, h.logger)
+		log := h.logger.With(tel.TelemetryFields()...)
+
 		log.Error(fmt.Sprintf("unsupported method %s for endpoint %s", r.Method, r.URL.Path))
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusMethodNotAllowed,
@@ -83,7 +84,12 @@ func (h *allowanceHandler) HandleAccount(w http.ResponseWriter, r *http.Request)
 }
 
 // handleGetAccount handles the GET request to get a users allowance account when requested from /allowance endpoint.
-func (h *allowanceHandler) handleGetAccount(w http.ResponseWriter, r *http.Request, tel *connect.Telemetry, log *slog.Logger) {
+func (h *allowanceHandler) handleGetAccount(w http.ResponseWriter, r *http.Request) {
+
+	// build/collect telemetry and add fields to the logger
+	tel := connect.NewTelemetry(r, h.logger)
+	log := h.logger.With(tel.TelemetryFields()...)
+
 
 	// add telemetry to context for call stack + service functions
 	ctx := context.WithValue(r.Context(), connect.TelemetryKey, tel)
@@ -148,7 +154,11 @@ func (h *allowanceHandler) handleGetAccount(w http.ResponseWriter, r *http.Reque
 }
 
 // handleUpdateAccount handles the PUT request to update a users allowance account when requested from /allowance endpoint.
-func (h *allowanceHandler) handleUpdateAccount(w http.ResponseWriter, r *http.Request, tel *connect.Telemetry, log *slog.Logger) {
+func (h *allowanceHandler) handleUpdateAccount(w http.ResponseWriter, r *http.Request) {
+
+	// build/collect telemetry and add fields to the logger
+	tel := connect.NewTelemetry(r, h.logger)
+	log := h.logger.With(tel.TelemetryFields()...)
 
 	// add telemetry to context for downstream calls + service functions
 	ctx := context.WithValue(r.Context(), connect.TelemetryKey, tel)
@@ -250,30 +260,31 @@ func (h *allowanceHandler) handleUpdateAccount(w http.ResponseWriter, r *http.Re
 // function that handles the requests to get all or create a new allowance account(s).
 func (h *allowanceHandler) HandleAllowances(w http.ResponseWriter, r *http.Request) {
 
-	// generate telemetry
-	tel := connect.NewTelemetry(r, h.logger)
-	log := h.logger.With(tel.TelemetryFields()...)
-
+	
 	switch r.Method {
 	case http.MethodGet:
 		// check for a slug -> get all vs get one
 		// get slug if it exists
 		slug := r.PathValue("slug")
 		if slug == "" {
+			
+			h.handleGetAll(w, r)
+			return
+			} else {
+				h.handleGetAllowance(w, r)
+				return
+			}
+		case http.MethodPost:
+			h.handleCreate(w, r)
+			return
+		case http.MethodPut:
+			h.handleUpdateAllowance(w, r)
+			return
+		default:
+			// generate telemetry
+			tel := connect.NewTelemetry(r, h.logger)
+			log := h.logger.With(tel.TelemetryFields()...)
 
-			h.handleGetAll(w, r, tel, log)
-			return
-		} else {
-			h.handleGetAllowance(w, r, tel, log)
-			return
-		}
-	case http.MethodPost:
-		h.handleCreate(w, r, tel, log)
-		return
-	case http.MethodPut:
-		h.handleUpdateAllowance(w, r, tel, log)
-		return
-	default:
 		log.Error(fmt.Sprintf("unsupported method %s for endpoint %s", r.Method, r.URL.Path))
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusMethodNotAllowed,
@@ -286,7 +297,12 @@ func (h *allowanceHandler) HandleAllowances(w http.ResponseWriter, r *http.Reque
 }
 
 // handleGetAll handles the GET request to get all allowance accounts when requested from /allowances endpoint.
-func (h *allowanceHandler) handleGetAll(w http.ResponseWriter, r *http.Request, tel *connect.Telemetry, log *slog.Logger) {
+func (h *allowanceHandler) handleGetAll(w http.ResponseWriter, r *http.Request) {
+
+	// build/collect telemetry and add fields to the logger
+	tel := connect.NewTelemetry(r, h.logger)
+	log := h.logger.With(tel.TelemetryFields()...)
+
 
 	// add telemetry to context for downstream calls + service functions
 	ctx := context.WithValue(r.Context(), connect.TelemetryKey, tel)
@@ -352,7 +368,12 @@ func (h *allowanceHandler) handleGetAll(w http.ResponseWriter, r *http.Request, 
 }
 
 // handleGetAllowance handles the GET request to get a specific allowance account when requested from /allowances/{slug} endpoint.
-func (h *allowanceHandler) handleGetAllowance(w http.ResponseWriter, r *http.Request, tel *connect.Telemetry, log *slog.Logger) {
+func (h *allowanceHandler) handleGetAllowance(w http.ResponseWriter, r *http.Request) {
+
+	// build/collect telemetry and add fields to the logger
+	tel := connect.NewTelemetry(r, h.logger)
+	log := h.logger.With(tel.TelemetryFields()...)
+
 
 	// add telemetry to context for downstream calls + service functions
 	ctx := context.WithValue(r.Context(), connect.TelemetryKey, tel)
@@ -429,7 +450,12 @@ func (h *allowanceHandler) handleGetAllowance(w http.ResponseWriter, r *http.Req
 }
 
 // handleCreate handles the POST request to create a new allowance account when posted to /allowances endpoint.
-func (h *allowanceHandler) handleCreate(w http.ResponseWriter, r *http.Request, tel *connect.Telemetry, log *slog.Logger) {
+func (h *allowanceHandler) handleCreate(w http.ResponseWriter, r *http.Request) {
+
+	// build/collect telemetry and add fields to the logger
+	tel := connect.NewTelemetry(r, h.logger)
+	log := h.logger.With(tel.TelemetryFields()...)
+
 
 	// add telemetry to context for downstream calls + service functions
 	ctx := context.WithValue(r.Context(), connect.TelemetryKey, tel)
@@ -529,7 +555,12 @@ func (h *allowanceHandler) handleCreate(w http.ResponseWriter, r *http.Request, 
 }
 
 // handleUpdateAllowance handles the PUT request to update an existing allowance account when posted to /allowances/{slug} endpoint.
-func (h *allowanceHandler) handleUpdateAllowance(w http.ResponseWriter, r *http.Request, tel *connect.Telemetry, log *slog.Logger) {
+func (h *allowanceHandler) handleUpdateAllowance(w http.ResponseWriter, r *http.Request) {
+
+	// build/collect telemetry and add fields to the logger
+	tel := connect.NewTelemetry(r, h.logger)
+	log := h.logger.With(tel.TelemetryFields()...)
+
 
 	// add telemetry to context for downstream calls + service functions
 	ctx := context.WithValue(r.Context(), connect.TelemetryKey, tel)

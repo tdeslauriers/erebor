@@ -56,10 +56,6 @@ type handler struct {
 // that handles requests against the /permissions/{slug...} endpoint.
 func (h *handler) HandlePermissions(w http.ResponseWriter, r *http.Request) {
 
-	// generate telemetry
-	telemetry := connect.NewTelemetry(r, h.logger)
-	logger := h.logger.With(telemetry.TelemetryFields()...)
-
 	switch r.Method {
 	case http.MethodGet:
 
@@ -68,20 +64,24 @@ func (h *handler) HandlePermissions(w http.ResponseWriter, r *http.Request) {
 		slug := r.PathValue("slug")
 		if slug == "" {
 
-			h.getAllPermissions(w, r, telemetry, logger)
+			h.getAllPermissions(w, r)
 			return
 		} else {
 
-			h.getPermissionBySlug(w, r, telemetry, logger)
+			h.getPermissionBySlug(w, r)
 			return
 		}
 	case http.MethodPut:
-		h.updatePermission(w, r, telemetry, logger)
+		h.updatePermission(w, r)
 		return
 	case http.MethodPost:
-		h.createPermission(w, r, telemetry, logger)
+		h.createPermission(w, r)
 		return
 	default:
+		// generate telemetry
+		telemetry := connect.NewTelemetry(r, h.logger)
+		logger := h.logger.With(telemetry.TelemetryFields()...)
+
 		logger.Error(fmt.Sprintf("unsupported method %s for endpoint %s", r.Method, r.URL.Path))
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusMethodNotAllowed,
@@ -95,7 +95,11 @@ func (h *handler) HandlePermissions(w http.ResponseWriter, r *http.Request) {
 // getAllPermissions is a helper method which  handles the GET request to the /permissions endpoint,
 // retrieving and collating/combining all permissions records from
 // all down stream services that use them.
-func (h *handler) getAllPermissions(w http.ResponseWriter, r *http.Request, tel *connect.Telemetry, log *slog.Logger) {
+func (h *handler) getAllPermissions(w http.ResponseWriter, r *http.Request) {
+
+	// generate telemetry
+	tel := connect.NewTelemetry(r, h.logger)
+	log := h.logger.With(tel.TelemetryFields()...)
 
 	// add telemetry to context for downstream calls + service functions
 	ctx := context.WithValue(r.Context(), connect.TelemetryKey, tel)
@@ -206,7 +210,11 @@ func (h *handler) getServicePermissions(
 
 // getPermisionBySlug is a helper method that handles the GET request to the /permissions/{slug} endpoint,
 // retrieving a specific permission record by its slug from the downstream services.
-func (h *handler) getPermissionBySlug(w http.ResponseWriter, r *http.Request, tel *connect.Telemetry, log *slog.Logger) {
+func (h *handler) getPermissionBySlug(w http.ResponseWriter, r *http.Request) {
+
+	// generate telemetry
+	tel := connect.NewTelemetry(r, h.logger)
+	log := h.logger.With(tel.TelemetryFields()...)
 
 	// add telemetry to context for downstream calls + service functions
 	ctx := context.WithValue(r.Context(), connect.TelemetryKey, tel)
@@ -338,7 +346,11 @@ func (h *handler) getPermissionBySlug(w http.ResponseWriter, r *http.Request, te
 
 // createPermission is a helper method that handles the POST request to the /permissions endpoint,
 // creating a new permission record in the downstream services.
-func (h *handler) createPermission(w http.ResponseWriter, r *http.Request, tel *connect.Telemetry, log *slog.Logger) {
+func (h *handler) createPermission(w http.ResponseWriter, r *http.Request) {
+
+	// generate telemetry
+	tel := connect.NewTelemetry(r, h.logger)
+	log := h.logger.With(tel.TelemetryFields()...)
 
 	// add telemetry to context for downstream calls + service functions
 	ctx := context.WithValue(r.Context(), connect.TelemetryKey, tel)
@@ -480,7 +492,11 @@ func (h *handler) createPermission(w http.ResponseWriter, r *http.Request, tel *
 
 // updatePermission is a helper method that handles the PUT request to the /permissions/{slug} endpoint,
 // updating an existing permission record in the downstream services.
-func (h *handler) updatePermission(w http.ResponseWriter, r *http.Request, tel *connect.Telemetry, log *slog.Logger) {
+func (h *handler) updatePermission(w http.ResponseWriter, r *http.Request) {
+
+	// generate telemetry
+	tel := connect.NewTelemetry(r, h.logger)
+	log := h.logger.With(tel.TelemetryFields()...)
 
 	// add telemetry to context for downstream calls + service functions
 	ctx := context.WithValue(r.Context(), connect.TelemetryKey, tel)

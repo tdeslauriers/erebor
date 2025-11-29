@@ -52,20 +52,20 @@ type profileHandler struct {
 // Note: this is for a user's profile only, and is not meant handle admin-level (any)user requests.
 func (h *profileHandler) HandleProfile(w http.ResponseWriter, r *http.Request) {
 
-	// generate telemetry
-	tel := connect.NewTelemetry(r, h.logger)
-	log := h.logger.With(tel.TelemetryFields()...)
-
 	switch r.Method {
 	case http.MethodGet:
 		// get user profile
-		h.handleGet(w, r, tel, log)
+		h.handleGet(w, r)
 		return
 	case http.MethodPut:
 		// update user profile
-		h.handlePut(w, r, tel, log)
+		h.handlePut(w, r)
 		return
 	default:
+		// generate telemetry
+		tel := connect.NewTelemetry(r, h.logger)
+		log := h.logger.With(tel.TelemetryFields()...)
+
 		log.Error(fmt.Sprintf("unsupported method %s for endpoint %s", r.Method, r.URL.Path))
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusMethodNotAllowed,
@@ -77,7 +77,11 @@ func (h *profileHandler) HandleProfile(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleGet handles the GET request for a user's profile.
-func (h *profileHandler) handleGet(w http.ResponseWriter, r *http.Request, tel *connect.Telemetry, log *slog.Logger) {
+func (h *profileHandler) handleGet(w http.ResponseWriter, r *http.Request) {
+
+	// build/collect telemetry and add fields to the logger
+	tel := connect.NewTelemetry(r, h.logger)
+	log := h.logger.With(tel.TelemetryFields()...)
 
 	// add telemetry to context for downstream calls + service functions
 	ctx := context.WithValue(r.Context(), connect.TelemetryKey, tel)
@@ -172,7 +176,11 @@ func (h *profileHandler) handleGet(w http.ResponseWriter, r *http.Request, tel *
 	}
 }
 
-func (h *profileHandler) handlePut(w http.ResponseWriter, r *http.Request, tel *connect.Telemetry, log *slog.Logger) {
+func (h *profileHandler) handlePut(w http.ResponseWriter, r *http.Request) {
+
+	// build/collect telemetry and add fields to the logger
+	tel := connect.NewTelemetry(r, h.logger)
+	log := h.logger.With(tel.TelemetryFields()...)
 
 	// add telemetry to context for downstream calls + service functions
 	ctx := context.WithValue(r.Context(), connect.TelemetryKey, tel)

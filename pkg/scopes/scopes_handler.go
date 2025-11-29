@@ -48,10 +48,6 @@ type handler struct {
 // concrete implementation of the Handler interface's HandleScope method.
 func (h *handler) HandleScopes(w http.ResponseWriter, r *http.Request) {
 
-	// generate telemetry
-	tel := connect.NewTelemetry(r, h.logger)
-	log := h.logger.With(tel.TelemetryFields()...)
-
 	// get slug if exists
 	slug := r.PathValue("slug")
 
@@ -59,22 +55,27 @@ func (h *handler) HandleScopes(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 
 		if slug == "" {
-			h.handleGetAll(w, r, tel, log)
+			h.handleGetAll(w, r)
 			return
 		} else {
-			h.handleGet(w, r, tel, log)
+			h.handleGet(w, r)
 			return
 		}
 
 	case "PUT":
-		h.handlePut(w, r, tel, log)
+		h.handlePut(w, r)
 		return
 	case "POST":
 
 		if slug == "add" {
-			h.HandleAdd(w, r, tel, log)
+			h.HandleAdd(w, r)
 			return
 		} else {
+
+			// generate telemetry
+			tel := connect.NewTelemetry(r, h.logger)
+			log := h.logger.With(tel.TelemetryFields()...)
+
 			log.Error(fmt.Sprintf("invalid slug submitted to /scopes/%s", slug[:10]+"..."))
 			e := connect.ErrorHttp{
 				StatusCode: http.StatusMethodNotAllowed,
@@ -86,6 +87,10 @@ func (h *handler) HandleScopes(w http.ResponseWriter, r *http.Request) {
 	// case "DELETE":
 	// 	return
 	default:
+		// generate telemetry
+		tel := connect.NewTelemetry(r, h.logger)
+		log := h.logger.With(tel.TelemetryFields()...)
+
 		log.Error(fmt.Sprintf("unsupported method %s for endpoint %s", r.Method, r.URL.Path))
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusMethodNotAllowed,
@@ -96,7 +101,11 @@ func (h *handler) HandleScopes(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (h *handler) handleGetAll(w http.ResponseWriter, r *http.Request, tel *connect.Telemetry, log *slog.Logger) {
+func (h *handler) handleGetAll(w http.ResponseWriter, r *http.Request) {
+
+	// build/collect telemetry and add fields to the logger
+	tel := connect.NewTelemetry(r, h.logger)
+	log := h.logger.With(tel.TelemetryFields()...)
 
 	// add telemetry to context for downstream calls + service functions
 	ctx := context.WithValue(r.Context(), connect.TelemetryKey, tel)
@@ -160,7 +169,11 @@ func (h *handler) handleGetAll(w http.ResponseWriter, r *http.Request, tel *conn
 
 // HandleAdd handles the request to add a new scope.
 // concrete implementation of the Handler interface.
-func (h *handler) HandleAdd(w http.ResponseWriter, r *http.Request, tel *connect.Telemetry, log *slog.Logger) {
+func (h *handler) HandleAdd(w http.ResponseWriter, r *http.Request) {
+
+	// build/collect telemetry and add fields to the logger
+	tel := connect.NewTelemetry(r, h.logger)
+	log := h.logger.With(tel.TelemetryFields()...)
 
 	// add telemetry to context for downstream calls + service functions
 	ctx := context.WithValue(r.Context(), connect.TelemetryKey, tel)
@@ -265,7 +278,12 @@ func (h *handler) HandleAdd(w http.ResponseWriter, r *http.Request, tel *connect
 	}
 }
 
-func (h *handler) handleGet(w http.ResponseWriter, r *http.Request, tel *connect.Telemetry, log *slog.Logger) {
+func (h *handler) handleGet(w http.ResponseWriter, r *http.Request) {
+
+	// build/collect telemetry and add fields to the logger
+	tel := connect.NewTelemetry(r, h.logger)
+	log := h.logger.With(tel.TelemetryFields()...)
+
 
 	// add telemetry to context for downstream calls + service functions
 	ctx := context.WithValue(r.Context(), connect.TelemetryKey, tel)
@@ -341,7 +359,12 @@ func (h *handler) handleGet(w http.ResponseWriter, r *http.Request, tel *connect
 }
 
 // handlePut handles the request to update an existing scope.
-func (h *handler) handlePut(w http.ResponseWriter, r *http.Request, tel *connect.Telemetry, log *slog.Logger) {
+func (h *handler) handlePut(w http.ResponseWriter, r *http.Request) {
+
+	// build/collect telemetry and add fields to the logger
+	tel := connect.NewTelemetry(r, h.logger)
+	log := h.logger.With(tel.TelemetryFields()...)
+
 
 	// add telemetry to context for downstream calls + service functions
 	ctx := context.WithValue(r.Context(), connect.TelemetryKey, tel)
