@@ -435,7 +435,7 @@ func (h *handler) createPermission(w http.ResponseWriter, r *http.Request) {
 		permission, err := connect.PostToService[permissions.Permission, permissions.Permission](
 			ctx,
 			h.tasks,
-			"/permissions",
+			"/permissions/",
 			s2sToken,
 			accessToken,
 			cmd,
@@ -452,7 +452,7 @@ func (h *handler) createPermission(w http.ResponseWriter, r *http.Request) {
 		permission, err := connect.PostToService[permissions.Permission, permissions.Permission](
 			ctx,
 			h.gallery,
-			"/permissions",
+			"/permissions/",
 			s2sToken,
 			accessToken,
 			cmd,

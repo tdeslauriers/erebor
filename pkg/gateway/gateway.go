@@ -253,14 +253,14 @@ func (g *gateway) Run() error {
 	// tasks/allowances
 	task := tasks.NewHandler(g.uxSession, g.tknProvider, g.iam, g.task)
 	mux.HandleFunc("/account", task.HandleAccount)
-	mux.HandleFunc("/allowances/{slug...}", task.HandleAllowances) 
+	mux.HandleFunc("/allowances/{slug...}", task.HandleAllowances)
 	mux.HandleFunc("/templates/{slug...}", task.HandleTemplates)
 	mux.HandleFunc("/tasks", task.HandleTasks)
 
 	// gallery/images/pics
 	glry := gallery.NewHandler(g.uxSession, g.tknProvider, g.gallery, g.pat)
 	mux.HandleFunc("/albums/{slug...}", glry.HandleAlbums)
-	mux.HandleFunc("/images/{slug}", glry.HandleImage)
+	mux.HandleFunc("/images/{slug...}", glry.HandleImage)
 	mux.HandleFunc("/images/notify/upload", glry.HandleImageUploadNotification)
 	mux.HandleFunc("/images/permissions", glry.HandlePermissions)
 

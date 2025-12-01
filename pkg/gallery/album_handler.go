@@ -93,7 +93,7 @@ func (h *albumHandler) HandleAlbums(w http.ResponseWriter, r *http.Request) {
 func (h *albumHandler) getAlbums(w http.ResponseWriter, r *http.Request) {
 
 	// generate telemetry
-	tel:= connect.NewTelemetry(r, h.logger)
+	tel := connect.NewTelemetry(r, h.logger)
 	log := h.logger.With(tel.TelemetryFields()...)
 
 	// add telemetry to context for downstream calls + service functions
@@ -161,7 +161,7 @@ func (h *albumHandler) getAlbums(w http.ResponseWriter, r *http.Request) {
 func (h *albumHandler) getAlbum(w http.ResponseWriter, r *http.Request) {
 
 	// generate telemetry
-	tel:= connect.NewTelemetry(r, h.logger)
+	tel := connect.NewTelemetry(r, h.logger)
 	log := h.logger.With(tel.TelemetryFields()...)
 
 	// add telemetry to context for downstream calls + service functions
@@ -241,7 +241,7 @@ func (h *albumHandler) getAlbum(w http.ResponseWriter, r *http.Request) {
 func (h *albumHandler) updateAlbum(w http.ResponseWriter, r *http.Request) {
 
 	// generate telemetry
-	tel:= connect.NewTelemetry(r, h.logger)
+	tel := connect.NewTelemetry(r, h.logger)
 	log := h.logger.With(tel.TelemetryFields()...)
 
 	// add telemetry to context for downstream calls + service functions
@@ -347,7 +347,7 @@ func (h *albumHandler) postAlbum(w http.ResponseWriter, r *http.Request) {
 
 	// get telemetry from request
 	// generate telemetry
-	tel:= connect.NewTelemetry(r, h.logger)
+	tel := connect.NewTelemetry(r, h.logger)
 	log := h.logger.With(tel.TelemetryFields()...)
 
 	// add telemetry to context for downstream calls + service functions
@@ -418,7 +418,7 @@ func (h *albumHandler) postAlbum(w http.ResponseWriter, r *http.Request) {
 	created, err := connect.PostToService[api.AddAlbumCmd, api.Album](
 		ctx,
 		h.gallery,
-		"/albums",
+		"/albums/",
 		galleryToken,
 		accessToken,
 		cmd,

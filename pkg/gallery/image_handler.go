@@ -79,7 +79,7 @@ func (h *imageHandler) HandleImage(w http.ResponseWriter, r *http.Request) {
 func (h *imageHandler) getImageData(w http.ResponseWriter, r *http.Request) {
 
 	// generate telemetry
-	tel:= connect.NewTelemetry(r, h.logger)
+	tel := connect.NewTelemetry(r, h.logger)
 	log := h.logger.With(tel.TelemetryFields()...)
 
 	// add telemetry to context for downstream calls + service functions
@@ -158,7 +158,7 @@ func (h *imageHandler) getImageData(w http.ResponseWriter, r *http.Request) {
 func (h *imageHandler) updateImageData(w http.ResponseWriter, r *http.Request) {
 
 	// generate telemetry
-	tel:= connect.NewTelemetry(r, h.logger)
+	tel := connect.NewTelemetry(r, h.logger)
 	log := h.logger.With(tel.TelemetryFields()...)
 
 	// add telemetry to context for downstream calls + service functions
@@ -261,7 +261,7 @@ func (h *imageHandler) updateImageData(w http.ResponseWriter, r *http.Request) {
 func (h *imageHandler) postImageData(w http.ResponseWriter, r *http.Request) {
 
 	// generate telemetry
-	tel:= connect.NewTelemetry(r, h.logger)
+	tel := connect.NewTelemetry(r, h.logger)
 	log := h.logger.With(tel.TelemetryFields()...)
 
 	// add telemetry to context for downstream calls + service functions
@@ -335,7 +335,7 @@ func (h *imageHandler) postImageData(w http.ResponseWriter, r *http.Request) {
 	data, err := connect.PostToService[api.AddMetaDataCmd, api.Placeholder](
 		ctx,
 		h.gallery,
-		"/images/upload",
+		"/images/",
 		galleryToken,
 		accessToken,
 		cmd,

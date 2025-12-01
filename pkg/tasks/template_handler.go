@@ -299,7 +299,7 @@ func (h *templateHandler) createTemplate(w http.ResponseWriter, r *http.Request)
 	template, err := connect.PostToService[templates.TemplateCmd, templates.Template](
 		ctx,
 		h.task,
-		"/templates",
+		"/templates/",
 		taskToken,
 		accessToken,
 		cmd,
