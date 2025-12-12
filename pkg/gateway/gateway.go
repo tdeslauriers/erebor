@@ -154,7 +154,7 @@ func New(config *config.Config) (Gateway, error) {
 		verifier:    jwt.NewVerifier(config.ServiceName, publicKey),
 		pat:         pat.NewVerifier(util.ServiceS2s, s2s, tkn),
 		cryptor:     cryptor,
-		cleanup:     scheduled.NewService(repository, tkn, iam, gallery),
+		cleanup:     scheduled.NewService(db, tkn, iam, gallery),
 
 		logger: slog.Default().
 			With(slog.String(util.PackageKey, util.PackageGateway)).

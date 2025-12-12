@@ -196,7 +196,7 @@ func (h *handler) getServicePermissions(
 	ps, err := connect.GetServiceData[[]permissions.Permission](
 		ctx,
 		svc,
-		"/permissions",
+		"/permissions/",
 		serviceToken,
 		accessToken,
 	)

@@ -10,7 +10,7 @@ import (
 	"github.com/tdeslauriers/carapace/pkg/permissions"
 	"github.com/tdeslauriers/carapace/pkg/session/provider"
 	"github.com/tdeslauriers/carapace/pkg/validate"
-	"github.com/tdeslauriers/ran/pkg/scopes"
+	"github.com/tdeslauriers/ran/pkg/api/scopes"
 )
 
 // Handler is the interface for handling user requests from the client.  Aggregates all user handler interfaces.

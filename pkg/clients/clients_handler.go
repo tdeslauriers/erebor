@@ -11,8 +11,8 @@ import (
 
 	"github.com/tdeslauriers/carapace/pkg/connect"
 	"github.com/tdeslauriers/carapace/pkg/session/provider"
-	"github.com/tdeslauriers/ran/pkg/clients"
-	"github.com/tdeslauriers/ran/pkg/pat"
+	"github.com/tdeslauriers/ran/pkg/api/clients"
+	"github.com/tdeslauriers/ran/pkg/api/pat"
 )
 
 // NewClientHandler returns a new Handler.

@@ -11,7 +11,7 @@ import (
 
 	"github.com/tdeslauriers/carapace/pkg/connect"
 	"github.com/tdeslauriers/carapace/pkg/session/provider"
-	"github.com/tdeslauriers/ran/pkg/scopes"
+	"github.com/tdeslauriers/ran/pkg/api/scopes"
 )
 
 // Handler is an interface for calls to the gateway /scopes/{slug...} endpoint.
@@ -284,7 +284,6 @@ func (h *handler) handleGet(w http.ResponseWriter, r *http.Request) {
 	tel := connect.NewTelemetry(r, h.logger)
 	log := h.logger.With(tel.TelemetryFields()...)
 
-
 	// add telemetry to context for downstream calls + service functions
 	ctx := context.WithValue(r.Context(), connect.TelemetryKey, tel)
 
@@ -364,7 +363,6 @@ func (h *handler) handlePut(w http.ResponseWriter, r *http.Request) {
 	// build/collect telemetry and add fields to the logger
 	tel := connect.NewTelemetry(r, h.logger)
 	log := h.logger.With(tel.TelemetryFields()...)
-
 
 	// add telemetry to context for downstream calls + service functions
 	ctx := context.WithValue(r.Context(), connect.TelemetryKey, tel)

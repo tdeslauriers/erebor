@@ -6,16 +6,16 @@ toolchain go1.24.4
 
 require (
 	github.com/tdeslauriers/apprentice v0.0.2
-	github.com/tdeslauriers/carapace v0.2.3
+	github.com/tdeslauriers/carapace v0.2.5
 	github.com/tdeslauriers/pixie v0.1.5
-	github.com/tdeslauriers/ran v0.0.6
-	github.com/tdeslauriers/shaw v0.0.3
+	github.com/tdeslauriers/ran v0.1.2
+	github.com/tdeslauriers/shaw v0.0.4
 )
 
 require (
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/go-ini/ini v1.67.0 // indirect
-	github.com/klauspost/compress v1.18.1 // indirect
+	github.com/klauspost/compress v1.18.2 // indirect
 	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
 	github.com/klauspost/crc32 v1.3.0 // indirect
 	github.com/minio/crc64nvme v1.1.1 // indirect
@@ -23,11 +23,11 @@ require (
 	github.com/minio/minio-go/v7 v7.0.97 // indirect
 	github.com/philhofer/fwd v1.2.0 // indirect
 	github.com/rs/xid v1.6.0 // indirect
-	github.com/tinylib/msgp v1.5.0 // indirect
-	golang.org/x/crypto v0.45.0 // indirect
-	golang.org/x/net v0.47.0 // indirect
-	golang.org/x/sys v0.38.0 // indirect
-	golang.org/x/text v0.31.0 // indirect
+	github.com/tinylib/msgp v1.6.1 // indirect
+	golang.org/x/crypto v0.46.0 // indirect
+	golang.org/x/net v0.48.0 // indirect
+	golang.org/x/sys v0.39.0 // indirect
+	golang.org/x/text v0.32.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
