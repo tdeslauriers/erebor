@@ -15,7 +15,7 @@ import (
 	"github.com/tdeslauriers/carapace/pkg/connect"
 	exo "github.com/tdeslauriers/carapace/pkg/permissions"
 	"github.com/tdeslauriers/carapace/pkg/session/provider"
-	"github.com/tdeslauriers/shaw/pkg/user"
+	"github.com/tdeslauriers/shaw/pkg/api/user"
 )
 
 // PermissionsHandler defines the interface for handling user permissions requests.

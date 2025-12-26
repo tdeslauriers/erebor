@@ -11,7 +11,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/tdeslauriers/apprentice/pkg/tasks"
+	"github.com/tdeslauriers/apprentice/pkg/api/tasks"
 	"github.com/tdeslauriers/carapace/pkg/connect"
 	"github.com/tdeslauriers/carapace/pkg/session/provider"
 )
@@ -51,7 +51,6 @@ type taskHandler struct {
 // Includes GET and POST for queries and new tasks respectively.
 func (h *taskHandler) HandleTasks(w http.ResponseWriter, r *http.Request) {
 
-	
 	switch r.Method {
 	case http.MethodGet:
 		h.handleGetTasks(w, r)
@@ -81,7 +80,6 @@ func (h *taskHandler) handleGetTasks(w http.ResponseWriter, r *http.Request) {
 	// build/collect telemetry and add fields to the logger
 	tel := connect.NewTelemetry(r, h.logger)
 	log := h.logger.With(tel.TelemetryFields()...)
-
 
 	// add telemetry to context for downstream calls + service functions
 	ctx := context.WithValue(r.Context(), connect.TelemetryKey, tel)
@@ -166,7 +164,6 @@ func (h *taskHandler) handlePatchTasks(w http.ResponseWriter, r *http.Request) {
 	// build/collect telemetry and add fields to the logger
 	tel := connect.NewTelemetry(r, h.logger)
 	log := h.logger.With(tel.TelemetryFields()...)
-
 
 	// add telemetry to context for downstream calls + service functions
 	ctx := context.WithValue(r.Context(), connect.TelemetryKey, tel)

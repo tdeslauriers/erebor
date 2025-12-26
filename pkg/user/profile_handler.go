@@ -12,7 +12,7 @@ import (
 
 	"github.com/tdeslauriers/carapace/pkg/connect"
 	"github.com/tdeslauriers/carapace/pkg/session/provider"
-	shaw "github.com/tdeslauriers/shaw/pkg/user"
+	shaw "github.com/tdeslauriers/shaw/pkg/api/user"
 )
 
 // ProfileHandler is the interface for handling profile requests from the client.

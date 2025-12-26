@@ -9,7 +9,7 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/tdeslauriers/apprentice/pkg/allowances"
+	"github.com/tdeslauriers/apprentice/pkg/api/allowances"
 	"github.com/tdeslauriers/carapace/pkg/connect"
 	"github.com/tdeslauriers/carapace/pkg/session/provider"
 )
@@ -347,6 +347,8 @@ func (h *allowanceHandler) handleGetAll(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	log.Info("%v", allowances)
+
 	log.Info(fmt.Sprintf("successfully retrieved %d allowance accounts", len(allowances)))
 
 	// respond to client
@@ -643,7 +645,7 @@ func (h *allowanceHandler) handleUpdateAllowance(w http.ResponseWriter, r *http.
 		cmd,
 	)
 	if err != nil {
-		log.Error(fmt.Sprintf("failed to update allowance account for slug %s from tasks service", slug), "err", err.Error())
+		log.Error("failed to update allowance account for slug from tasks service", "err", err.Error())
 		h.task.RespondUpstreamError(err, w)
 		return
 	}

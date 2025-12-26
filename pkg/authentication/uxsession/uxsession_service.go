@@ -20,13 +20,7 @@ import (
 	"github.com/tdeslauriers/carapace/pkg/session/types"
 )
 
-// container interface for multiple task specific interfaces
-type Service interface {
-	SessionService
-	CsrfService
-	TokenService
-	SessionErrService
-}
+
 
 // SessionService is the interface for handling ux session specific operations.
 type SessionService interface {
@@ -48,26 +42,18 @@ type SessionService interface {
 	DestroySession(ctx context.Context, session string) error
 }
 
-// SessionErrService is the interface for handling ux session service and
-// its underlying interfaces errors in a consistent way
-type SessionErrService interface {
-
-	// HandleSessionErr is a helper function to handle session errors in a consistent way
-	HandleSessionErr(err error, w http.ResponseWriter)
-}
-
 // NewService creates a new instance of the container Session Service interface and returns a pointer to its concrete implementation.
-func NewService(
+func NewSessionService(
 	cfg *config.OauthRedirect,
-	db data.SqlRepository,
+	db *sql.DB,
 	i data.Indexer,
 	c data.Cryptor,
 	p provider.S2sTokenProvider,
 	call *connect.S2sCaller,
-) Service {
-	return &service{
+) SessionService {
+	return &uxSession{
 		cfg:         cfg,
-		db:          db,
+		db:          NewSessionRepository(db),
 		indexer:     i,
 		cryptor:     c,
 		s2sProvider: p,
@@ -79,12 +65,12 @@ func NewService(
 	}
 }
 
-var _ Service = (*service)(nil)
+var _ SessionService = (*uxSession)(nil)
 
 // service is the concrete implementation of the Service interface.
-type service struct {
+type uxSession struct {
 	cfg         *config.OauthRedirect // needed to populate client id for refresh requests
-	db          data.SqlRepository
+	db          SessionRepository
 	indexer     data.Indexer
 	cryptor     data.Cryptor
 	s2sProvider provider.S2sTokenProvider
@@ -96,7 +82,7 @@ type service struct {
 // Build creates a new seesion record, persisting it to the database, and returns the struct.  It builds both authenticated and unauthenticated sessions.
 // However, the authentication designation in the struct is just a convenience, the presesnce of Access and Refresh tokens is the real indicator of authentication status.
 // If no access tokens exist, user will be redirected to login page.
-func (s *service) Build(st UxSessionType) (*UxSession, error) {
+func (s *uxSession) Build(st UxSessionType) (*UxSession, error) {
 
 	var (
 		wg sync.WaitGroup
@@ -210,8 +196,7 @@ func (s *service) Build(st UxSessionType) (*UxSession, error) {
 		Revoked:       false,
 	}
 
-	qry := `INSERT INTO uxsession (uuid, session_index, session_token, csrf_token, created_at, authenticated, revoked) VALUES (?, ?, ?, ?, ?, ?, ?)`
-	if err := s.db.InsertRecord(qry, persist); err != nil {
+	if err := s.db.InsertUxSession(persist); err != nil {
 		return nil, err
 	}
 
@@ -227,7 +212,7 @@ func (s *service) Build(st UxSessionType) (*UxSession, error) {
 }
 
 // IsValid checks if the session is valid, ie, not revoked, not expired, etc.
-func (s *service) IsValid(session string) (bool, error) {
+func (s *uxSession) IsValid(session string) (bool, error) {
 
 	// light weight input validation
 	if len(session) < 16 || len(session) > 64 {
@@ -241,12 +226,8 @@ func (s *service) IsValid(session string) (bool, error) {
 	}
 
 	// look up uxSession from db by index
-	var uxSession UxSession
-	qry := "SELECT uuid, session_index, session_token, csrf_token, created_at, authenticated, revoked FROM uxsession WHERE session_index = ?"
-	if err := s.db.SelectRecord(qry, &uxSession, index); err != nil {
-		if err == sql.ErrNoRows {
-			return false, fmt.Errorf("session xxxxxx-%s - %s: %v", session[len(session)-6:], ErrSessionNotFound, err)
-		}
+	uxSession, err := s.db.FindSession(index)
+	if err != nil {
 		return false, err
 	}
 
@@ -265,7 +246,7 @@ func (s *service) IsValid(session string) (bool, error) {
 
 // RevokeSession revokes the session
 // Note: does not revoke access tokens or refresh tokens, that is done in the identity service
-func (s *service) RevokeSession(session string) error {
+func (s *uxSession) RevokeSession(session string) error {
 
 	// light weight input validation
 	if len(session) < 16 || len(session) > 64 {
@@ -278,16 +259,15 @@ func (s *service) RevokeSession(session string) error {
 		return fmt.Errorf("%s from provided session token xxxxxx-%s: %v", ErrGenIndex, session[len(session)-6:], err)
 	}
 
-	qry := "UPDATE uxsession SET revoked = ? WHERE session_index = ?"
-	if err := s.db.UpdateRecord(qry, true, index); err != nil {
-		return fmt.Errorf("failed to revok session xxxxxx-%s: %v", session[len(session)-6:], err)
+	if err := s.db.UpdateRevoked(index, true); err != nil {
+		return fmt.Errorf("failed to revoke session xxxxxx-%s: %v", session[len(session)-6:], err)
 	}
 
 	return nil
 }
 
 // DestroySession deletes the session from the database and removes all associated tokens, oauth state, xref records, etc.
-func (s *service) DestroySession(ctx context.Context, session string) error {
+func (s *uxSession) DestroySession(ctx context.Context, session string) error {
 
 	// get telemtry from context
 	telemetry, ok := connect.GetTelemetryFromContext(ctx)
@@ -316,12 +296,8 @@ func (s *service) DestroySession(ctx context.Context, session string) error {
 	}
 
 	// look up session by index
-	var uxSession UxSession
-	qry := "SELECT uuid, session_index, session_token, csrf_token, created_at, authenticated, revoked FROM uxsession WHERE session_index = ?"
-	if err := s.db.SelectRecord(qry, &uxSession, index); err != nil {
-		if err == sql.ErrNoRows {
-			return fmt.Errorf("session xxxxxx-%s - %s: %v", session[len(session)-6:], ErrSessionNotFound, err)
-		}
+	uxSession, err := s.db.FindSession(index)
+	if err != nil {
 		return fmt.Errorf("failed to look up session xxxxxx-%s: %v", session[len(session)-6:], err)
 	}
 
@@ -353,8 +329,7 @@ func (s *service) DestroySession(ctx context.Context, session string) error {
 	}
 
 	// delete session
-	qry = "DELETE FROM uxsession WHERE session_index = ?"
-	if err := s.db.DeleteRecord(qry, index); err != nil {
+	if err := s.db.DeleteSession(index); err != nil {
 		return fmt.Errorf("failed to delete authenticated(%t) session id %s: %v", uxSession.Authenticated, uxSession.Id, err)
 	}
 
@@ -366,7 +341,7 @@ func (s *service) DestroySession(ctx context.Context, session string) error {
 // removeAccessTokens is a helper function to remove access tokens from the db if they exist and
 // call the identity service to destroy the refresh token(s).
 // Note: if no records exist, it will not push an error to the error channel, but will still decrement the wait group, and return.
-func (s *service) removeAccessTokens(ctx context.Context, sessionId string, errChan chan error, wg *sync.WaitGroup) {
+func (s *uxSession) removeAccessTokens(ctx context.Context, sessionId string, errChan chan error, wg *sync.WaitGroup) {
 
 	defer wg.Done()
 
@@ -377,21 +352,9 @@ func (s *service) removeAccessTokens(ctx context.Context, sessionId string, errC
 		telemetryLogger = s.logger // set to default logger if not found in context
 	}
 
-	live := make([]LiveAccessToken, 0, 32) // should be more than enough for most cases
-	qry := `SELECT
-				ua.id,
-				ua.uxsession_uuid,
-				ua.accesstoken_uuid,
-				a.refresh_token
-				FROM uxsession_accesstoken ua
-					LEFT OUTER JOIN accesstoken a ON ua.accesstoken_uuid = a.uuid
-				WHERE ua.uxsession_uuid = ?
-					AND (
-						a.access_expires > UTC_TIMESTAMP()
-						OR (a.refresh_expires > UTC_TIMESTAMP()
-							AND a.refresh_claimed = FALSE)
-						)`
-	if err := s.db.SelectRecords(qry, &live, sessionId); err != nil {
+	// find live access tokens for session in db
+	live, err := s.db.FindLiveAccessTokens(sessionId)
+	if err != nil {
 		errChan <- err
 		return
 	}
@@ -416,8 +379,7 @@ func (s *service) removeAccessTokens(ctx context.Context, sessionId string, errC
 		go func(id int, ch chan error, wg *sync.WaitGroup) {
 			defer wg.Done()
 
-			qry := "DELETE FROM uxsession_accesstoken WHERE id = ?"
-			if err := s.db.DeleteRecord(qry, id); err != nil {
+			if err := s.db.DeleteSessionAccessXref(id); err != nil {
 				ch <- fmt.Errorf("%s id %d: %v", ErrDeleteUxsessionAccesstokenXref, id, err)
 			}
 
@@ -436,8 +398,7 @@ func (s *service) removeAccessTokens(ctx context.Context, sessionId string, errC
 		go func(id string, ch chan error, wg *sync.WaitGroup) {
 			defer wg.Done()
 
-			qry := "DELETE FROM accesstoken WHERE uuid = ?"
-			if err := s.db.DeleteRecord(qry, id); err != nil {
+			if err := s.db.DeleteAccessToken(id); err != nil {
 				ch <- fmt.Errorf("%s id/jti %s: %v", ErrDeleteAccessToken, id, err)
 				return
 			}
@@ -477,13 +438,13 @@ func (s *service) removeAccessTokens(ctx context.Context, sessionId string, errC
 }
 
 // removeOauthFlow is a helper function to remove oauthflow and uxsession_oauthflow records from the db if they exist.
-func (s *service) removeOauthFlow(sessionId string, errChan chan error, wg *sync.WaitGroup) {
+func (s *uxSession) removeOauthFlow(sessionId string, errChan chan error, wg *sync.WaitGroup) {
 
 	defer wg.Done()
 
-	oauthXref := make([]UxsesionOauthFlow, 0, 32)
-	qry := "SELECT id, uxsession_uuid, oauthflow_uuid FROM uxsession_oauthflow WHERE uxsession_uuid = ?"
-	if err := s.db.SelectRecords(qry, &oauthXref, sessionId); err != nil {
+	// get session oauth xref records from db
+	oauthXref, err := s.db.FindSessionOauthXrefs(sessionId)
+	if err != nil {
 		errChan <- err
 		return
 	}
@@ -503,8 +464,7 @@ func (s *service) removeOauthFlow(sessionId string, errChan chan error, wg *sync
 		go func(id int, ch chan error, wg *sync.WaitGroup) {
 			defer wg.Done()
 
-			qry := "DELETE FROM uxsession_oauthflow WHERE id = ?"
-			if err := s.db.DeleteRecord(qry, id); err != nil {
+			if err := s.db.DeleteSessionOauthXref(id); err != nil {
 				ch <- fmt.Errorf("%s id %d: %v", ErrDeleteUxsessionOauthflowXref, id, err)
 				return
 			}
@@ -521,8 +481,7 @@ func (s *service) removeOauthFlow(sessionId string, errChan chan error, wg *sync
 		go func(id string, ch chan error, wg *sync.WaitGroup) {
 			defer wg.Done()
 
-			qry := "DELETE FROM oauthflow WHERE uuid = ?"
-			if err := s.db.DeleteRecord(qry, id); err != nil {
+			if err := s.db.DeleteOauthflow(id); err != nil {
 				ch <- fmt.Errorf("%s id %s: %v", ErrDeleteOauthExchange, id, err)
 				return
 			}
@@ -532,9 +491,26 @@ func (s *service) removeOauthFlow(sessionId string, errChan chan error, wg *sync
 	}
 }
 
+// SessionErrService is the interface for handling ux session service and
+// its underlying interfaces errors in a consistent way
+type SessionErrService interface {
+
+	// HandleSessionErr is a helper function to handle session errors in a consistent way
+	HandleSessionErr(err error, w http.ResponseWriter)
+}
+
+// NewSessionErrService creates a new instance of the SessionErrService interface and returns a pointer to its concrete implementation.
+func NewSessionErrService() SessionErrService {
+	return &errService{}
+}
+
+var _ SessionErrService = (*errService)(nil)
+
+type errService struct{}
+
 // helper function to handle session errors in a consistent way
 // HandleSessionErr implements the ErrService interface
-func (s *service) HandleSessionErr(err error, w http.ResponseWriter) {
+func (s *errService) HandleSessionErr(err error, w http.ResponseWriter) {
 
 	switch {
 	case strings.Contains(err.Error(), ErrInvalidSession):

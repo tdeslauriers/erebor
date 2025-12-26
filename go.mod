@@ -5,11 +5,11 @@ go 1.24.0
 toolchain go1.24.4
 
 require (
-	github.com/tdeslauriers/apprentice v0.0.2
-	github.com/tdeslauriers/carapace v0.2.5
-	github.com/tdeslauriers/pixie v0.1.5
-	github.com/tdeslauriers/ran v0.1.2
-	github.com/tdeslauriers/shaw v0.0.4
+	github.com/tdeslauriers/apprentice v0.1.3
+	github.com/tdeslauriers/carapace v0.3.0
+	github.com/tdeslauriers/pixie v0.1.7
+	github.com/tdeslauriers/ran v0.1.3
+	github.com/tdeslauriers/shaw v0.1.3
 )
 
 require (

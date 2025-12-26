@@ -1,6 +1,13 @@
 package uxsession
 
-import "github.com/tdeslauriers/carapace/pkg/data"
+import (
+	"database/sql"
+
+	"github.com/tdeslauriers/carapace/pkg/config"
+	"github.com/tdeslauriers/carapace/pkg/connect"
+	"github.com/tdeslauriers/carapace/pkg/data"
+	"github.com/tdeslauriers/carapace/pkg/session/provider"
+)
 
 const (
 	// 422
@@ -54,6 +61,40 @@ const (
 	ErrDeleteUxsessionAccesstokenXref = "failed to delete uxsession_accesstoken xref record"
 	ErrDeleteUxsessionOauthflowXref   = "failed to delete uxsession_oauthflow xref record"
 )
+
+// container interface for multiple task specific interfaces
+type Service interface {
+	SessionService
+	CsrfService
+	TokenService
+	SessionErrService
+}
+
+// NewService creates a new instance of the container Service interface and returns a pointer to its concrete implementation.
+func NewService(
+	cfg *config.OauthRedirect,
+	db *sql.DB,
+	i data.Indexer,
+	c data.Cryptor,
+	p provider.S2sTokenProvider,
+	call *connect.S2sCaller,
+) Service {
+
+	return &uxService{
+		SessionService:    NewSessionService(cfg, db, i, c, p, call),
+		CsrfService:       NewCsrfService(db, i, c),
+		TokenService:      NewTokenService(cfg, db, i, c, p, call),
+		SessionErrService: NewSessionErrService(),
+	}
+}
+
+// service is the concrete implementation of the Service interface.
+type uxService struct {
+	SessionService
+	CsrfService
+	TokenService
+	SessionErrService
+}
 
 // frontend only every sees session and csrf tokens,
 // the rest of theses fields are internal metadata for the gateway
@@ -132,5 +173,3 @@ type UxsessionAccesstoken struct {
 	RefreshRevoked bool            `json:"refresh_revoked" db:"refresh_revoked"`
 	RefreshClaimed bool            `json:"refresh_claimed" db:"refresh_claimed"`
 }
-
-

@@ -6,12 +6,15 @@ import (
 	"erebor/internal/util"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/tdeslauriers/carapace/pkg/config"
 	"github.com/tdeslauriers/carapace/pkg/connect"
+	"github.com/tdeslauriers/carapace/pkg/data"
 	"github.com/tdeslauriers/carapace/pkg/session/provider"
 	"github.com/tdeslauriers/carapace/pkg/session/types"
 )
@@ -33,9 +36,43 @@ type TokenService interface {
 	PersistXref(xref SessionAccessXref) error
 }
 
+// NewTokenService creates a new instance of the TokenService interface, returning a concrete implementation.
+func NewTokenService(
+	cfg *config.OauthRedirect,
+	db *sql.DB,
+	indexer data.Indexer,
+	cryptor data.Cryptor,
+	s2sProvider provider.S2sTokenProvider,
+	identity *connect.S2sCaller,
+) TokenService {
+	return &tokenService{
+		cfg:         cfg,
+		db:          NewTokenRepository(db),
+		indexer:     indexer,
+		cryptor:     cryptor,
+		s2sProvider: s2sProvider,
+		identity:    identity,
+		logger: slog.Default().
+			With(slog.String(util.PackageKey, util.PackageSession)).
+			With(slog.String(util.ComponentKey, util.ComponentSession)),
+	}
+}
+
+// service is the concrete implementation of the Service interface.
+type tokenService struct {
+	cfg         *config.OauthRedirect // needed to populate client id for refresh requests
+	db          TokenRepository
+	indexer     data.Indexer
+	cryptor     data.Cryptor
+	s2sProvider provider.S2sTokenProvider
+	identity    *connect.S2sCaller
+
+	logger *slog.Logger
+}
+
 // GetAccessToken retrieves the access token record from the database, decrypts the access and refresh tokens,
 // and returns the struct.  If the access token is expired, it will use an active refesh token to retrieve a new access token.
-func (s *service) GetAccessToken(ctx context.Context, session string) (string, error) {
+func (s *tokenService) GetAccessToken(ctx context.Context, session string) (string, error) {
 
 	// get telemetry from context -> set up logger
 	logger := s.logger
@@ -57,32 +94,9 @@ func (s *service) GetAccessToken(ctx context.Context, session string) (string, e
 		return "", fmt.Errorf("%s from provided session token: %v", ErrGenIndex, err)
 	}
 
-	// look up uxSession from db by index
-	// Note: the coalesce function is used to return defaults for null values.  Revoked and expired checks are set to trigger their errors
-	// in the checks below just to make double sure if the session is untenticated a token will n ever be tried.
-	// checks are also done for empty strings which would indicate an unauthenticated session.
-	qry := `SELECT 
-				u.uuid AS uxsession_uuid, 
-				u.created_at, 
-				u.authenticated, 
-				u.revoked,
-				COALESCE(a.uuid, '') AS accesstoken_uuid,
-				COALESCE(a.access_token, '') AS access_token,
-				COALESCE(a.access_expires, '1970-01-01 00:00:00') AS access_expires,
-				COALESCE(a.access_revoked, true) AS access_revoked,
-				COALESCE(a.refresh_token, '') AS refresh_token,
-				COALESCE(a.refresh_expires, '1970-01-01 00:00:00') AS refresh_expires,
-				COALESCE(a.refresh_revoked, true) AS refresh_revoked,
-				COALESCE(a.refresh_claimed, true) AS refresh_claimed
-			FROM uxsession u
-				LEFT OUTER JOIN uxsession_accesstoken ua ON u.uuid = ua.uxsession_uuid
-				LEFT OUTER JOIN accesstoken a ON ua.accesstoken_uuid = a.uuid
-			WHERE u.session_index = ?` // checks for revoked, expired, etc., done progarmmatically for error handling
-	var tokens []UxsessionAccesstoken
-	if err := s.db.SelectRecords(qry, &tokens, index); err != nil {
-		if err == sql.ErrNoRows {
-			return "", fmt.Errorf("%s: %v", ErrSessionNotFound, err)
-		}
+	// look up access tokens tied to uxSession from db by session index
+	tokens, err := s.db.FindAccessTokensBySession(index)
+	if err != nil {
 		return "", fmt.Errorf("failed to retrieve access token records for session token: %v", err)
 	}
 
@@ -239,14 +253,13 @@ func (s *service) GetAccessToken(ctx context.Context, session string) (string, e
 
 		// delete vs mark as claimed: identity service will not allow a refresh token to be used more than once
 		go func() {
-			qry := "DELETE FROM uxsession_accesstoken WHERE accesstoken_uuid = ?"
-			if err := s.db.DeleteRecord(qry, token.AccessTokenId); err != nil {
+
+			if err := s.db.DeleteUxsessionAccessTknXref(token.AccessTokenId); err != nil {
 				logger.Error("failed to delete xref for claimed refresh token", "err", err.Error())
 				return
 			}
 
-			qry = "DELETE FROM accesstoken WHERE uuid = ?"
-			if err := s.db.DeleteRecord(qry, token.AccessTokenId); err != nil {
+			if err := s.db.DeleteAccessToken(token.AccessTokenId); err != nil {
 				logger.Error("failed to delete access token for claimed refresh token", "err", err.Error())
 				return
 			}
@@ -261,7 +274,7 @@ func (s *service) GetAccessToken(ctx context.Context, session string) (string, e
 // PeristToken creates a new AccessToken record, performs field level encryption for db record,
 // persists it to the database, and returns the struct.
 // Note: this interface is implemented by the service struct in session_serivic.go
-func (s *service) PersistToken(access *provider.UserAuthorization) (*AccessToken, error) {
+func (s *tokenService) PersistToken(access *provider.UserAuthorization) (*AccessToken, error) {
 
 	// create primary key for access token
 	id, err := uuid.NewRandom()
@@ -286,8 +299,8 @@ func (s *service) PersistToken(access *provider.UserAuthorization) (*AccessToken
 		return nil, errors.New(err.Error())
 	}
 
-	qry := `INSERT INTO accesstoken (uuid, access_token, access_expires, access_revoked, refresh_token, refresh_expires, refresh_revoked, refresh_claimed) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-	if err := s.db.InsertRecord(qry, persist); err != nil {
+	// persist to database
+	if err := s.db.InsertAccessToken(persist); err != nil {
 		return nil, fmt.Errorf("failed to persist access token: %v", err)
 	}
 
@@ -296,7 +309,7 @@ func (s *service) PersistToken(access *provider.UserAuthorization) (*AccessToken
 
 // fieldLevelEncrypt is a helper function which encrypts the access and refresh tokens
 // and can be updated to encrypt other fields as needed.
-func (s *service) fieldLevelEncrypt(access *AccessToken) error {
+func (s *tokenService) fieldLevelEncrypt(access *AccessToken) error {
 
 	var (
 		wgEncrypt      sync.WaitGroup
@@ -335,7 +348,7 @@ func (s *service) fieldLevelEncrypt(access *AccessToken) error {
 }
 
 // encrypt is a helper function which abstracts the encryption process for concurency operations readability
-func (h *service) encrypt(plaintext, errMsg string, encrypted *string, ch chan error, wg *sync.WaitGroup) {
+func (h *tokenService) encrypt(plaintext, errMsg string, encrypted *string, ch chan error, wg *sync.WaitGroup) {
 
 	defer wg.Done()
 
@@ -349,7 +362,7 @@ func (h *service) encrypt(plaintext, errMsg string, encrypted *string, ch chan e
 }
 
 // PersistXref persists the xref between the authenticated uxsession and the access token.
-func (s *service) PersistXref(xref SessionAccessXref) error {
+func (s *tokenService) PersistXref(xref SessionAccessXref) error {
 
 	// lightweight input validation: redundant, but good practice
 	if xref.UxsessionId == "" || len(xref.UxsessionId) > 64 {
@@ -360,8 +373,8 @@ func (s *service) PersistXref(xref SessionAccessXref) error {
 		return fmt.Errorf("failed to persist uxsessionaccess_token xref: %v", ErrInvalidAccessTokenId)
 	}
 
-	qry := `INSERT INTO uxsession_accesstoken (id, uxsession_uuid, accesstoken_uuid) VALUES (?, ?, ?)`
-	if err := s.db.InsertRecord(qry, xref); err != nil {
+	// persist to database
+	if err := s.db.InsertUxsessionAccessTknXref(xref); err != nil {
 		return fmt.Errorf("failed to persist uxsession_accesstoken xref: %v", err)
 	}
 

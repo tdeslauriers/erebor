@@ -28,10 +28,10 @@ type Service interface {
 }
 
 // NewService creates a new instance of the login service
-func NewService(o config.OauthRedirect, db data.SqlRepository, c data.Cryptor, i data.Indexer) Service {
+func NewService(o config.OauthRedirect, db *sql.DB, c data.Cryptor, i data.Indexer) Service {
 	return &service{
 		oauth:   o,
-		db:      db,
+		db:      NewOAuthRepository(db),
 		cryptor: c,
 		indexer: i,
 
@@ -61,7 +61,7 @@ var _ Service = (*service)(nil)
 
 type service struct {
 	oauth   config.OauthRedirect
-	db      data.SqlRepository
+	db      OAuthRepository
 	cryptor data.Cryptor
 	indexer data.Indexer
 
@@ -83,50 +83,32 @@ func (s *service) Obtain(cmd OauthCmd) (*OauthExchange, error) {
 	}
 
 	// check if the oauth exchange record already exists
-	qry := `
-		SELECT
-			u.uuid AS uxsession_uuid,
-			u.created_at AS uxsession_created_at,
-			u.authenticated,
-			u.revoked,
-			COALESCE(o.uuid, '') AS oauth_uuid,
-			COALESCE(o.response_type, '') AS response_type,
-			COALESCE(o.nonce, '') AS nonce,
-			COALESCE(o.state, '') AS state,
-			COALESCE(o.client_id, '') AS client_id,
-			COALESCE(o.redirect_url, '') AS redirect_url,
-			COALESCE(o.created_at, '1970-01-01 00:00:00') AS oauth_created_at
-		FROM uxsession u
-			LEFT OUTER JOIN uxsession_oauthflow uo ON u.uuid = uo.uxsession_uuid
-			LEFT OUTER JOIN oauthflow o ON uo.oauthflow_uuid = o.uuid
-		WHERE u.session_index = ?`
-
-	var oauthSession OauthSession
-	if err := s.db.SelectRecord(qry, &oauthSession, index); err != nil {
-		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("session token xxxxxx-%s: %s", cmd.SessionToken[len(cmd.SessionToken)-6:], ErrSessionNotFound)
-		}
-		return nil, fmt.Errorf("%s for session token xxxxxx-%s: %v", ErrLookupUxSession, cmd.SessionToken[len(cmd.SessionToken)-6:], err)
+	// look up in database
+	oauthSession, err := s.db.FindOauthBySession(index)
+	if err != nil {
+		return nil, fmt.Errorf("%s for session token xxxxxx-%s: %v",
+			ErrLookupUxSession, cmd.SessionToken[len(cmd.SessionToken)-6:], err)
 	}
 
 	// check if session has been revoked
 	if oauthSession.Revoked {
-		return nil, fmt.Errorf("session id %s - session token xxxxxx-%s: %s", oauthSession.UxsessionId, cmd.SessionToken[len(cmd.SessionToken)-6:], ErrSessionRevoked)
+		return nil, fmt.Errorf("session id %s - session token xxxxxx-%s: %s",
+			oauthSession.UxsessionId, cmd.SessionToken[len(cmd.SessionToken)-6:], ErrSessionRevoked)
 	}
 
 	// check if session is authenticated
 	// authenticated sessions should not have oauth exchange records associated with them
 	// there is no need since this is used for the authentication and the session is already authenticated
 	if oauthSession.Authenticated {
-		return nil, fmt.Errorf("session id %s - session token xxxxxx-%s: %s", oauthSession.UxsessionId, cmd.SessionToken[len(cmd.SessionToken)-6:], ErrSessionAuthenticated)
+		return nil, fmt.Errorf("session id %s - session token xxxxxx-%s: %s",
+			oauthSession.UxsessionId, cmd.SessionToken[len(cmd.SessionToken)-6:], ErrSessionAuthenticated)
 	}
 
 	// check if session is expired
 	if oauthSession.UxsessionCreatedAt.UTC().Add(time.Hour).Before(time.Now().UTC()) {
-		return nil, fmt.Errorf("session id %s - session token xxxxxx-%s: %s", oauthSession.UxsessionId, cmd.SessionToken[len(cmd.SessionToken)-6:], ErrSessionExpired)
+		return nil, fmt.Errorf("session id %s - session token xxxxxx-%s: %s",
+			oauthSession.UxsessionId, cmd.SessionToken[len(cmd.SessionToken)-6:], ErrSessionExpired)
 	}
-
-	//
 
 	// oauthflow/oauth exchange uuid will be empty if there was no record attached by xref to the session
 	if oauthSession.OauthId != "" {
@@ -186,8 +168,7 @@ func (s *service) Obtain(cmd OauthCmd) (*OauthExchange, error) {
 		}
 
 		// create the relationship between the session and the oauth exchange record and return the exchange
-		qry := `INSERT INTO uxsession_oauthflow (id, uxsession_uuid, oauthflow_uuid) VALUES (?, ?, ?)`
-		if err := s.db.InsertRecord(qry, xref); err != nil {
+		if err := s.db.InsertUxsessionOauthXref(xref); err != nil {
 			return nil, fmt.Errorf("%s between uxsession %s and oathflow %s: %v", ErrPersistXref, oauthSession.UxsessionId, exchange.Id, err)
 		}
 
@@ -355,8 +336,9 @@ func (s *service) build() (*OauthExchange, error) {
 		RedirectUrl:  encryptedRedirect,
 		CreatedAt:    data.CustomTime{Time: currentTime},
 	}
-	qry := `INSERT INTO oauthflow (uuid, state_index, response_type, nonce, state, client_id, redirect_url, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-	if err := s.db.InsertRecord(qry, persist); err != nil {
+
+	// persist to database
+	if err := s.db.InsertOauthflow(persist); err != nil {
 		return nil, fmt.Errorf("failed to persist oauth exchange record: %v", err)
 	}
 
@@ -387,35 +369,15 @@ func (s *service) Validate(cmd AuthCodeCmd) error {
 	}
 
 	// look up the oauth exchange record
-	query := `
-		SELECT 
-			o.uuid, 
-			o.state_index, 
-			o.response_type, 
-			o.nonce, 
-			o.state, 
-			o.client_id, 
-			o.redirect_url, 
-			o.created_at
-		FROM oauthflow o 
-			LEFT OUTER JOIN uxsession_oauthflow uo ON o.uuid = uo.oauthflow_uuid
-			LEFT OUTER JOIN uxsession u ON uo.uxsession_uuid = u.uuid
-		WHERE u.session_index = ?
-			AND u.revoked = false
-			AND u.created_at > UTC_TIMESTAMP() - INTERVAL 1 HOUR
-			AND o.created_at > UTC_TIMESTAMP() - INTERVAL 1 HOUR` // check revoked and expiries
-
-	var check OauthExchange
-	if err := s.db.SelectRecord(query, &check, index); err != nil {
-		if err == sql.ErrNoRows {
-			return fmt.Errorf("session xxxxxx-%s: %s", cmd.Session[len(cmd.Session)-6:], ErrSessionNotFound)
-		} else {
-			return fmt.Errorf("session xxxxxx-%s is %s: %v", cmd.Session[len(cmd.Session)-6:], ErrInvalidSession, err)
-		}
+	// note: if oauth revoked, will return as not found
+	check, err := s.db.FindActiveOauthflow(index)
+	if err != nil {
+		return fmt.Errorf("failed to retreive oauthflow for session xxxxxx-%s from database: %v",
+			cmd.Session[len(cmd.Session)-6:], err)
 	}
 
 	// decrypt the exchange record
-	exchange, err := s.decryptExchange(check)
+	exchange, err := s.decryptExchange(*check)
 	if err != nil {
 		return fmt.Errorf("%s for session xxxxxx-%s: %v", ErrLookupOauthExchange, cmd.Session[len(cmd.Session)-6:], err)
 	}

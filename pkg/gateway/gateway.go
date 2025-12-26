@@ -4,6 +4,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/tls"
 	"crypto/x509"
+	"database/sql"
 	"encoding/base64"
 	"encoding/pem"
 	"erebor/internal/util"
@@ -88,8 +89,6 @@ func New(config *config.Config) (Gateway, error) {
 		return nil, fmt.Errorf("failed to connect to database: %v", err)
 	}
 
-	repository := data.NewSqlRepository(db)
-
 	// set up indexer to create blind indexes for encrypted data tables
 	indexer := data.NewIndexer([]byte(config.Database.IndexSecret))
 
@@ -121,7 +120,7 @@ func New(config *config.Config) (Gateway, error) {
 	gallery := connect.NewS2sCaller(config.Gallery.Url, util.ServiceGallery, client, retry)
 
 	// s2s token provider
-	tkn := provider.NewS2sTokenProvider(s2s, creds, repository, cryptor)
+	tkn := provider.NewS2sTokenProvider(s2s, creds, db, cryptor)
 
 	// format public key for use in jwt verification
 	pubPem, err := base64.StdEncoding.DecodeString(config.Jwt.UserVerifyingKey)
@@ -143,14 +142,14 @@ func New(config *config.Config) (Gateway, error) {
 	return &gateway{
 		config:      *config,
 		serverTls:   serverTlsConfig,
-		repository:  repository,
+		repository:  db,
 		tknProvider: tkn,
 		s2s:         s2s,
 		iam:         iam,
 		task:        task,
 		gallery:     gallery,
-		uxSession:   uxsession.NewService(&config.OauthRedirect, repository, indexer, cryptor, tkn, iam),
-		oAuth:       oauth.NewService(config.OauthRedirect, repository, cryptor, indexer),
+		uxSession:   uxsession.NewService(&config.OauthRedirect, db, indexer, cryptor, tkn, iam),
+		oAuth:       oauth.NewService(config.OauthRedirect, db, cryptor, indexer),
 		verifier:    jwt.NewVerifier(config.ServiceName, publicKey),
 		pat:         pat.NewVerifier(util.ServiceS2s, s2s, tkn),
 		cryptor:     cryptor,
@@ -167,7 +166,7 @@ var _ Gateway = (*gateway)(nil)
 type gateway struct {
 	config      config.Config
 	serverTls   *tls.Config
-	repository  data.SqlRepository
+	repository  *sql.DB
 	tknProvider provider.S2sTokenProvider
 	s2s         *connect.S2sCaller
 	iam         *connect.S2sCaller

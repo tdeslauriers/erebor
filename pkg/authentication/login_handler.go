@@ -13,7 +13,7 @@ import (
 	"github.com/tdeslauriers/carapace/pkg/connect"
 	"github.com/tdeslauriers/carapace/pkg/session/provider"
 	"github.com/tdeslauriers/carapace/pkg/session/types"
-	"github.com/tdeslauriers/shaw/pkg/login"
+	"github.com/tdeslauriers/shaw/pkg/api/login"
 )
 
 // LoginHandler is the interface for handling login requests from the client.

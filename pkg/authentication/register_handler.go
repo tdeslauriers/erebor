@@ -13,9 +13,9 @@ import (
 	"github.com/tdeslauriers/carapace/pkg/config"
 	"github.com/tdeslauriers/carapace/pkg/connect"
 	"github.com/tdeslauriers/carapace/pkg/session/provider"
-	"github.com/tdeslauriers/carapace/pkg/session/types"
-	"github.com/tdeslauriers/pixie/pkg/patron"
-	"github.com/tdeslauriers/shaw/pkg/user"
+	"github.com/tdeslauriers/pixie/pkg/api"
+	"github.com/tdeslauriers/shaw/pkg/api/register"
+	"github.com/tdeslauriers/shaw/pkg/api/user"
 )
 
 type RegistrationHandler interface {
@@ -74,7 +74,7 @@ func (h *registrationHandler) HandleRegistration(w http.ResponseWriter, r *http.
 		return
 	}
 
-	var cmd types.UserRegisterCmd
+	var cmd register.UserRegisterCmd
 	err := json.NewDecoder(r.Body).Decode(&cmd)
 	if err != nil {
 		telemetryLogger.Error("failed to decode json in user registration request body", "err", err.Error())
@@ -128,7 +128,7 @@ func (h *registrationHandler) HandleRegistration(w http.ResponseWriter, r *http.
 	}
 
 	// post registration request to identity service
-	registered, err := connect.PostToService[types.UserRegisterCmd, user.UserAccount](
+	registered, err := connect.PostToService[register.UserRegisterCmd, user.UserAccount](
 		ctx,
 		h.identity,
 		"/register",
@@ -153,13 +153,13 @@ func (h *registrationHandler) HandleRegistration(w http.ResponseWriter, r *http.
 			return
 		}
 
-		_, err = connect.PostToService[patron.PatronRegisterCmd, struct{}](
+		_, err = connect.PostToService[api.PatronRegisterCmd, struct{}](
 			ctx,
 			h.gallery,
 			"/s2s/patrons/register",
 			s2sGalleryToken,
 			"",
-			patron.PatronRegisterCmd{Username: username},
+			api.PatronRegisterCmd{Username: username},
 		)
 		if err != nil {
 			// logging only, not returning error --> hidden/abstracted from user

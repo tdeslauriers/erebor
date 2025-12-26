@@ -10,8 +10,8 @@ import (
 
 	"github.com/tdeslauriers/carapace/pkg/connect"
 	"github.com/tdeslauriers/carapace/pkg/session/provider"
-	"github.com/tdeslauriers/pixie/pkg/patron"
-	"github.com/tdeslauriers/shaw/pkg/user"
+	"github.com/tdeslauriers/pixie/pkg/api"
+	"github.com/tdeslauriers/shaw/pkg/api/user"
 )
 
 // UserAccountService is an interface that defines the methods available for scheduled tasks.
@@ -116,13 +116,13 @@ func (s *userAccountService) ReconcileGalleryAccounts() {
 				}
 
 				// post to gallery service to create patron ghost account for user
-				_, err = connect.PostToService[patron.PatronRegisterCmd, patron.Patron](
+				_, err = connect.PostToService[api.PatronRegisterCmd, api.Patron](
 					ctx,
 					s.gallery,
 					"/s2s/patrons/register",
 					s2sGalleryToken,
 					"",
-					patron.PatronRegisterCmd{Username: user.Username},
+					api.PatronRegisterCmd{Username: user.Username},
 				)
 				if err != nil {
 					log.Error(fmt.Sprintf("failed to create gallery patron for user %s", user.Username), "err", err.Error())

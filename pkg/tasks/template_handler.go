@@ -9,7 +9,7 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/tdeslauriers/apprentice/pkg/templates"
+	"github.com/tdeslauriers/apprentice/pkg/api/templates"
 	"github.com/tdeslauriers/carapace/pkg/connect"
 	"github.com/tdeslauriers/carapace/pkg/session/provider"
 )

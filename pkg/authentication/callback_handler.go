@@ -17,7 +17,7 @@ import (
 	"github.com/tdeslauriers/carapace/pkg/connect"
 	"github.com/tdeslauriers/carapace/pkg/jwt"
 	"github.com/tdeslauriers/carapace/pkg/session/provider"
-	shaw "github.com/tdeslauriers/shaw/pkg/oauth"
+	shaw "github.com/tdeslauriers/shaw/pkg/api/oauth"
 )
 
 type CallbackHandler interface {

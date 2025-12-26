@@ -7,6 +7,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/tdeslauriers/carapace/pkg/data"
 )
 
 // CsrfService interface provides methods for handling csrf tokens.
@@ -19,8 +21,26 @@ type CsrfService interface {
 	IsValidCsrf(session, csrf string) (bool, error)
 }
 
+// NewCsrfService creates a new instance of the CsrfService interface, returning a concrete implementation.
+func NewCsrfService(sql *sql.DB, i data.Indexer, c data.Cryptor) CsrfService {
+	return &crsfService{
+		db:      NewCsrfRepository(sql),
+		indexer: i,
+		cryptor: c,
+	}
+}
+
+var _ CsrfService = (*crsfService)(nil)
+
+// concrete implementation of the CsrfService interface.
+type crsfService struct {
+	db      CsrfRepository
+	indexer data.Indexer
+	cryptor data.Cryptor
+}
+
 // implements GetCsrf of CsrfService interface
-func (s *service) GetCsrf(session string) (*UxSession, error) {
+func (s *crsfService) GetCsrf(session string) (*UxSession, error) {
 
 	// light weight input validation (not checking if session id is valid or well-formed)
 	if len(session) < 16 || len(session) > 64 {
@@ -30,17 +50,15 @@ func (s *service) GetCsrf(session string) (*UxSession, error) {
 	// re generate session index
 	index, err := s.indexer.ObtainBlindIndex(session)
 	if err != nil {
-		return nil, fmt.Errorf("%s from provided session token xxxxxx-%s: %v", ErrGenIndex, session[len(session)-6:], err)
+		return nil, fmt.Errorf("%s from provided session token xxxxxx-%s: %v",
+			ErrGenIndex, session[len(session)-6:], err)
 	}
 
 	// look up uxSession from db by index
-	var uxSession UxSession
-	qry := "SELECT uuid, session_index, session_token, csrf_token, created_at, authenticated, revoked FROM uxsession WHERE session_index = ?"
-	if err := s.db.SelectRecord(qry, &uxSession, index); err != nil {
-		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("session xxxxxx-%s - %s: %v", session[len(session)-6:], ErrSessionNotFound, err)
-		}
-		return nil, err
+	uxSession, err := s.db.FindSession(index)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get session token xxxxxx-%s from database: %v",
+			session[len(session)-6:], err)
 	}
 
 	// check if session is revoked before decyption:
@@ -92,7 +110,7 @@ func (s *service) GetCsrf(session string) (*UxSession, error) {
 // IsValidCsrf implements ValidateCsrf of Service interface
 // csrf tokens are single use, so this function will delete the token from the db after validation
 // and assign a new one (asyncronously, so the user doesn't have to wait for the db write to complete)
-func (s *service) IsValidCsrf(session, csrf string) (bool, error) {
+func (s *crsfService) IsValidCsrf(session, csrf string) (bool, error) {
 
 	// light weight input validation)
 	if len(session) < 16 || len(session) > 64 {
@@ -109,13 +127,10 @@ func (s *service) IsValidCsrf(session, csrf string) (bool, error) {
 		return false, fmt.Errorf("%s from provided session token xxxxxx-%s: %v", ErrGenIndex, session[len(session)-6:], err)
 	}
 
-	var uxSession UxSession
-	qry := "SELECT uuid, session_index, session_token, csrf_token, created_at, authenticated, revoked FROM uxsession WHERE session_index = ?"
-	if err := s.db.SelectRecord(qry, &uxSession, index); err != nil {
-		if err == sql.ErrNoRows {
-			return false, fmt.Errorf("session xxxxxx-%s - %s: %v", session[len(session)-6:], ErrSessionNotFound, err)
-		}
-		return false, err
+	uxSession, err := s.db.FindSession(index)
+	if err != nil {
+		return false, fmt.Errorf("failed to get session token xxxxxx-%s from database: %v",
+			session[len(session)-6:], err)
 	}
 
 	// check if session is revoked before decryption:
@@ -144,7 +159,7 @@ func (s *service) IsValidCsrf(session, csrf string) (bool, error) {
 }
 
 // decrypt is a helper function to abstract away the field level string decryption process
-func (s *service) decrypt(encrypted string, decrypted *string, ch chan error, wg *sync.WaitGroup) {
+func (s *crsfService) decrypt(encrypted string, decrypted *string, ch chan error, wg *sync.WaitGroup) {
 	defer wg.Done()
 
 	d, err := s.cryptor.DecryptServiceData(encrypted)
