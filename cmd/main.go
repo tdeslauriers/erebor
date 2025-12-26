@@ -4,7 +4,7 @@ import (
 	"erebor/internal/util"
 	"fmt"
 
-	"erebor/pkg/gateway"
+	"erebor/internal/gateway"
 	"log/slog"
 	"os"
 
