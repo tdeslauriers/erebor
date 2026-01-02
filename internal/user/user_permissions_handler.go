@@ -211,7 +211,7 @@ func (h *permissionsHandler) updateUserPermissions(w http.ResponseWriter, r *htt
 		_, err = connect.PutToService[exo.UpdatePermissionsCmd, struct{}](
 			ctx,
 			h.gallery,
-			"/permissions",
+			"/patrons/permissions",
 			galleryToken,
 			accessToken,
 			galleryCmd,
@@ -242,7 +242,7 @@ func (h *permissionsHandler) updateUserPermissions(w http.ResponseWriter, r *htt
 		_, err = connect.PutToService[exo.UpdatePermissionsCmd, struct{}](
 			ctx,
 			h.tasks,
-			"/permissions",
+			"/allowances/permissions",
 			tasksToken,
 			accessToken,
 			tasksCmd,
