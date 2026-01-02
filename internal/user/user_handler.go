@@ -532,7 +532,7 @@ func (h *userHandler) getServicePermissions(
 		permissions, err := connect.GetServiceData[[]permissions.PermissionRecord](
 			ctx,
 			h.gallery,
-			fmt.Sprintf("/permissions?username=%s", username),
+			fmt.Sprintf("/patrons/permissions?username=%s", username),
 			token,
 			accessToken,
 		)
