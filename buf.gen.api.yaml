@@ -1,0 +1,17 @@
+version: v2
+managed:
+  enabled: true
+  override:
+    - file_option: go_package
+      value: github.com/tdeslauriers/erebor/gen
+plugins:
+  - local: build/bin/protoc-gen-go
+    out: gen
+    opt: paths=source_relative
+  - local: build/bin/protoc-gen-go-grpc
+    out: gen
+    opt: paths=source_relative
+inputs:
+  - git_repo: https://github.com/tdeslauriers/silhouette
+    branch: main
+    subdir: api/v1

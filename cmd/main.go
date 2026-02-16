@@ -58,7 +58,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	defer gateway.CloseDb()
+	defer gateway.Close()
 
 	if err := gateway.Run(); err != nil {
 		logger.Error(fmt.Sprintf("failed to run %s gateway", config.ServiceName), "err", err.Error())

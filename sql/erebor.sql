@@ -14,7 +14,7 @@ CREATE UNIQUE INDEX idx_session_index ON uxsession(session_index);
 -- access token
 CREATE TABLE accesstoken (
     uuid CHAR(36) PRIMARY KEY,
-    access_token VARCHAR(2048) NOT NULL,
+    access_token VARCHAR(4096) NOT NULL,
     access_expires TIMESTAMP NOT NULL DEFAULT UTC_TIMESTAMP,
     access_revoked BOOLEAN NOT NULL,
     refresh_token CHAR(128) NOT NULL,
@@ -59,7 +59,7 @@ CREATE TABLE uxsession_oauthflow (
 CREATE TABLE servicetoken (
     uuid CHAR(36) PRIMARY KEY,
     service_name VARCHAR(32) NOT NULL,
-    service_token VARCHAR(2048) NOT NULL,
+    service_token VARCHAR(4096) NOT NULL,
     service_expires TIMESTAMP NOT NULL,
     refresh_token VARCHAR(128) NOT NULL,
     refresh_expires TIMESTAMP NOT NULL

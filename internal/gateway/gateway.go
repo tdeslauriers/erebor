@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"encoding/pem"
+	"erebor/gen"
 	"erebor/internal/authentication"
 	"erebor/internal/authentication/oauth"
 	"erebor/internal/authentication/uxsession"
@@ -26,21 +27,24 @@ import (
 
 	"github.com/tdeslauriers/carapace/pkg/config"
 	"github.com/tdeslauriers/carapace/pkg/connect"
+	exo "github.com/tdeslauriers/carapace/pkg/connect/grpc"
 	"github.com/tdeslauriers/carapace/pkg/data"
 	"github.com/tdeslauriers/carapace/pkg/diagnostics"
 	"github.com/tdeslauriers/carapace/pkg/jwt"
 	"github.com/tdeslauriers/carapace/pkg/pat"
 	"github.com/tdeslauriers/carapace/pkg/session/provider"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 )
 
 type Gateway interface {
 	Run() error
-	CloseDb() error
+	Close() error
 }
 
 func New(config *config.Config) (Gateway, error) {
 
-	// server
+	// server certs
 	serverPki := &connect.Pki{
 		CertFile: *config.Certs.ServerCert,
 		KeyFile:  *config.Certs.ServerKey,
@@ -51,7 +55,7 @@ func New(config *config.Config) (Gateway, error) {
 		return nil, fmt.Errorf("failed to configure server tls: %v", err)
 	}
 
-	// s2s client
+	// s2s client certs
 	clientPki := &connect.Pki{
 		CertFile: *config.Certs.ClientCert,
 		KeyFile:  *config.Certs.ClientKey,
@@ -59,12 +63,14 @@ func New(config *config.Config) (Gateway, error) {
 	}
 
 	clientConfig := connect.NewTlsClientConfig(clientPki)
+
+	// standard http client
 	client, err := connect.NewTlsClient(clientConfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to configure s2s client config: %v", err)
 	}
 
-	// db client
+	// db client certs
 	dbClientPki := &connect.Pki{
 		CertFile: *config.Certs.DbClientCert,
 		KeyFile:  *config.Certs.DbClientKey,
@@ -122,22 +128,51 @@ func New(config *config.Config) (Gateway, error) {
 	// s2s token provider
 	tkn := provider.NewS2sTokenProvider(s2s, creds, db, cryptor)
 
+	// ux session service
+	sn := uxsession.NewService(&config.OauthRedirect, db, indexer, cryptor, tkn, iam)
+
+	// profile grpc client
+	// set up tls
+	tlsCfg, err := clientConfig.Build()
+	if err != nil {
+		return nil, fmt.Errorf("failed to build grpc tls config: %v", err)
+	}
+
+	tlsCfg.MinVersion = tls.VersionTLS12
+	tlsCreds := credentials.NewTLS(tlsCfg)
+
+	// instatiate profile service grpc client connection
+	profileConn, err := grpc.NewClient(
+		"192.168.68.54:9003", // replace with config value
+		grpc.WithTransportCredentials(tlsCreds),
+		grpc.WithChainUnaryInterceptor(
+			exo.UnaryClientWithTelemetry(slog.Default()),
+			authentication.NewAuthInterceptor(tkn, sn).Unary(),
+		),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create profile grpc client connection: %v", err)
+	}
+
+	// profiles grpc client
+	profileClient := gen.NewProfilesClient(profileConn)
+
 	// format public key for use in jwt verification
 	pubPem, err := base64.StdEncoding.DecodeString(config.Jwt.UserVerifyingKey)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode user jwt-verifying public key: %v", err)
 	}
+
 	pubBlock, _ := pem.Decode(pubPem)
 	genericPublicKey, err := x509.ParsePKIXPublicKey(pubBlock.Bytes)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse pub Block to generic public key: %v", err)
 	}
+
 	publicKey, ok := genericPublicKey.(*ecdsa.PublicKey)
 	if !ok {
 		return nil, fmt.Errorf("not an ECDSA public key")
 	}
-
-	//
 
 	return &gateway{
 		config:      *config,
@@ -148,12 +183,13 @@ func New(config *config.Config) (Gateway, error) {
 		iam:         iam,
 		task:        task,
 		gallery:     gallery,
-		uxSession:   uxsession.NewService(&config.OauthRedirect, db, indexer, cryptor, tkn, iam),
+		profileConn: profileConn,
+		uxSession:   sn,
 		oAuth:       oauth.NewService(config.OauthRedirect, db, cryptor, indexer),
 		verifier:    jwt.NewVerifier(config.ServiceName, publicKey),
 		pat:         pat.NewVerifier(util.ServiceS2s, s2s, tkn),
 		cryptor:     cryptor,
-		cleanup:     scheduled.NewService(db, tkn, iam, gallery),
+		cleanup:     scheduled.NewService(db, tkn, iam, gallery, profileClient),
 
 		logger: slog.Default().
 			With(slog.String(util.PackageKey, util.PackageGateway)).
@@ -172,6 +208,7 @@ type gateway struct {
 	iam         *connect.S2sCaller
 	task        *connect.S2sCaller
 	gallery     *connect.S2sCaller
+	profileConn *grpc.ClientConn
 	uxSession   uxsession.Service
 	oAuth       oauth.Service
 	verifier    jwt.Verifier
@@ -182,11 +219,22 @@ type gateway struct {
 	logger *slog.Logger
 }
 
-func (g *gateway) CloseDb() error {
+func (g *gateway) Close() error {
+
+	// close database connection
 	if err := g.repository.Close(); err != nil {
 		g.logger.Error(err.Error())
 		return err
 	}
+
+	// close the grpc connections
+	if g.profileConn != nil {
+		if err := g.profileConn.Close(); err != nil {
+			g.logger.Error("failed to close profile service grpc connection", "err", err.Error())
+			return err
+		}
+	}
+
 	return nil
 }
 
@@ -207,7 +255,14 @@ func (g *gateway) Run() error {
 	mux.HandleFunc("/session/csrf/", csrfHandler.HandleGetCsrf) // trailing slash required for /session/csrf/{session}
 
 	// user registation
-	register := authentication.NewRegistrationHandler(g.config.OauthRedirect, g.uxSession, g.tknProvider, g.iam, g.gallery)
+	register := authentication.NewRegistrationHandler(
+		g.config.OauthRedirect,
+		g.uxSession,
+		g.tknProvider,
+		g.iam,
+		g.gallery,
+		g.profileConn,
+	)
 	mux.HandleFunc("/register", register.HandleRegistration)
 
 	// oauth state
@@ -215,7 +270,13 @@ func (g *gateway) Run() error {
 	mux.HandleFunc("/oauth/state", oauth.HandleGetState)
 
 	// oauth callback
-	callback := authentication.NewCallbackHandler(g.tknProvider, g.iam, g.oAuth, g.uxSession, g.verifier)
+	callback := authentication.NewCallbackHandler(
+		g.tknProvider,
+		g.iam,
+		g.oAuth,
+		g.uxSession,
+		g.verifier,
+	)
 	mux.HandleFunc("/oauth/callback", callback.HandleCallback)
 
 	// login
@@ -227,7 +288,13 @@ func (g *gateway) Run() error {
 	mux.HandleFunc("/logout", logout.HandleLogout)
 
 	// user, profile, pw
-	accounts := user.NewHandler(g.uxSession, g.tknProvider, g.iam, g.task, g.gallery)
+	accounts := user.NewHandler(
+		g.uxSession,
+		g.tknProvider,
+		g.iam,
+		g.task,
+		g.gallery,
+	)
 	mux.HandleFunc("/profile", accounts.HandleProfile)
 	mux.HandleFunc("/reset", accounts.HandleReset)
 	mux.HandleFunc("/users/{slug...}", accounts.HandleUsers)
@@ -282,6 +349,7 @@ func (g *gateway) Run() error {
 	g.cleanup.ExpiredS2s()
 	g.cleanup.ExpiredSession(1)
 	g.cleanup.ReconcileGalleryAccounts()
+	g.cleanup.ReconcileProfileAccounts()
 
 	return nil
 }

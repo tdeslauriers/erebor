@@ -7,8 +7,10 @@ import (
 	"log/slog"
 	"net/http"
 
-	"erebor/internal/util"
+	"erebor/gen"
+
 	"erebor/internal/authentication/uxsession"
+	"erebor/internal/util"
 
 	"github.com/tdeslauriers/carapace/pkg/config"
 	"github.com/tdeslauriers/carapace/pkg/connect"
@@ -16,6 +18,7 @@ import (
 	"github.com/tdeslauriers/pixie/pkg/api"
 	"github.com/tdeslauriers/shaw/pkg/api/register"
 	"github.com/tdeslauriers/shaw/pkg/api/user"
+	"google.golang.org/grpc"
 )
 
 type RegistrationHandler interface {
@@ -29,13 +32,15 @@ func NewRegistrationHandler(
 	p provider.S2sTokenProvider,
 	iam *connect.S2sCaller,
 	g *connect.S2sCaller,
+	cc grpc.ClientConnInterface,
 ) RegistrationHandler {
 	return &registrationHandler{
-		oAuth:     o,
-		uxSession: s,
-		s2sToken:  p,
-		identity:  iam,
-		gallery:   g,
+		oAuth:      o,
+		uxSession:  s,
+		s2sToken:   p,
+		identity:   iam,
+		gallery:    g,
+		profileSvc: gen.NewProfilesClient(cc),
 
 		logger: slog.Default().
 			With(slog.String(util.PackageKey, util.PackageAuth)).
@@ -46,11 +51,12 @@ func NewRegistrationHandler(
 var _ RegistrationHandler = (*registrationHandler)(nil)
 
 type registrationHandler struct {
-	oAuth     config.OauthRedirect
-	uxSession uxsession.Service
-	s2sToken  provider.S2sTokenProvider
-	identity  *connect.S2sCaller
-	gallery   *connect.S2sCaller
+	oAuth      config.OauthRedirect
+	uxSession  uxsession.Service
+	s2sToken   provider.S2sTokenProvider
+	identity   *connect.S2sCaller
+	gallery    *connect.S2sCaller
+	profileSvc gen.ProfilesClient
 
 	logger *slog.Logger
 }
@@ -168,6 +174,23 @@ func (h *registrationHandler) HandleRegistration(w http.ResponseWriter, r *http.
 		}
 
 		telemetryLogger.Info(fmt.Sprintf("successfully created patron account for user %s", username))
+
+	}(cmd.Username)
+
+	// profile account creation
+	go func(username string) {
+
+		// call profile service to create ghost profile for user
+		_, err = h.profileSvc.CreateProfile(ctx, &gen.CreateProfileRequest{Username: username}, WithS2SOnly())
+		if err != nil {
+			// logging only, not returning error --> hidden/abstracted from user
+			telemetryLogger.Error(fmt.Sprintf("failed to create account in profile servicefor user %s", username),
+				"err", err.Error(),
+			)
+			return
+		}
+
+		telemetryLogger.Info(fmt.Sprintf("successfully created account for user %s in profile service", username))
 
 	}(cmd.Username)
 

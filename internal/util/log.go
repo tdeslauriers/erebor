@@ -20,6 +20,7 @@ const (
 
 	ComponentAlbums               string = "gallery albums"
 	ComponentAllowances           string = "task allowances"
+	ComponentAuthInterceptor      string = "authentication interceptor"
 	ComponentCallback             string = "oauth flow callback"
 	ComponentCsrf                 string = "csrf"
 	ComponentClients              string = "s2s service clients"

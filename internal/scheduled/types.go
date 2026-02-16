@@ -2,6 +2,7 @@ package scheduled
 
 import (
 	"database/sql"
+	"erebor/gen"
 
 	"github.com/tdeslauriers/carapace/pkg/connect"
 	exo "github.com/tdeslauriers/carapace/pkg/schedule"
@@ -17,10 +18,10 @@ type Service interface {
 
 // NewService returns a new instance of Service, which is an aggregate interface
 // that combines the methods from exo.Cleanup and ScheduledService.
-func NewService(sql *sql.DB, tkn provider.S2sTokenProvider, iam, g *connect.S2sCaller) Service {
+func NewService(sql *sql.DB, tkn provider.S2sTokenProvider, iam, g *connect.S2sCaller, p gen.ProfilesClient) Service {
 	return &service{
 		Cleanup:            exo.NewCleanup(sql),
-		UserAccountService: NewUserAccountService(tkn, iam, g),
+		UserAccountService: NewUserAccountService(tkn, iam, g, p),
 	}
 }
 
