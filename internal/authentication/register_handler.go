@@ -14,6 +14,7 @@ import (
 
 	"github.com/tdeslauriers/carapace/pkg/config"
 	"github.com/tdeslauriers/carapace/pkg/connect"
+	exo "github.com/tdeslauriers/carapace/pkg/connect/grpc"
 	"github.com/tdeslauriers/carapace/pkg/session/provider"
 	"github.com/tdeslauriers/pixie/pkg/api"
 	"github.com/tdeslauriers/shaw/pkg/api/register"
@@ -179,6 +180,12 @@ func (h *registrationHandler) HandleRegistration(w http.ResponseWriter, r *http.
 
 	// profile account creation
 	go func(username string) {
+
+		// convert http telemetry to grpc telemetry
+		grpcTelemetry := exo.GrpcTelemetry{Traceparent: telemetry.Traceparent}
+
+		// add grpc telemetry to context for downstream grpc call
+		ctx, _ = exo.GetTraceparentForOutgoingCall(ctx, &grpcTelemetry, telemetryLogger)
 
 		// call profile service to create ghost profile for user
 		_, err = h.profileSvc.CreateProfile(ctx, &gen.CreateProfileRequest{Username: username}, WithS2SOnly())

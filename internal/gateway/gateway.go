@@ -184,6 +184,7 @@ func New(config *config.Config) (Gateway, error) {
 		task:        task,
 		gallery:     gallery,
 		profileConn: profileConn,
+		profiles:    profileClient,
 		uxSession:   sn,
 		oAuth:       oauth.NewService(config.OauthRedirect, db, cryptor, indexer),
 		verifier:    jwt.NewVerifier(config.ServiceName, publicKey),
@@ -209,6 +210,7 @@ type gateway struct {
 	task        *connect.S2sCaller
 	gallery     *connect.S2sCaller
 	profileConn *grpc.ClientConn
+	profiles    gen.ProfilesClient
 	uxSession   uxsession.Service
 	oAuth       oauth.Service
 	verifier    jwt.Verifier
@@ -294,6 +296,7 @@ func (g *gateway) Run() error {
 		g.iam,
 		g.task,
 		g.gallery,
+		g.profiles,
 	)
 	mux.HandleFunc("/profile", accounts.HandleProfile)
 	mux.HandleFunc("/reset", accounts.HandleReset)

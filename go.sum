@@ -41,8 +41,8 @@ github.com/stretchr/testify v1.9.0 h1:HtqpIVDClZ4nwg75+f6Lvsy/wHu+3BoSGCbBAcpTsT
 github.com/stretchr/testify v1.9.0/go.mod h1:r2ic/lqez/lEtzL7wO/rwa5dbSLXVDPFyf8C91i36aY=
 github.com/tdeslauriers/apprentice v0.1.3 h1:Ku4G9FgHlmIzEXLNxppwdvssJKNM+mCRsqRVgTui13U=
 github.com/tdeslauriers/apprentice v0.1.3/go.mod h1:lUnYhsNDg1aQAr+i++IjNgIBfIqZqXktGFYvooYZaAM=
-github.com/tdeslauriers/carapace v0.3.8 h1:NDL+BZqe/kFvTaNHvzW+1NrLNetsW5Z3uHDOtQSRn78=
-github.com/tdeslauriers/carapace v0.3.8/go.mod h1:POP1x+ktyMrZye396aId6f88NdbqJmNnJZp6pZNEMww=
+github.com/tdeslauriers/carapace v0.3.13 h1:ng+BLaIOqneN15AI2fKTOj4+DvcpUzqewNDgNIT0WG4=
+github.com/tdeslauriers/carapace v0.3.13/go.mod h1:POP1x+ktyMrZye396aId6f88NdbqJmNnJZp6pZNEMww=
 github.com/tdeslauriers/pixie v0.1.7 h1:/Cz8/Btaw/bmQd1o+MpodtN/ZS+i9ru08piYaHEK5k0=
 github.com/tdeslauriers/pixie v0.1.7/go.mod h1:7hZnXPFrJ1LiIuI/tg9eeOSd7xqo7avAwLFCnX+gjNY=
 github.com/tdeslauriers/ran v0.1.3 h1:QdR75SO0h2Kqqe+hPjSxaQY1qrstBchY39tFybccGGE=

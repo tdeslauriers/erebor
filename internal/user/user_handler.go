@@ -3,6 +3,8 @@ package user
 import (
 	"context"
 	"encoding/json"
+	"erebor/gen"
+	"erebor/internal/authentication"
 	"erebor/internal/authentication/uxsession"
 	"erebor/internal/util"
 	"errors"
@@ -27,13 +29,22 @@ type UserHandler interface {
 	HandleUsers(w http.ResponseWriter, r *http.Request)
 }
 
-func NewUserHandler(ux uxsession.Service, p provider.S2sTokenProvider, i, t, g *connect.S2sCaller) UserHandler {
+func NewUserHandler(
+	ux uxsession.Service,
+	pvdr provider.S2sTokenProvider,
+	i *connect.S2sCaller,
+	t *connect.S2sCaller,
+	g *connect.S2sCaller,
+	p gen.ProfilesClient,
+) UserHandler {
+
 	return &userHandler{
 		session:  ux,
-		provider: p,
+		provider: pvdr,
 		identity: i,
 		tasks:    t,
 		gallery:  g,
+		profile:  p,
 
 		logger: slog.Default().
 			With(slog.String(util.PackageKey, util.PackageUser)).
@@ -49,6 +60,7 @@ type userHandler struct {
 	identity *connect.S2sCaller
 	tasks    *connect.S2sCaller
 	gallery  *connect.S2sCaller
+	profile  gen.ProfilesClient
 
 	logger *slog.Logger
 }
@@ -217,7 +229,21 @@ func (h *userHandler) getUser(w http.ResponseWriter, r *http.Request) {
 
 	log.Info(fmt.Sprintf("successfully retrieved user %s from identity service", slug))
 
-	// TODO: placeholder for geting silhouette data from silhouette service
+	// get profile data
+	p, err := h.profile.GetProfile(
+		ctx,
+		&gen.GetProfileRequest{Username: user.Username},
+		authentication.WithUserRequired(session),
+	)
+	if err != nil {
+		log.Error(fmt.Sprintf("failed to get profile for user %s from profile service: %s", slug, err.Error()))
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusInternalServerError,
+			Message:    "failed to get user profile",
+		}
+		e.SendJsonErr(w)
+		return
+	}
 
 	// get permissions for the user from applicable services
 	ps, err := h.getPermissions(ctx, user.Username, accessToken)
@@ -232,14 +258,13 @@ func (h *userHandler) getUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// build profile model for user data + silhouette data
-	profile := ProfileCmd{
-		// NEVER RETURN THE CSRF/SESSION TOKEN TO THE CLIENT
-		// even if it is returned, will be dropped by the client
-
+	profile := ProfileResponse{
 		Id:             user.Id,
 		Username:       user.Username,
 		Firstname:      user.Firstname,
 		Lastname:       user.Lastname,
+		NickName:       p.GetNickName(),
+		DarkMode:       p.GetDarkMode(),
 		Slug:           user.Slug,
 		CreatedAt:      user.CreatedAt,
 		Enabled:        user.Enabled,
@@ -264,6 +289,16 @@ func (h *userHandler) getUser(w http.ResponseWriter, r *http.Request) {
 		profile.BirthMonth = int(dob.Month())
 		profile.BirthDay = dob.Day()
 		profile.BirthYear = dob.Year()
+	}
+
+	// add addresses if they exist
+	if len(p.Address) > 0 {
+		profile.Addresses = p.Address
+	}
+
+	// add phones if they exist
+	if len(p.Phone) > 0 {
+		profile.Phones = p.Phone
 	}
 
 	// respond with user profile to client
@@ -380,7 +415,7 @@ func (h *userHandler) putUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// forward the update request to the identity service
-	updated, err := connect.PutToService[user.User, user.User](
+	updatedUser, err := connect.PutToService[user.User, user.User](
 		ctx,
 		h.identity,
 		fmt.Sprintf("/users/%s", slug),
@@ -394,23 +429,43 @@ func (h *userHandler) putUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO: placeholder for updating silhouette data in silhouette service
+	// update data in silhouette service
+	p, err := h.profile.UpdateProfile(
+		ctx,
+		&gen.UpdateProfileRequest{
+			Username: updatedUser.Username,
+			NickName: &cmd.NickName,
+			DarkMode: cmd.DarkMode,
+		},
+		authentication.WithUserRequired(session),
+	)
+	if err != nil {
+		log.Error(fmt.Sprintf("failed to update user %s profile in profile service: %s", slug, err.Error()))
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusInternalServerError,
+			Message:    "failed to update user profile data",
+		}
+		e.SendJsonErr(w)
+		return
+	}
 
 	// build profile model for user data + silhouette data
 	profile := ProfileCmd{
-		Id:             updated.Id,
-		Username:       updated.Username,
-		Firstname:      updated.Firstname,
-		Lastname:       updated.Lastname,
-		Slug:           updated.Slug,
-		CreatedAt:      updated.CreatedAt,
-		Enabled:        updated.Enabled,
-		AccountExpired: updated.AccountExpired,
-		AccountLocked:  updated.AccountLocked,
+		Id:             updatedUser.Id,
+		Username:       updatedUser.Username,
+		Firstname:      updatedUser.Firstname,
+		Lastname:       updatedUser.Lastname,
+		NickName:       p.GetNickName(),
+		DarkMode:       p.GetDarkMode(),
+		Slug:           updatedUser.Slug,
+		CreatedAt:      updatedUser.CreatedAt,
+		Enabled:        updatedUser.Enabled,
+		AccountExpired: updatedUser.AccountExpired,
+		AccountLocked:  updatedUser.AccountLocked,
 	}
 
-	if updated.BirthDate != "" {
-		dob, err := time.Parse("2006-01-02", updated.BirthDate)
+	if updatedUser.BirthDate != "" {
+		dob, err := time.Parse("2006-01-02", updatedUser.BirthDate)
 		if err != nil {
 			log.Error("failed to parse user birthdate", "err", err.Error())
 			e := connect.ErrorHttp{

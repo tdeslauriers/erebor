@@ -1,8 +1,10 @@
 package user
 
 import (
+	"erebor/gen"
 	"erebor/internal/authentication/uxsession"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/tdeslauriers/carapace/pkg/connect"
@@ -22,13 +24,20 @@ type Handler interface {
 	UserHandler
 }
 
-func NewHandler(ux uxsession.Service, p provider.S2sTokenProvider, iam, task, g *connect.S2sCaller) Handler {
+func NewHandler(
+	ux uxsession.Service,
+	pvdr provider.S2sTokenProvider,
+	iam *connect.S2sCaller,
+	task *connect.S2sCaller,
+	g *connect.S2sCaller,
+	p gen.ProfilesClient,
+) Handler {
 	return &handler{
-		PermissionsHandler: NewPermissionsHandler(ux, p, iam, task, g),
-		ProfileHandler:     NewProfileHandler(ux, p, iam),
-		ResetHandler:       NewResetHandler(ux, p, iam),
-		ScopesHandler:      NewScopesHandler(ux, p, iam),
-		UserHandler:        NewUserHandler(ux, p, iam, task, g),
+		PermissionsHandler: NewPermissionsHandler(ux, pvdr, iam, task, g),
+		ProfileHandler:     NewProfileHandler(ux, pvdr, iam, p),
+		ResetHandler:       NewResetHandler(ux, pvdr, iam),
+		ScopesHandler:      NewScopesHandler(ux, pvdr, iam),
+		UserHandler:        NewUserHandler(ux, pvdr, iam, task, g, p),
 	}
 }
 
@@ -52,6 +61,8 @@ type ProfileCmd struct {
 	Username       string                         `json:"username"`
 	Firstname      string                         `json:"firstname"`
 	Lastname       string                         `json:"lastname"`
+	NickName       string                         `json:"nickname,omitempty"`
+	DarkMode       bool                           `json:"dark_mode,omitempty"`
 	BirthMonth     int                            `json:"birth_month,omitempty"`
 	BirthDay       int                            `json:"birth_day,omitempty"`
 	BirthYear      int                            `json:"birth_year,omitempty"`
@@ -67,27 +78,32 @@ type ProfileCmd struct {
 func (cmd *ProfileCmd) ValidateCmd() error {
 
 	// light weight validation of csrf
-	if len(cmd.Csrf) <= 16 || len((cmd.Csrf)) > 64 {
+	if len(cmd.Csrf) <= 16 || len((strings.TrimSpace(cmd.Csrf))) > 64 {
 		return fmt.Errorf("invalid csrf token: must be between 16 and 64 characters")
 	}
 
 	// Username is immutable at this time, and will be dropped for update operations
-	// only lightweight validation to make sure it isnt too long
-	// may not be present on user initiated updates since using name not taken from update cmd
-	if cmd.Username != "" {
-		if len(cmd.Username) < validate.EmailMin || len(cmd.Username) > validate.EmailMax {
-			return fmt.Errorf("invalid username: must be greater than %d and less than %d characters long", validate.EmailMin, validate.EmailMax)
-		}
+	// in the identity service, however, it is used as a lookup field for the profile service,
+	// so it is required for all operations.
+	if err := validate.IsValidEmail(strings.TrimSpace(cmd.Username)); err != nil {
+		return fmt.Errorf("invalid username: %v", err)
 	}
 
 	// validate firstname
-	if err := validate.IsValidName(cmd.Firstname); err != nil {
+	if err := validate.IsValidName(strings.TrimSpace(cmd.Firstname)); err != nil {
 		return fmt.Errorf("invalid firstname: %v", err)
 	}
 
 	// validate lastname
-	if err := validate.IsValidName(cmd.Lastname); err != nil {
+	if err := validate.IsValidName(strings.TrimSpace(cmd.Lastname)); err != nil {
 		return fmt.Errorf("invalid lastname: %v", err)
+	}
+
+	// validate nickname - optional but if present must be validate nickname
+	if strings.TrimSpace(cmd.NickName) != "" {
+		if err := validate.IsValidName(strings.TrimSpace(cmd.NickName)); err != nil {
+			return fmt.Errorf("invalid nickname: %v", err)
+		}
 	}
 
 	// validate either all or none of the date of birth fields are present
@@ -128,6 +144,8 @@ func (cmd *ProfileCmd) ValidateCmd() error {
 		}
 	}
 
+	// DarkMode is a boolean, no validation needed
+
 	// CreatedAt is a timestamp, no validation needed, will be dropped on all updates
 
 	// Enabled is a boolean, no validation needed
@@ -166,4 +184,27 @@ func (cmd *UserScopesCmd) ValidateCmd() error {
 	}
 
 	return nil
+}
+
+// ProfileResponse is a model for a user's profile as it is expected to be returned to the frontend ui.
+// It is a composite of the data returned by several different services, like identity and profile.
+type ProfileResponse struct {
+	Id             string                         `json:"id,omitempty"`
+	Username       string                         `json:"username"`
+	Firstname      string                         `json:"firstname"`
+	Lastname       string                         `json:"lastname"`
+	NickName       string                         `json:"nickname,omitempty"`
+	BirthMonth     int                            `json:"birth_month,omitempty"`
+	BirthDay       int                            `json:"birth_day,omitempty"`
+	BirthYear      int                            `json:"birth_year,omitempty"`
+	DarkMode       bool                           `json:"dark_mode,omitempty"`
+	Slug           string                         `json:"slug,omitempty"`
+	CreatedAt      data.CustomTime                `json:"created_at"`
+	Enabled        bool                           `json:"enabled"`
+	AccountExpired bool                           `json:"account_expired"`
+	AccountLocked  bool                           `json:"account_locked"`
+	Addresses      []*gen.Address                 `json:"addresses,omitempty"`   // will not always be returned: call specific
+	Phones         []*gen.Phone                   `json:"phones,omitempty"`      // will not always be returned: call specific
+	Scopes         []scopes.Scope                 `json:"scopes,omitempty"`      // will not always be returned: call specific
+	Permissions    []permissions.PermissionRecord `json:"permissions,omitempty"` // will not always be returned: call specific
 }

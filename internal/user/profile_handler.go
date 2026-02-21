@@ -3,6 +3,8 @@ package user
 import (
 	"context"
 	"encoding/json"
+	"erebor/gen"
+	"erebor/internal/authentication"
 	"erebor/internal/authentication/uxsession"
 	"erebor/internal/util"
 	"fmt"
@@ -24,11 +26,17 @@ type ProfileHandler interface {
 }
 
 // NewProfileHandler returns a pointer to a concrete implementation of the ProfileHandler interface.
-func NewProfileHandler(ux uxsession.Service, p provider.S2sTokenProvider, iam *connect.S2sCaller) ProfileHandler {
+func NewProfileHandler(
+	ux uxsession.Service,
+	p provider.S2sTokenProvider,
+	iam *connect.S2sCaller,
+	pcc gen.ProfilesClient,
+) ProfileHandler {
 	return &profileHandler{
 		session:  ux,
 		provider: p,
 		identity: iam,
+		profile:  pcc,
 
 		logger: slog.Default().
 			With(slog.String(util.PackageKey, util.PackageUser)).
@@ -43,7 +51,7 @@ type profileHandler struct {
 	session  uxsession.Service
 	provider provider.S2sTokenProvider
 	identity *connect.S2sCaller
-	// profile connect.S2sCaller: silhoutte service, ie, non-identity data that is part of user profile, address, phone, preferences, etc
+	profile  gen.ProfilesClient
 
 	logger *slog.Logger
 }
@@ -128,16 +136,31 @@ func (h *profileHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO: place holder for getting silhouette data from silhouette service
+	// get profile data from silhouette service
+	p, err := h.profile.GetProfile(
+		ctx,
+		&gen.GetProfileRequest{
+			Username: user.Username,
+		},
+		authentication.WithUserRequired(session),
+	)
+	if err != nil {
+		log.Error("failed to get profile data from profile service", "err", err.Error())
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusInternalServerError,
+			Message:    "internl service error",
+		}
+		e.SendJsonErr(w)
+		return
+	}
 
 	// build profile model from user data + silhoutte data
-	profile := ProfileCmd{
-		// NEVER RETURN SESSION TOKEN/CRSF TO CLIENT: it is only used for server-side validation
-		// and will be dropped from the model before sending to the client anyway
-
+	profile := ProfileResponse{
 		Username:       user.Username,
 		Firstname:      user.Firstname,
 		Lastname:       user.Lastname,
+		NickName:       p.GetNickName(),
+		DarkMode:       p.GetDarkMode(),
 		Slug:           user.Slug,
 		CreatedAt:      user.CreatedAt,
 		Enabled:        user.Enabled,
@@ -160,6 +183,16 @@ func (h *profileHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 		profile.BirthMonth = int(dob.Month())
 		profile.BirthDay = dob.Day()
 		profile.BirthYear = dob.Year()
+	}
+
+	// add addresses if they exist
+	if len(p.Address) > 0 {
+		profile.Addresses = p.Address
+	}
+
+	// add phones if they exist
+	if len(p.Phone) > 0 {
+		profile.Phones = p.Phone
 	}
 
 	// profile model will be returned to the client
@@ -263,7 +296,7 @@ func (h *profileHandler) handlePut(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// update user data in identity service
-	updated, err := connect.PutToService[shaw.User, shaw.User](
+	updatedUser, err := connect.PutToService[shaw.User, shaw.User](
 		ctx,
 		h.identity,
 		"/profile",
@@ -277,24 +310,44 @@ func (h *profileHandler) handlePut(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO: placeholder for updating silhouette data in silhouette service
+	// update profile data in silhouette service
+	updatedProfile, err := h.profile.UpdateProfile(
+		ctx,
+		&gen.UpdateProfileRequest{
+			Username: cmd.Username,
+			NickName: &cmd.NickName,
+			DarkMode: cmd.DarkMode,
+		},
+		authentication.WithUserRequired(session),
+	)
+	if err != nil {
+		log.Error("failed to update profile data in profile service", "err", err.Error())
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusInternalServerError,
+			Message:    "internl service error",
+		}
+		e.SendJsonErr(w)
+		return
+	}
 
 	// build profile model from user data + silhoutte data
 	profile := ProfileCmd{
 		// drop id no need for it in the response
-		Username:       updated.Username,
-		Firstname:      updated.Firstname,
-		Lastname:       updated.Lastname,
-		Slug:           updated.Slug,
-		CreatedAt:      updated.CreatedAt,
-		Enabled:        updated.Enabled,
-		AccountExpired: updated.AccountExpired,
-		AccountLocked:  updated.AccountLocked,
+		Username:       updatedUser.Username,
+		Firstname:      updatedUser.Firstname,
+		Lastname:       updatedUser.Lastname,
+		NickName:       updatedProfile.GetNickName(),
+		DarkMode:       updatedProfile.GetDarkMode(),
+		Slug:           updatedUser.Slug,
+		CreatedAt:      updatedUser.CreatedAt,
+		Enabled:        updatedUser.Enabled,
+		AccountExpired: updatedUser.AccountExpired,
+		AccountLocked:  updatedUser.AccountLocked,
 	}
 
 	// add date of birth fields to profile model if birthdate is present
-	if updated.BirthDate != "" {
-		birthdate, err := time.Parse("2006-01-02", updated.BirthDate)
+	if updatedUser.BirthDate != "" {
+		birthdate, err := time.Parse("2006-01-02", updatedUser.BirthDate)
 		if err != nil {
 			log.Error("failed to parse user birthdate returned from identity service", "err", err.Error())
 			h.identity.RespondUpstreamError(err, w)
@@ -305,9 +358,9 @@ func (h *profileHandler) handlePut(w http.ResponseWriter, r *http.Request) {
 		profile.BirthYear = birthdate.Year()
 	}
 
+	log.Info(fmt.Sprintf("successfully updated %s's profile", updatedUser.Username))
+
 	w.Header().Set("Content-Type", "application/json")
-	// cant be 204 because will need to return the new csrf token to the client,
-	// TODO: replace used csrf with new one
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(profile); err != nil {
 		log.Error("failed to encode user profile to json", "err", err.Error())

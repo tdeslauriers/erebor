@@ -62,7 +62,10 @@ func (a *authInterceptor) Unary() grpc.UnaryClientInterceptor {
 		grpcSvcName, methodName := parseMethod(method)
 
 		// get telemetry
-		telemetry := exo.ObtainGrpcTelemetry(ctx, method, a.logger)
+		telemetry, ok := exo.GetTelemetryFromContext(ctx)
+		if !ok {
+			a.logger.Error("failed to extract telemetry from context in client auth interceptor")
+		}
 		log := a.logger.With(telemetry.TelemetryFields()...)
 
 		// extract auth mode from options to determine if user token is required
@@ -87,7 +90,7 @@ func (a *authInterceptor) Unary() grpc.UnaryClientInterceptor {
 		}
 
 		// create metadata with tokens
-		md := metadata.Pairs(
+		ctx = metadata.AppendToOutgoingContext(ctx,
 			"service-authorization", fmt.Sprintf("Bearer %s", s2sToken),
 		)
 
@@ -112,11 +115,10 @@ func (a *authInterceptor) Unary() grpc.UnaryClientInterceptor {
 				return fmt.Errorf("user token required: %w", err)
 			}
 
-			md.Append("authorization", fmt.Sprintf("Bearer %s", userToken))
+			ctx = metadata.AppendToOutgoingContext(ctx,
+				"authorization", fmt.Sprintf("Bearer %s", userToken),
+			)
 		}
-
-		// add metadata to context
-		ctx = metadata.NewOutgoingContext(ctx, md)
 
 		// proceed with invoker
 		return invoker(ctx, method, req, reply, cc, opts...)

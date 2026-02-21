@@ -158,9 +158,7 @@ func (s *userAccountService) ReconcileProfileAccounts() {
 		for {
 
 			// generate httpTelemetry -> in this case just a trace parent for web calls
-			httpTelemetry := &connect.Telemetry{
-				Traceparent: *connect.GenerateTraceParent(),
-			}
+			httpTelemetry := connect.NewTelemetry(nil, s.logger)
 
 			log := s.logger.With(httpTelemetry.TelemetryFields()...)
 
