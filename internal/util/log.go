@@ -18,6 +18,7 @@ const (
 
 	ComponentKey string = "component"
 
+	ComponentAddresses            string = "addresses"
 	ComponentAlbums               string = "gallery albums"
 	ComponentAllowances           string = "task allowances"
 	ComponentAuthInterceptor      string = "authentication interceptor"

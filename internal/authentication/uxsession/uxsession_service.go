@@ -20,8 +20,6 @@ import (
 	"github.com/tdeslauriers/carapace/pkg/session/types"
 )
 
-
-
 // SessionService is the interface for handling ux session specific operations.
 type SessionService interface {
 	// Build creates a new seesion record, persisting it to the database, and returns
@@ -30,6 +28,10 @@ type SessionService interface {
 	// the presesnce of Access and Refresh tokens is the real indicator of authentication status.
 	// If no access tokens exist, user will be redirected to login page.
 	Build(st UxSessionType) (*UxSession, error)
+
+	// GetValidSession returns the session struct for a given session token if
+	// it is valid, ie, not revoked or exired, otherwise returns an error.
+	GetValidSession(session string) (*UxSession, error)
 
 	// IsValid checks if the session is valid, ie, not revoked, not expired, etc.
 	IsValid(session string) (bool, error)
@@ -211,34 +213,114 @@ func (s *uxSession) Build(st UxSessionType) (*UxSession, error) {
 	}, nil
 }
 
-// IsValid checks if the session is valid, ie, not revoked, not expired, etc.
-func (s *uxSession) IsValid(session string) (bool, error) {
+// GetValidSession returns the session struct for a given session token if
+// it is valid, ie, not revoked or exired, otherwise returns an error.
+func (s *uxSession) GetValidSession(session string) (*UxSession, error) {
+
+	return s.getValidSession(session)
+}
+
+// getValidSession returns the session struct for a given session token if
+// it is valid, ie, not revoked or exired, otherwise returns an error.  It is a helper function for GetValidSession and GetSessionData, which both call this function to get the session struct before doing additional work.
+func (s *uxSession) getValidSession(session string) (*UxSession, error) {
 
 	// light weight input validation
 	if len(session) < 16 || len(session) > 64 {
-		return false, errors.New(ErrInvalidSession)
+		return nil, errors.New(ErrInvalidSession)
 	}
 
 	// build session index
 	index, err := s.indexer.ObtainBlindIndex(session)
 	if err != nil {
-		return false, fmt.Errorf("%s from provided session token xxxxxx-%s: %v", ErrGenIndex, session[len(session)-6:], err)
+		return nil, fmt.Errorf("%s from provided session token xxxxxx-%s: %v", ErrGenIndex, session[len(session)-6:], err)
 	}
 
 	// look up uxSession from db by index
 	uxSession, err := s.db.FindSession(index)
 	if err != nil {
-		return false, err
+		return nil, err
 	}
 
 	// check if session is revoked
 	if uxSession.Revoked {
-		return false, fmt.Errorf("session id %s: %s", uxSession.Id, ErrSessionRevoked)
+		return nil, fmt.Errorf("session id %s: %s", uxSession.Id, ErrSessionRevoked)
 	}
 
 	// check if session is expired
 	if uxSession.CreatedAt.UTC().Add(1 * time.Hour).Before(time.Now().UTC()) {
-		return false, fmt.Errorf("session id %s: %s", uxSession.Id, ErrSessionExpired)
+		return nil, fmt.Errorf("session id %s: %s", uxSession.Id, ErrSessionExpired)
+	}
+
+	// check if authenticated
+	// Note: this is a convenience field, the real indicator is if access tokens are
+	// associated with the session
+	// just a quick sanity check only
+	if !uxSession.Authenticated {
+		return nil, fmt.Errorf("session id %s: %s", uxSession.Id, ErrSessionNotAuthenticated)
+	}
+
+	var (
+		wg        sync.WaitGroup
+		sessionCh = make(chan string, 1)
+		csrfCh    = make(chan string, 1)
+
+		errCh = make(chan error, 2)
+	)
+
+	wg.Add(1)
+	go func(encrypted string, sessionCh chan string, errCh chan error, wg *sync.WaitGroup) {
+		defer wg.Done()
+
+		// decrypt session token
+		token, err := s.cryptor.DecryptServiceData(uxSession.SessionToken)
+		if err != nil {
+			errCh <- fmt.Errorf("%s for session id %s: %v", ErrDecryptSession, uxSession.Id, err)
+			return
+		}
+
+		sessionCh <- string(token)
+	}(uxSession.SessionToken, sessionCh, errCh, &wg)
+
+	wg.Add(1)
+	go func(encrypted string, csrfCh chan string, errCh chan error, wg *sync.WaitGroup) {
+		defer wg.Done()
+
+		// need to decyrpt csrf token for caller to verify it against user provided csrf
+		csrf, err := s.cryptor.DecryptServiceData(uxSession.CsrfToken)
+		if err != nil {
+			errCh <- fmt.Errorf("%s for session id %s: %v", ErrDecryptCsrf, uxSession.Id, err)
+			return
+		}
+
+		csrfCh <- string(csrf)
+	}(uxSession.CsrfToken, csrfCh, errCh, &wg)
+
+	wg.Wait()
+	close(sessionCh)
+	close(csrfCh)
+	close(errCh)
+
+	// check for errors
+	if len(errCh) > 0 {
+		var errs []error
+		for err := range errCh {
+			errs = append(errs, err)
+		}
+		return nil, fmt.Errorf("failed to decrypt session data for session id %s: %v", uxSession.Id, errors.Join(errs...))
+	}
+
+	uxSession.SessionToken = <-sessionCh
+	uxSession.CsrfToken = <-csrfCh
+
+	return uxSession, nil
+}
+
+// IsValid checks if the session is valid, ie, not revoked, not expired, etc.
+func (s *uxSession) IsValid(session string) (bool, error) {
+
+	_, err := s.getValidSession(session)
+	if err != nil {
+		return false, err
 	}
 
 	return true, nil

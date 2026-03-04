@@ -208,3 +208,68 @@ type ProfileResponse struct {
 	Scopes         []scopes.Scope                 `json:"scopes,omitempty"`      // will not always be returned: call specific
 	Permissions    []permissions.PermissionRecord `json:"permissions,omitempty"` // will not always be returned: call specific
 }
+
+// AddressCmd is a model for a user's address as it is expected to be submitted from
+// the frontend ui when creating or updating an address.
+type AddressCmd struct {
+	Csrf     string      `json:"csrf,omitempty"`
+	Slug     string      `json:"slug,omitempty"` // slug will be empty for creates, but required for updates
+	Username string      `json:"username"`
+	Address  gen.Address `json:"address"`
+}
+
+// ValidateCmd performs input validation check on address fields.
+func (cmd *AddressCmd) ValidateCmd() error {
+
+	//  csrf token
+	if len(cmd.Csrf) <= 16 || len((strings.TrimSpace(cmd.Csrf))) > 64 {
+		return fmt.Errorf("invalid csrf token: must be between 16 and 64 characters")
+	}
+
+	// slug may not be present for creates, but if it is present it must be valid
+	if cmd.Slug != "" {
+		if len(cmd.Slug) < 16 || len(cmd.Slug) > 64 {
+			return fmt.Errorf("invalid slug: must be between 16 and 64 characters")
+		}
+	}
+
+	// username is required and must be a valid email
+	if err := validate.IsValidEmail(strings.TrimSpace(cmd.Username)); err != nil {
+		return fmt.Errorf("invalid username: %v", err)
+	}
+
+	// validate street address line 1
+	if err := validate.ValidateStreetAddress(strings.TrimSpace(cmd.Address.StreetAddress)); err != nil {
+		return fmt.Errorf("invalid street address line 1: %v", err)
+	}
+
+	// validate street address line 2 - optional but if present must be valid
+	if strings.TrimSpace(*cmd.Address.StreetAddress_2) != "" {
+		if err := validate.ValidateStreetAddress2(strings.TrimSpace(*cmd.Address.StreetAddress_2)); err != nil {
+			return fmt.Errorf("invalid street address line 2: %v", err)
+		}
+	}
+
+	// validate city
+	if err := validate.ValidateCity(strings.TrimSpace(cmd.Address.City)); err != nil {
+		return fmt.Errorf("invalid city: %v", err)
+	}
+
+	// validate state
+	if err := validate.ValidateState(strings.TrimSpace(cmd.Address.StateProvince)); err != nil {
+		return fmt.Errorf("invalid state: %v", err)
+	}
+
+	// validate postal code
+	if err := validate.ValidateZipCode(strings.TrimSpace(cmd.Address.PostalCode)); err != nil {
+		return fmt.Errorf("invalid postal code: %v", err)
+	}
+
+	// validate country
+	if err := validate.ValidateCountry(strings.TrimSpace(cmd.Address.Country)); err != nil {
+		return fmt.Errorf("invalid country: %v", err)
+	}
+
+	return nil
+}
+
