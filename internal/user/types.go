@@ -273,3 +273,154 @@ func (cmd *AddressCmd) ValidateCmd() error {
 	return nil
 }
 
+// DeleteAddressCmd is a model for a user's address deletion request as it is expected to be submitted from
+// the frontend ui when deleting an address.
+type DeleteAddressCmd struct {
+	Csrf     string `json:"csrf,omitempty"`
+	Slug     string `json:"slug"` // slug is required to identify which address to delete
+	Username string `json:"username"`
+}
+
+// ValidateCmd performs input validation check on delete address command fields.
+func (cmd *DeleteAddressCmd) ValidateCmd() error {
+
+	//  csrf token
+	if len(cmd.Csrf) <= 16 || len((strings.TrimSpace(cmd.Csrf))) > 64 {
+		return fmt.Errorf("invalid csrf token: must be between 16 and 64 characters")
+	}
+
+	// slug is required and must be valid
+	if len(cmd.Slug) < 16 || len(cmd.Slug) > 64 {
+		return fmt.Errorf("invalid slug: must be between 16 and 64 characters")
+	}
+
+	// username is required and must be a valid email
+	if err := validate.IsValidEmail(strings.TrimSpace(cmd.Username)); err != nil {
+		return fmt.Errorf("invalid username: %v", err)
+	}
+
+	return nil
+}
+
+// Phone is a model for a user's phone number as it is expected to be returned to the frontend ui.
+type Phone struct {
+	Id          string          `json:"id,omitempty"`
+	Slug        string          `json:"slug,omitempty"`
+	CountryCode string          `json:"country_code"`
+	PhoneNumber string          `json:"phone_number"`
+	Extension   *string         `json:"extension,omitempty"`
+	PhoneType   string          `json:"phone_type"`
+	IsCurrent   bool            `json:"is_current"`
+	IsPrimary   bool            `json:"is_primary"`
+	CreatedAt   data.CustomTime `json:"created_at"`
+	UpdatedAt   data.CustomTime `json:"updated_at"`
+}
+
+// GetExtension returns the phone extension if it exists, or an empty string if it does not.
+func (p *Phone) GetExtension() string {
+	if p.Extension != nil {
+		return *p.Extension
+	}
+	return ""
+}
+
+// ValidPhoneTypes is a map of front end phone types to their corresponding gen.PhoneType values.
+// Used for validating phone type input from the frontend, and mapping to the
+// correct gen.PhoneType value for service calls.
+var ValidPhoneTypes = map[string]struct{}{
+	"MOBILE":      {},
+	"HOME":        {},
+	"WORK":        {},
+	"UNSPECIFIED": {},
+}
+
+// PhoneCmd is a model for a user's phone as it is expected to be submitted from
+// the frontend ui when creating a phone.
+type PhoneCmd struct {
+	Csrf     string `json:"csrf,omitempty"`
+	Slug     string `json:"slug,omitempty"` // slug will be empty for creates, but required for updates
+	Username string `json:"username"`
+	Phone    Phone  `json:"phone"`
+}
+
+// ValidateCmd performs input validation check on phone fields.
+func (cmd *PhoneCmd) ValidateCmd() error {
+
+	//  csrf token
+	if len(cmd.Csrf) <= 16 || len((strings.TrimSpace(cmd.Csrf))) > 64 {
+		return fmt.Errorf("invalid csrf token: must be between 16 and 64 characters")
+	}
+
+	// slug may not be present for creates, but must be valid for updates
+	if cmd.Slug != "" {
+		if len(cmd.Slug) < 16 || len(cmd.Slug) > 64 {
+			return fmt.Errorf("invalid slug: must be between 16 and 64 characters")
+		}
+	}
+
+	// username is required and must be a valid email
+	if err := validate.IsValidEmail(strings.TrimSpace(cmd.Username)); err != nil {
+		return fmt.Errorf("invalid username: %v", err)
+	}
+
+	// validate country code
+	if err := validate.ValidateCountryCode(strings.TrimSpace(cmd.Phone.CountryCode)); err != nil {
+		return fmt.Errorf("invalid country code: %v", err)
+	}
+
+	// validate phone number
+	if err := validate.ValidatePhoneNumber(strings.TrimSpace(cmd.Phone.PhoneNumber)); err != nil {
+		return fmt.Errorf("invalid phone number: %v", err)
+	}
+
+	// if extension is present, validate extension
+	if cmd.Phone.Extension != nil && strings.TrimSpace(*cmd.Phone.Extension) != "" {
+		if err := validate.ValidateExtension(strings.TrimSpace(*cmd.Phone.Extension)); err != nil {
+			return fmt.Errorf("invalid phone extension: %v", err)
+		}
+	}
+
+	// validate phone type
+	if len(strings.TrimSpace(cmd.Phone.PhoneType)) > 32 {
+		return fmt.Errorf("invalid phone type: must be less than 32 characters")
+	}
+
+	if _, ok := ValidPhoneTypes[strings.ToUpper(strings.TrimSpace(cmd.Phone.PhoneType))]; !ok {
+		return fmt.Errorf("invalid phone type: must be one of the following: mobile, home, work, unspecified")
+	}
+
+	if _, ok := gen.PhoneType_value[strings.ToUpper("PHONE_TYPE_"+strings.TrimSpace(cmd.Phone.PhoneType))]; !ok {
+		return fmt.Errorf("invalid phone type: must be one of the following: mobile, home, work, unspecified")
+	}
+
+	return nil
+}
+
+// DeletePhoneCmd is a model for a user's phone deletion request as it is expected to be submitted from
+// the frontend ui when deleting a phone.
+type DeletePhoneCmd struct {
+	Csrf     string `json:"csrf,omitempty"`
+	Slug     string `json:"slug"` // slug is required to identify which phone to delete
+	Username string `json:"username"`
+}
+
+// ValidateCmd performs input validation check on delete phone command fields.
+func (cmd *DeletePhoneCmd) ValidateCmd() error {
+
+	//  csrf token
+	if len(cmd.Csrf) <= 16 || len((strings.TrimSpace(cmd.Csrf))) > 64 {
+		return fmt.Errorf("invalid csrf token: must be between 16 and 64 characters")
+	}
+
+	// slug is required and must be valid
+	if len(cmd.Slug) < 16 || len(cmd.Slug) > 64 {
+		return fmt.Errorf("invalid slug: must be between 16 and 64 characters")
+	}
+
+	// username is required and must be a valid email
+	if err := validate.IsValidEmail(strings.TrimSpace(cmd.Username)); err != nil {
+		return fmt.Errorf("invalid username: %v", err)
+	}
+
+	return nil
+}

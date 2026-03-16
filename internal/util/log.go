@@ -35,6 +35,7 @@ const (
 	ComponentNotification         string = "notifications"
 	ComponentOauth                string = "oauth flow exchange"
 	ComponentPermissions          string = "permissions"
+	ComponentPhones               string = "phones"
 	ComponentProfile              string = "profile"
 	ComponentRegister             string = "register"
 	ComponentResetUser            string = "user password reset"

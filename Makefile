@@ -48,7 +48,7 @@ fmt-go: .tools-install
 
 .PHONY: clean-build
 clean-build:
-	rm -rf build/
+	rm -rf build/ gen/
 
 .PHONY: clean-proto
 clean-proto:

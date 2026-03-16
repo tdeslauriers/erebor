@@ -1,13 +1,17 @@
 # build app
-FROM golang:1.24 AS builder
+FROM golang:1.25 AS builder
 
 WORKDIR /app
+
+RUN apt-get update && apt-get install -y make && rm -rf /var/lib/apt/lists/*
 
 COPY go.mod go.sum ./
 
 RUN go mod download
 
 COPY . .
+
+RUN make build
 
 RUN go build -o main ./cmd
 

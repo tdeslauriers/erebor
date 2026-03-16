@@ -304,12 +304,21 @@ func (g *gateway) Run() error {
 	mux.HandleFunc("/users/scopes", accounts.HandleScopes)
 	mux.HandleFunc("/users/permissions", accounts.HandlePermissions)
 
+	// user addresses
 	addresses := user.NewAddressHandler(
 		g.uxSession,
 		g.tknProvider,
 		g.profileConn,
 	)
-	mux.HandleFunc("/addresses/{slug...}", addresses.HandleAddress)
+	mux.HandleFunc("/addresses", addresses.HandleAddress)
+
+	// user phones
+	phones := user.NewPhoneHandler(
+		g.uxSession,
+		g.tknProvider,
+		g.profileConn,
+	)
+	mux.HandleFunc("/phones", phones.HandlePhones)
 
 	// scopes
 	scope := scopes.NewHandler(g.uxSession, g.tknProvider, g.s2s)

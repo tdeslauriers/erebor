@@ -195,6 +195,8 @@ func (h *profileHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 		profile.Phones = p.Phone
 	}
 
+	log.Info(fmt.Sprintf("successfully retrieved %+v", profile))
+
 	// profile model will be returned to the client
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
