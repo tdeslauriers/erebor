@@ -302,45 +302,13 @@ func (cmd *DeleteAddressCmd) ValidateCmd() error {
 	return nil
 }
 
-// Phone is a model for a user's phone number as it is expected to be returned to the frontend ui.
-type Phone struct {
-	Id          string          `json:"id,omitempty"`
-	Slug        string          `json:"slug,omitempty"`
-	CountryCode string          `json:"country_code"`
-	PhoneNumber string          `json:"phone_number"`
-	Extension   *string         `json:"extension,omitempty"`
-	PhoneType   string          `json:"phone_type"`
-	IsCurrent   bool            `json:"is_current"`
-	IsPrimary   bool            `json:"is_primary"`
-	CreatedAt   data.CustomTime `json:"created_at"`
-	UpdatedAt   data.CustomTime `json:"updated_at"`
-}
-
-// GetExtension returns the phone extension if it exists, or an empty string if it does not.
-func (p *Phone) GetExtension() string {
-	if p.Extension != nil {
-		return *p.Extension
-	}
-	return ""
-}
-
-// ValidPhoneTypes is a map of front end phone types to their corresponding gen.PhoneType values.
-// Used for validating phone type input from the frontend, and mapping to the
-// correct gen.PhoneType value for service calls.
-var ValidPhoneTypes = map[string]struct{}{
-	"MOBILE":      {},
-	"HOME":        {},
-	"WORK":        {},
-	"UNSPECIFIED": {},
-}
-
 // PhoneCmd is a model for a user's phone as it is expected to be submitted from
 // the frontend ui when creating a phone.
 type PhoneCmd struct {
-	Csrf     string `json:"csrf,omitempty"`
-	Slug     string `json:"slug,omitempty"` // slug will be empty for creates, but required for updates
-	Username string `json:"username"`
-	Phone    Phone  `json:"phone"`
+	Csrf     string    `json:"csrf,omitempty"`
+	Slug     string    `json:"slug,omitempty"` // slug will be empty for creates, but required for updates
+	Username string    `json:"username"`
+	Phone    gen.Phone `json:"phone"`
 }
 
 // ValidateCmd performs input validation check on phone fields.
@@ -381,16 +349,9 @@ func (cmd *PhoneCmd) ValidateCmd() error {
 	}
 
 	// validate phone type
-	if len(strings.TrimSpace(cmd.Phone.PhoneType)) > 32 {
-		return fmt.Errorf("invalid phone type: must be less than 32 characters")
-	}
 
-	if _, ok := ValidPhoneTypes[strings.ToUpper(strings.TrimSpace(cmd.Phone.PhoneType))]; !ok {
-		return fmt.Errorf("invalid phone type: must be one of the following: mobile, home, work, unspecified")
-	}
-
-	if _, ok := gen.PhoneType_value[strings.ToUpper("PHONE_TYPE_"+strings.TrimSpace(cmd.Phone.PhoneType))]; !ok {
-		return fmt.Errorf("invalid phone type: must be one of the following: mobile, home, work, unspecified")
+	if _, ok := gen.PhoneType_name[int32(cmd.Phone.PhoneType)]; !ok {
+		return fmt.Errorf("invalid phone type")
 	}
 
 	return nil

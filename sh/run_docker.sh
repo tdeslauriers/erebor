@@ -1,8 +1,15 @@
 #!/bin/bash
 
-docker build -t erebor:latest .
+set -euo pipefail
 
-docker run -d --rm -p $(op read "op://world_site/erebor_service_container_dev/port"):$(op read "op://world_site/erebor_service_container_dev/port") \
+IMAGE_NAME="erebor:latest"
+CONTAINER_NAME="erebor-dev"
+
+docker build --pull --no-cache -t "${IMAGE_NAME}" .
+
+docker rm -f "${CONTAINER_NAME}" >/dev/null 2>&1 || true
+
+docker run -d --rm --name "${CONTAINER_NAME}" -p $(op read "op://world_site/erebor_service_container_dev/port"):$(op read "op://world_site/erebor_service_container_dev/port") \
     -e EREBOR_SERVICE_CLIENT_ID=$(op read "op://world_site/erebor_service_container_dev/client_id") \
     -e EREBOR_SERVICE_PORT=":$(op read "op://world_site/erebor_service_container_dev/port")" \
     -e EREBOR_CA_CERT="$(op document get "service_ca_dev_cert" --vault world_site | base64 -w 0)" \
@@ -28,4 +35,4 @@ docker run -d --rm -p $(op read "op://world_site/erebor_service_container_dev/po
     -e EREBOR_OAUTH_CALLBACK_CLIENT_ID=$(op read "op://world_site/erebor_oauth_callback_dev/client_id") \
     -e EREBOR_TASKS_URL=$(op read "op://world_site/apprentice_service_container_dev/url"):$(op read "op://world_site/apprentice_service_container_dev/port") \
     -e EREBOR_GALLERY_URL=$(op read "op://world_site/pixie_service_container_dev/url"):$(op read "op://world_site/pixie_service_container_dev/port") \
-    erebor:latest
+    "${IMAGE_NAME}"

@@ -141,30 +141,15 @@ func (h *phoneHandler) createPhone(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// prepare fields for service call
-	extenstion := strings.TrimSpace(cmd.Phone.GetExtension())
-
-	// concat is safe because validateda above and just a lookup, not executed.
-	var phoneType int32
-	if val, ok := gen.PhoneType_value[strings.ToUpper("PHONE_TYPE_"+strings.TrimSpace(cmd.Phone.PhoneType))]; ok {
-		phoneType = val
-	} else {
-		log.Error("invalid phone type: must be one of the following: mobile, home, work, unspecified")
-		e := connect.ErrorHttp{
-			StatusCode: http.StatusBadRequest,
-			Message:    "invalid phone type: must be one of the following: mobile, home, work, unspecified",
-		}
-		e.SendJsonErr(w)
-		return
-	}
-
 	// build the request for the service call
+	extension := strings.TrimSpace(cmd.Phone.GetExtension())
+
 	req := &gen.CreatePhoneRequest{
 		Username:    strings.TrimSpace(cmd.Username),
 		CountryCode: strings.TrimSpace(cmd.Phone.CountryCode),
 		PhoneNumber: strings.TrimSpace(cmd.Phone.PhoneNumber),
-		Extension:   &extenstion,
-		PhoneType:   gen.PhoneType(phoneType),
+		Extension:   &extension,
+		PhoneType:   cmd.Phone.PhoneType,
 		IsCurrent:   cmd.Phone.IsCurrent,
 		IsPrimary:   cmd.Phone.IsPrimary,
 	}
@@ -262,28 +247,14 @@ func (h *phoneHandler) updatePhone(w http.ResponseWriter, r *http.Request) {
 	// prepare fields for service call
 	extenstion := strings.TrimSpace(cmd.Phone.GetExtension())
 
-	// concat is safe because validateda above and just a lookup, not executed.
-	var phoneType int32
-	if val, ok := gen.PhoneType_value[strings.ToUpper("PHONE_TYPE_"+strings.TrimSpace(cmd.Phone.PhoneType))]; ok {
-		phoneType = val
-	} else {
-		log.Error("invalid phone type: must be one of the following: mobile, home, work, unspecified")
-		e := connect.ErrorHttp{
-			StatusCode: http.StatusBadRequest,
-			Message:    "invalid phone type: must be one of the following: mobile, home, work, unspecified",
-		}
-		e.SendJsonErr(w)
-		return
-	}
-
 	// build the request for the service call
 	req := &gen.UpdatePhoneRequest{
 		Username:    strings.TrimSpace(cmd.Username),
-		PhoneSlug:   strings.TrimSpace(cmd.Phone.Slug),
+		PhoneSlug:   strings.TrimSpace(cmd.Slug),
 		CountryCode: strings.TrimSpace(cmd.Phone.CountryCode),
 		PhoneNumber: strings.TrimSpace(cmd.Phone.PhoneNumber),
 		Extension:   &extenstion,
-		PhoneType:   gen.PhoneType(phoneType),
+		PhoneType:   cmd.Phone.PhoneType,
 		IsCurrent:   cmd.Phone.IsCurrent,
 		IsPrimary:   cmd.Phone.IsPrimary,
 	}
