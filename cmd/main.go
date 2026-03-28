@@ -43,6 +43,7 @@ func main() {
 			OauthRedirect:    true,
 			Tasks:            true,
 			Gallery:          true,
+			Profiles:         true,
 		},
 	}
 

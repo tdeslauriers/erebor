@@ -3,9 +3,11 @@ package authentication
 import (
 	"context"
 	"encoding/json"
+	"erebor/gen"
 	"erebor/internal/authentication/oauth"
 	"erebor/internal/authentication/uxsession"
 	"erebor/internal/util"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -24,10 +26,11 @@ type CallbackHandler interface {
 	HandleCallback(w http.ResponseWriter, r *http.Request)
 }
 
-func NewCallbackHandler(p provider.S2sTokenProvider, iam *connect.S2sCaller, o oauth.Service, ux uxsession.Service, v jwt.Verifier) CallbackHandler {
+func NewCallbackHandler(p provider.S2sTokenProvider, iam *connect.S2sCaller, pcc gen.ProfilesClient, o oauth.Service, ux uxsession.Service, v jwt.Verifier) CallbackHandler {
 	return &callbackHandler{
 		s2sToken:  p,
 		iam:       iam,
+		profile:   pcc,
 		oAuth:     o,
 		uxSession: ux,
 		verifier:  v,
@@ -43,6 +46,7 @@ var _ CallbackHandler = (*callbackHandler)(nil)
 type callbackHandler struct {
 	s2sToken  provider.S2sTokenProvider
 	iam       *connect.S2sCaller
+	profile   gen.ProfilesClient
 	oAuth     oauth.Service
 	uxSession uxsession.Service
 	verifier  jwt.Verifier
@@ -179,8 +183,6 @@ func (h *callbackHandler) HandleCallback(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	render := BuildRender(accessToken.Claims.Scopes)
-
 	var (
 		wgPersist sync.WaitGroup
 
@@ -223,19 +225,14 @@ func (h *callbackHandler) HandleCallback(w http.ResponseWriter, r *http.Request)
 	close(errPersistChan)
 
 	if len(errPersistChan) > 0 {
-		var builder strings.Builder
-		count := 0
+		var errs []error
 		for err := range errPersistChan {
-			builder.WriteString(err.Error())
-			if count < len(errPersistChan)-1 {
-				builder.WriteString("; ")
-			}
-			count++
+			errs = append(errs, err)
 		}
-		logger.Error("failed to build authenticated session", "err", builder.String())
+		logger.Error("failed to persist session and tokens", "errs", errors.Join(errs...))
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusInternalServerError,
-			Message:    "failed to persist callback session",
+			Message:    "failed to persist session and tokens",
 		}
 		e.SendJsonErr(w)
 		return
@@ -266,6 +263,25 @@ func (h *callbackHandler) HandleCallback(w http.ResponseWriter, r *http.Request)
 		}
 	}()
 
+	// call profile service to get nickname, etc for render data
+	p, err := h.profile.GetProfile(
+		ctx,
+		&gen.GetProfileRequest{Username: idToken.Claims.Email},
+		WithUserRequired(session.SessionToken),
+	)
+	if err != nil {
+		logger.Error("failed to call profile service to get user profile data", "err", err.Error())
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusInternalServerError,
+			Message:    "failed to retrieve user profile data",
+		}
+		e.SendJsonErr(w)
+		return
+	}
+
+	// build the render data for the client
+	render := BuildRender(accessToken.Claims.Scopes)
+
 	// return authentication data
 	response := CallbackResponse{
 		Session:       session.SessionToken,
@@ -275,6 +291,7 @@ func (h *callbackHandler) HandleCallback(w http.ResponseWriter, r *http.Request)
 		Fullname:   idToken.Claims.Name,
 		GivenName:  idToken.Claims.GivenName,
 		FamilyName: idToken.Claims.FamilyName,
+		NickName:   *p.NickName,
 		// Birthdate: idToken.Claims.Birthdate,
 
 		Ux: render,

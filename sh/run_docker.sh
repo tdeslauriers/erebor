@@ -29,10 +29,11 @@ docker run -d --rm --name "${CONTAINER_NAME}" -p $(op read "op://world_site/ereb
     -e EREBOR_DATABASE_PASSWORD="$(op read "op://world_site/erebor_db_dev/password")" \
     -e EREBOR_DATABASE_HMAC_INDEX_SECRET="$(op read "op://world_site/erebor_hmac_index_secret_dev/secret")" \
     -e EREBOR_FIELD_LEVEL_AES_GCM_SECRET="$(op read "op://world_site/erebor_aes_gcm_secret_dev/secret")" \
-    -e EREBOR_USER_AUTH_URL=$(op read "op://world_site/shaw_service_container_dev/url"):$(op read "op://world_site/shaw_service_container_dev/port") \
+    -e EREBOR_USER_AUTH_URL="$(op read "op://world_site/shaw_service_container_dev/url"):$(op read "op://world_site/shaw_service_container_dev/port")" \
     -e EREBOR_USER_JWT_VERIFYING_KEY="$(op read "op://world_site/shaw_jwt_key_pair_dev/verifying_key")" \
-    -e EREBOR_OAUTH_CALLBACK_URL=$(op read "op://world_site/erebor_oauth_callback_dev/url"):$(op read "op://world_site/erebor_oauth_callback_dev/port")/callback \
-    -e EREBOR_OAUTH_CALLBACK_CLIENT_ID=$(op read "op://world_site/erebor_oauth_callback_dev/client_id") \
-    -e EREBOR_TASKS_URL=$(op read "op://world_site/apprentice_service_container_dev/url"):$(op read "op://world_site/apprentice_service_container_dev/port") \
-    -e EREBOR_GALLERY_URL=$(op read "op://world_site/pixie_service_container_dev/url"):$(op read "op://world_site/pixie_service_container_dev/port") \
+    -e EREBOR_OAUTH_CALLBACK_URL="$(op read "op://world_site/erebor_oauth_callback_dev/url"):$(op read "op://world_site/erebor_oauth_callback_dev/port")/callback" \
+    -e EREBOR_OAUTH_CALLBACK_CLIENT_ID="$(op read "op://world_site/erebor_oauth_callback_dev/client_id")" \
+    -e EREBOR_TASKS_URL="$(op read "op://world_site/apprentice_service_container_dev/url"):$(op read "op://world_site/apprentice_service_container_dev/port")" \
+    -e EREBOR_GALLERY_URL="$(op read "op://world_site/pixie_service_container_dev/url"):$(op read "op://world_site/pixie_service_container_dev/port")" \
+    -e EREBOR_PROFILES_URL="$(op read "op://world_site/silhouette_service_container_dev/url"):$(op read "op://world_site/silhouette_service_container_dev/port")" \
     "${IMAGE_NAME}"

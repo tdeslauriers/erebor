@@ -146,6 +146,11 @@ spec:
                 configMapKeyRef:
                   name: cm-gallery-service
                   key: gallery-url
+            - name: EREBOR_PROFILES_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: cm-silhouette-service
+                  key: silhouette-url
           resources:
             limits:
               memory: "128Mi"

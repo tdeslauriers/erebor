@@ -47,5 +47,6 @@ export EREBOR_OAUTH_CALLBACK_CLIENT_ID=$(op read "op://world_site/erebor_oauth_c
 
 export EREBOR_TASKS_URL=$(op read "op://world_site/apprentice_service_container_dev/url"):$(op read "op://world_site/apprentice_service_container_dev/port") 
 export EREBOR_GALLERY_URL=$(op read "op://world_site/pixie_service_container_dev/url"):$(op read "op://world_site/pixie_service_container_dev/port") 
+export EREBOR_PROFILES_URL=$(op read "op://world_site/silhouette_service_container_dev/url"):$(op read "op://world_site/silhouette_service_container_dev/port")
 
 

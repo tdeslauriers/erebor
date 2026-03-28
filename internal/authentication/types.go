@@ -18,6 +18,7 @@ type CallbackResponse struct {
 	Fullname      string `json:"fullname"`
 	GivenName     string `json:"given_name"`
 	FamilyName    string `json:"family_name"`
+	NickName      string `json:"nickname,omitempty"`
 	Birthdate     string `json:"birthdate,omitempty"`
 	Ux            Render `json:"ux_render,omitempty"`
 }

@@ -143,7 +143,7 @@ func New(config *config.Config) (Gateway, error) {
 
 	// instatiate profile service grpc client connection
 	profileConn, err := grpc.NewClient(
-		"192.168.68.54:9003", // replace with config value
+		config.Profiles.Url,
 		grpc.WithTransportCredentials(tlsCreds),
 		grpc.WithChainUnaryInterceptor(
 			exo.UnaryClientWithTelemetry(slog.Default()),
@@ -275,6 +275,7 @@ func (g *gateway) Run() error {
 	callback := authentication.NewCallbackHandler(
 		g.tknProvider,
 		g.iam,
+		g.profiles,
 		g.oAuth,
 		g.uxSession,
 		g.verifier,
