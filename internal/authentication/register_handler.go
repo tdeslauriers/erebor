@@ -145,15 +145,25 @@ func (h *registrationHandler) HandleRegistration(w http.ResponseWriter, r *http.
 	)
 	if err != nil {
 		telemetryLogger.Error(fmt.Sprintf("failed to register user %s", cmd.Username), "err", err.Error())
-
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusInternalServerError,
+			Message:    fmt.Sprintf("failed to register user %s", cmd.Username),
+		}
+		e.SendJsonErr(w)
+		return
 	}
+
+	// detach follow-up work from the request lifecycle so it can complete
+	// after the HTTP handler returns while still preserving context values
+	// such as telemetry for downstream calls.
+	detachedCtx := context.WithoutCancel(ctx)
 
 	// ghost account creation in downstream services
 	// concurrent so can return immediately --> ghost account creation abstracted from user
 	// gallery account creation
 	go func(username string) {
 
-		s2sGalleryToken, err := h.s2sToken.GetServiceToken(ctx, util.ServiceGallery)
+		s2sGalleryToken, err := h.s2sToken.GetServiceToken(detachedCtx, util.ServiceGallery)
 		if err != nil {
 			// logging only, not returning error --> hidden/abstracted from user
 			telemetryLogger.Error(fmt.Sprintf("failed to get s2s token for gallery service: %s", err.Error()))
@@ -161,7 +171,7 @@ func (h *registrationHandler) HandleRegistration(w http.ResponseWriter, r *http.
 		}
 
 		_, err = connect.PostToService[api.PatronRegisterCmd, struct{}](
-			ctx,
+			detachedCtx,
 			h.gallery,
 			"/s2s/patrons/register",
 			s2sGalleryToken,
@@ -185,13 +195,13 @@ func (h *registrationHandler) HandleRegistration(w http.ResponseWriter, r *http.
 		grpcTelemetry := exo.GrpcTelemetry{Traceparent: telemetry.Traceparent}
 
 		// add grpc telemetry to context for downstream grpc call
-		ctx, _ = exo.GetTraceparentForOutgoingCall(ctx, &grpcTelemetry, telemetryLogger)
+		detachedCtx, _ = exo.GetTraceparentForOutgoingCall(detachedCtx, &grpcTelemetry, telemetryLogger)
 
 		// call profile service to create ghost profile for user
-		_, err = h.profileSvc.CreateProfile(ctx, &gen.CreateProfileRequest{Username: username}, WithS2SOnly())
+		_, err = h.profileSvc.CreateProfile(detachedCtx, &gen.CreateProfileRequest{Username: username}, WithS2SOnly())
 		if err != nil {
 			// logging only, not returning error --> hidden/abstracted from user
-			telemetryLogger.Error(fmt.Sprintf("failed to create account in profile servicefor user %s", username),
+			telemetryLogger.Error(fmt.Sprintf("failed to create account in profile service for user %s", username),
 				"err", err.Error(),
 			)
 			return
