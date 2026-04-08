@@ -235,7 +235,8 @@ func (s *service) build() (*OauthExchange, error) {
 		defer wgExchange.Done()
 		cipher, err := s.cryptor.EncryptServiceData([]byte(string(types.AuthCode))) // responseType "enum" value TODO: rename to AuthCodeType
 		if err != nil {
-			errChan <- fmt.Errorf("%s: %v", cipher, err)
+			errChan <- fmt.Errorf("failed to encrypt response type: %v", err)
+			return
 		}
 		*encrypted = cipher
 	}(&encryptedResponseType, errChan, &wgExchange)
@@ -248,12 +249,14 @@ func (s *service) build() (*OauthExchange, error) {
 		n, err := uuid.NewRandom()
 		if err != nil {
 			errChan <- fmt.Errorf("%s: %v", ErrGenNonce, err)
+			return
 		}
 		*nonce = n
 
 		cipher, err := s.cryptor.EncryptServiceData([]byte(nonce.String()))
 		if err != nil {
 			errChan <- fmt.Errorf("%s: %v", ErrEncryptNonce, err)
+			return
 		}
 		*encrypted = cipher
 	}(&nonce, &encryptedNonce, errChan, &wgExchange)
@@ -267,18 +270,21 @@ func (s *service) build() (*OauthExchange, error) {
 		st, err := uuid.NewRandom()
 		if err != nil {
 			errChan <- fmt.Errorf("%s: %v", ErrGenState, err)
+			return
 		}
 		*state = st
 
 		i, err := s.indexer.ObtainBlindIndex(state.String())
 		if err != nil {
 			errChan <- fmt.Errorf("%s: %v", ErrGenSessionIndex, err)
+			return
 		}
 		*index = i
 
 		cipher, err := s.cryptor.EncryptServiceData([]byte(state.String()))
 		if err != nil {
 			errChan <- fmt.Errorf("%s: %v", ErrEncryptState, err)
+			return
 		}
 		*encrypted = cipher
 	}(&state, &index, &encryptedState, errChan, &wgExchange)
@@ -290,6 +296,7 @@ func (s *service) build() (*OauthExchange, error) {
 		cipher, err := s.cryptor.EncryptServiceData([]byte(s.oauth.CallbackClientId))
 		if err != nil {
 			errChan <- fmt.Errorf("%s: %v", ErrEncryptCallbackClientId, err)
+			return
 		}
 		*encrypted = cipher
 	}(&encryptedClientId, errChan, &wgExchange)
@@ -301,6 +308,7 @@ func (s *service) build() (*OauthExchange, error) {
 		cipher, err := s.cryptor.EncryptServiceData([]byte(s.oauth.CallbackUrl))
 		if err != nil {
 			errChan <- fmt.Errorf("%s: %v", ErrEncryptCallbackRedirectUrl, err)
+			return
 		}
 		*encrypted = cipher
 	}(&encryptedRedirect, errChan, &wgExchange)
@@ -310,18 +318,11 @@ func (s *service) build() (*OauthExchange, error) {
 
 	// aggregate any errors and return
 	if len(errChan) > 0 {
-		var builder strings.Builder
-		count := 0
+		var errs []error
 		for e := range errChan {
-			builder.WriteString(e.Error())
-			if len(errChan) > 1 && count < len(errChan)-1 {
-				builder.WriteString("; ")
-			}
-			count++
+			errs = append(errs, e)
 		}
-		// return all errors as a single error: all are 500s
-		// exit the function
-		return nil, errors.New(builder.String())
+		return nil, errors.Join(errs...)
 	}
 
 	currentTime := time.Now().UTC()
@@ -496,6 +497,7 @@ func (s *service) decrypt(encrypted, errDecrypt string, decrypted *string, errCh
 	if err != nil {
 
 		errChan <- fmt.Errorf("%s: %v", errDecrypt, err)
+		return
 	}
 	*decrypted = string(d)
 }

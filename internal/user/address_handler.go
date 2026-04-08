@@ -141,7 +141,7 @@ func (h *addressHandler) createAddress(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// build request for profile service
-	trimmedStreetAddress_2 := strings.TrimSpace(*cmd.Address.StreetAddress_2)
+	trimmedStreetAddress_2 := strings.TrimSpace(cmd.Address.GetStreetAddress_2())
 
 	req := &gen.CreateAddressRequest{
 		Username:        strings.TrimSpace(cmd.Username),
@@ -248,7 +248,7 @@ func (h *addressHandler) updateAddress(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// build request for profile service
-	trimmedStreetAddress_2 := strings.TrimSpace(*cmd.Address.StreetAddress_2)
+	trimmedStreetAddress_2 := strings.TrimSpace(cmd.Address.GetStreetAddress_2())
 
 	updated := &gen.UpdateAddressRequest{
 		Username:        strings.TrimSpace(cmd.Username),

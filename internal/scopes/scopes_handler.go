@@ -76,7 +76,7 @@ func (h *handler) HandleScopes(w http.ResponseWriter, r *http.Request) {
 			tel := connect.NewTelemetry(r, h.logger)
 			log := h.logger.With(tel.TelemetryFields()...)
 
-			log.Error(fmt.Sprintf("invalid slug submitted to /scopes/%s", slug[:10]+"..."))
+			log.Error(fmt.Sprintf("invalid slug submitted to /scopes/%s", slug))
 			e := connect.ErrorHttp{
 				StatusCode: http.StatusMethodNotAllowed,
 				Message:    "invalid slug submitted to /scopes/",
@@ -94,7 +94,7 @@ func (h *handler) HandleScopes(w http.ResponseWriter, r *http.Request) {
 		log.Error(fmt.Sprintf("unsupported method %s for endpoint %s", r.Method, r.URL.Path))
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusMethodNotAllowed,
-			Message:    fmt.Sprintf("unsupported method %s for endpoint %s", r.Method, r.URL.Path[:100]),
+			Message:    fmt.Sprintf("unsupported method %s for endpoint %s", r.Method, r.URL.Path),
 		}
 		e.SendJsonErr(w)
 		return
@@ -462,7 +462,7 @@ func (h *handler) handlePut(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Error(fmt.Sprintf("successfully updated scope %s in s2s service", response.Name))
+	log.Info(fmt.Sprintf("successfully updated scope %s in s2s service", response.Name))
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)

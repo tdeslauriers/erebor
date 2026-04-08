@@ -244,7 +244,7 @@ func (cmd *AddressCmd) ValidateCmd() error {
 	}
 
 	// validate street address line 2 - optional but if present must be valid
-	if strings.TrimSpace(*cmd.Address.StreetAddress_2) != "" {
+	if strings.TrimSpace(cmd.Address.GetStreetAddress_2()) != "" {
 		if err := validate.ValidateStreetAddress2(strings.TrimSpace(*cmd.Address.StreetAddress_2)); err != nil {
 			return fmt.Errorf("invalid street address line 2: %v", err)
 		}

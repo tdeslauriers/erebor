@@ -116,10 +116,10 @@ func (s *userAccountService) ReconcileGalleryAccounts() {
 			}
 
 			log.Info(fmt.Sprintf("reconciling %d gallery accounts", len(users)))
+			s2sGalleryToken, err := s.token.GetServiceToken(ctx, util.ServiceGallery)
 			for _, user := range users {
 
 				// create ghost account in gallery service
-				s2sGalleryToken, err := s.token.GetServiceToken(ctx, util.ServiceGallery)
 				if err != nil {
 					log.Error("failed to get service token for gallery service", "err", err.Error())
 					continue

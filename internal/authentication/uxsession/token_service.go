@@ -34,6 +34,7 @@ type TokenService interface {
 
 	// PersistXref persists the xref between the authenticated uxsession and the access token.
 	PersistXref(xref SessionAccessXref) error
+
 }
 
 // NewTokenService creates a new instance of the TokenService interface, returning a concrete implementation.

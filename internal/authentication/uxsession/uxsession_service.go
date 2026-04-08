@@ -454,10 +454,14 @@ func (s *uxSession) removeAccessTokens(ctx context.Context, sessionId string, er
 	}
 
 	// remove xref records
-	var wgXref sync.WaitGroup
+	var (
+		xrefWg      sync.WaitGroup
+		xrefErrChan = make(chan error, len(live)) // buffer size of number of live tokens since in worst case we could have an error for each token
+	)
+
 	for _, token := range live {
 		// remove xref records
-		wgXref.Add(1)
+		xrefWg.Add(1)
 		go func(id int, ch chan error, wg *sync.WaitGroup) {
 			defer wg.Done()
 
@@ -466,17 +470,33 @@ func (s *uxSession) removeAccessTokens(ctx context.Context, sessionId string, er
 			}
 
 			telemetryLogger.Info(fmt.Sprintf("successfully removed uxsession_accesstoken xref id %d", id))
-		}(token.Id, errChan, &wgXref)
+		}(token.Id, xrefErrChan, &xrefWg)
 	}
 
 	// need to wait until xrefs deleted or foreign key constraint will prevent deletion of access token(s)
-	wgXref.Wait()
-	// errors collected to primary error channel
+	xrefWg.Wait()
+	close(xrefErrChan)
+
+	// check for xref deletion errors before proceeding to delete access tokens and call identity service to destroy refresh tokens
+	if len(xrefErrChan) > 0 {
+		var errs []error
+		for err := range xrefErrChan {
+			errs = append(errs, err)
+		}
+		errChan <- fmt.Errorf("failed to delete session_access_token xrefs for session id %s: %v", sessionId, errors.Join(errs...))
+		return
+	}
+
+	// remove access tokens and call identity service to destroy refresh tokens
+	var (
+		accessTokenWg sync.WaitGroup
+		accessErrChan = make(chan error, len(live)) // buffer size of number of live tokens since in worst case we could have an error for each token
+	)
 
 	for _, token := range live {
 
 		// delete access token from local db
-		wg.Add(1) // adding to primary wait group
+		accessTokenWg.Add(1) // adding to primary wait group
 		go func(id string, ch chan error, wg *sync.WaitGroup) {
 			defer wg.Done()
 
@@ -486,10 +506,10 @@ func (s *uxSession) removeAccessTokens(ctx context.Context, sessionId string, er
 			}
 
 			telemetryLogger.Info(fmt.Sprintf("successfully removed access token id/jti %s", id))
-		}(token.AccessTokenId, errChan, wg)
+		}(token.AccessTokenId, accessErrChan, &accessTokenWg)
 
 		// call identity service to destroy refresh token
-		wg.Add(1) // adding to primary wait group
+		accessTokenWg.Add(1) // adding to primary wait group
 		go func(encrypted, jti, s2sBearer string, ch chan error, wg *sync.WaitGroup) {
 			defer wg.Done()
 
@@ -515,7 +535,20 @@ func (s *uxSession) removeAccessTokens(ctx context.Context, sessionId string, er
 			}
 
 			telemetryLogger.Info(fmt.Sprintf("successfully destroyed refresh token xxxxxx-%s", refresh[len(refresh)-6:]))
-		}(token.RefreshToken, token.AccessTokenId, s2sToken, errChan, wg)
+		}(token.RefreshToken, token.AccessTokenId, s2sToken, accessErrChan, &accessTokenWg)
+	}
+
+	accessTokenWg.Wait()
+	close(accessErrChan)
+
+	// check for access token deletion and identity service call errors
+	if len(accessErrChan) > 0 {
+		var errs []error
+		for err := range accessErrChan {
+			errs = append(errs, err)
+		}
+		errChan <- fmt.Errorf("failed to delete access tokens and/or destroy refresh tokens for session id %s: %v", sessionId, errors.Join(errs...))
+		return
 	}
 }
 
@@ -537,12 +570,15 @@ func (s *uxSession) removeOauthFlow(sessionId string, errChan chan error, wg *sy
 	}
 
 	// remove oauth flow records
-	var wgXref sync.WaitGroup
+	var (
+		xrefWg      sync.WaitGroup
+		xrefErrChan = make(chan error, len(oauthXref))
+	)
 
 	// remove xref records
 	for _, xref := range oauthXref {
 		// using the primary wait group
-		wgXref.Add(1)
+		xrefWg.Add(1)
 		go func(id int, ch chan error, wg *sync.WaitGroup) {
 			defer wg.Done()
 
@@ -552,11 +588,27 @@ func (s *uxSession) removeOauthFlow(sessionId string, errChan chan error, wg *sy
 			}
 
 			s.logger.Info(fmt.Sprintf("successfully removed oauth flow id %d", id))
-		}(xref.Id, errChan, &wgXref)
+		}(xref.Id, xrefErrChan, &xrefWg)
 	}
+
 	// need to wait until xrefs deleted or foreign key constraint will prevent deletion of oauth flow(s)
-	wgXref.Wait()
-	// errors collected to primary error channel
+	xrefWg.Wait()
+	close(xrefErrChan)
+
+	// check for xref deletion errors before proceeding to delete oauth flows
+	if len(xrefErrChan) > 0 {
+		var errs []error
+		for err := range xrefErrChan {
+			errs = append(errs, err)
+		}
+		errChan <- fmt.Errorf("failed to delete session_oauthflow xrefs for session id %s: %v", sessionId, errors.Join(errs...))
+		return
+	}
+
+	var (
+		oauthWg      sync.WaitGroup
+		oauthErrChan = make(chan error, len(oauthXref)) // buffer size of number of oauth xrefs since in worst case we could have an error for each one
+	)
 
 	for _, xref := range oauthXref {
 		wg.Add(1) // adding to primary wait group
@@ -569,7 +621,20 @@ func (s *uxSession) removeOauthFlow(sessionId string, errChan chan error, wg *sy
 			}
 
 			s.logger.Info(fmt.Sprintf("successfully removed oauthflow id %s", id))
-		}(xref.OauthExchangeId, errChan, wg)
+		}(xref.OauthExchangeId, oauthErrChan, &oauthWg)
+	}
+
+	oauthWg.Wait()
+	close(oauthErrChan)
+
+	// check for oauth flow deletion errors
+	if len(oauthErrChan) > 0 {
+		var errs []error
+		for err := range oauthErrChan {
+			errs = append(errs, err)
+		}
+		errChan <- fmt.Errorf("failed to delete oauthflow records for session id %s: %v", sessionId, errors.Join(errs...))
+		return
 	}
 }
 
@@ -596,6 +661,12 @@ func (s *errService) HandleSessionErr(err error, w http.ResponseWriter) {
 
 	switch {
 	case strings.Contains(err.Error(), ErrInvalidSession):
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusUnauthorized,
+			Message:    ErrInvalidSession,
+		}
+		e.SendJsonErr(w)
+		return
 	case strings.Contains(err.Error(), ErrInvalidCsrf):
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusUnauthorized,

@@ -80,8 +80,16 @@ func (a *authInterceptor) Unary() grpc.UnaryClientInterceptor {
 			}
 		}
 
+		svcName, err := parseServiceName(grpcSvcName)
+		if err != nil {
+			log.Error(fmt.Sprintf("failed to parse service name from grpc service name: %s", grpcSvcName),
+				"err", err.Error(),
+			)
+			return err
+		}
+
 		// set service token
-		s2sToken, err := a.tknProvider.GetServiceToken(ctx, parseServiceName(grpcSvcName))
+		s2sToken, err := a.tknProvider.GetServiceToken(ctx, svcName)
 		if err != nil {
 			log.Error(fmt.Sprintf("failed to get s2s token for %s %s call", grpcSvcName, methodName),
 				"err", err.Error(),
@@ -156,12 +164,19 @@ func parseMethod(fullMethod string) (service, method string) {
 
 // helper method to get the service name from the full grpc service name
 // e.g., com.silhouette.api.v1.Profiles -> silhouette
-func parseServiceName(grpcSvcName string) string {
+func parseServiceName(grpcSvcName string) (string, error) {
 
 	// split by '.'
 	parts := strings.Split(grpcSvcName, ".")
 
-	return parts[1]
+	// service name should be the second to last part of the grpc service name
+	// validate there are enough parts to extract service name
+	// it should never happen that they're are not, but just in case
+	if len(parts) < 2 {
+		return "", fmt.Errorf("invalid grpc service name: %s", grpcSvcName)
+	}
+
+	return parts[1], nil
 }
 
 // used to determine if call method is s2s only or if a user token is required

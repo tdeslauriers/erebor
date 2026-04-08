@@ -291,7 +291,7 @@ func (h *callbackHandler) HandleCallback(w http.ResponseWriter, r *http.Request)
 		Fullname:   idToken.Claims.Name,
 		GivenName:  idToken.Claims.GivenName,
 		FamilyName: idToken.Claims.FamilyName,
-		NickName:   *p.NickName,
+		NickName:   p.GetNickName(),
 		// Birthdate: idToken.Claims.Birthdate,
 
 		Ux: render,
@@ -322,6 +322,7 @@ func (h *callbackHandler) verify(token, errMsg string, jot *jwt.Token, ch chan e
 
 	if err := h.verifier.VerifySignature(tkn.BaseString, tkn.Signature); err != nil {
 		ch <- fmt.Errorf("%s: %v", errMsg, err)
+		return
 	}
 
 	*jot = *tkn
