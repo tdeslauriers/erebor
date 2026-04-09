@@ -607,11 +607,11 @@ func (s *uxSession) removeOauthFlow(sessionId string, errChan chan error, wg *sy
 
 	var (
 		oauthWg      sync.WaitGroup
-		oauthErrChan = make(chan error, len(oauthXref)) // buffer size of number of oauth xrefs since in worst case we could have an error for each one
+		oauthErrChan = make(chan error, len(oauthXref))
 	)
 
 	for _, xref := range oauthXref {
-		wg.Add(1) // adding to primary wait group
+		oauthWg.Add(1) // adding to primary wait group
 		go func(id string, ch chan error, wg *sync.WaitGroup) {
 			defer wg.Done()
 
