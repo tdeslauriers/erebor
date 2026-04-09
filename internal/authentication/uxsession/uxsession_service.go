@@ -255,9 +255,9 @@ func (s *uxSession) getValidSession(session string) (*UxSession, error) {
 	// Note: this is a convenience field, the real indicator is if access tokens are
 	// associated with the session
 	// just a quick sanity check only
-	if !uxSession.Authenticated {
-		return nil, fmt.Errorf("session id %s: %s", uxSession.Id, ErrSessionNotAuthenticated)
-	}
+	// if !uxSession.Authenticated {
+	// 	return nil, fmt.Errorf("session id %s: %s", uxSession.Id, ErrSessionNotAuthenticated)
+	// }
 
 	var (
 		wg        sync.WaitGroup
@@ -309,8 +309,20 @@ func (s *uxSession) getValidSession(session string) (*UxSession, error) {
 		return nil, fmt.Errorf("failed to decrypt session data for session id %s: %v", uxSession.Id, errors.Join(errs...))
 	}
 
-	uxSession.SessionToken = <-sessionCh
-	uxSession.CsrfToken = <-csrfCh
+	// check for empty strings which would indicate decryption failure, and thus invalid session
+	// check for decryption failure (channel closed without value) or empty decrypted token
+	sessionToken, ok := <-sessionCh
+	if !ok || sessionToken == "" {
+		return nil, fmt.Errorf("session id %s: %s", uxSession.Id, "session token decryption failed")
+	}
+	uxSession.SessionToken = sessionToken
+
+	// check for decryption failure (channel closed without value) or empty decrypted csrf
+	csrfToken, ok := <-csrfCh
+	if !ok || csrfToken == "" {
+		return nil, fmt.Errorf("session id %s: %s", uxSession.Id, "csrf token decryption failed")
+	}
+	uxSession.CsrfToken = csrfToken
 
 	return uxSession, nil
 }

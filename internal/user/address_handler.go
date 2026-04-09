@@ -90,8 +90,8 @@ func (h *addressHandler) createAddress(w http.ResponseWriter, r *http.Request) {
 	// add telemetry to context for downstream calls + service functions
 	ctx := context.WithValue(r.Context(), connect.TelemetryKey, tel)
 
-	// get session token from request
-	session, err := connect.GetSessionToken(r)
+	// get sessionToken token from request
+	sessionToken, err := connect.GetSessionToken(r)
 	if err != nil {
 		log.Error("failed to get session token from request", "err", err.Error())
 		h.session.HandleSessionErr(err, w)
@@ -99,7 +99,7 @@ func (h *addressHandler) createAddress(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// get valid session
-	uxSession, err := h.session.GetValidSession(session)
+	uxSession, err := h.session.GetValidSession(sessionToken)
 	if err != nil {
 		log.Error("invalid session token provided", "err", err.Error())
 		h.session.HandleSessionErr(err, w)

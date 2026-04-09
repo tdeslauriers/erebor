@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 
 	"erebor/internal/authentication/uxsession"
 	"erebor/internal/util"
@@ -69,9 +70,24 @@ func (h *loginHandler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var cmd login.UserLoginCmd
-	err := json.NewDecoder(r.Body).Decode(&cmd)
+	// get session token from request
+	sessionToken, err := connect.GetSessionToken(r)
 	if err != nil {
+		telemetryLogger.Error("failed to get session token from request", "err", err.Error())
+		h.uxSession.HandleSessionErr(err, w)
+		return
+	}
+
+	// get valid session
+	session, err := h.uxSession.GetValidSession(sessionToken)
+	if err != nil {
+		telemetryLogger.Error("invalid session token provided", "err", err.Error())
+		h.uxSession.HandleSessionErr(err, w)
+		return
+	}
+
+	var cmd login.UserLoginCmd
+	if err := json.NewDecoder(r.Body).Decode(&cmd); err != nil {
 		telemetryLogger.Error("failed to decode json in user login request body", "err", err.Error())
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusBadRequest,
@@ -93,10 +109,14 @@ func (h *loginHandler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// check for valid session with valid csrf token
-	if valid, err := h.uxSession.IsValidCsrf(cmd.Session, cmd.Csrf); !valid {
-		telemetryLogger.Error("invalid session or csrf token", "err", err.Error())
-		h.uxSession.HandleSessionErr(err, w)
+	// check for valid csrf token
+	if session.CsrfToken != strings.TrimSpace(cmd.Csrf) {
+		telemetryLogger.Error("invalid csrf token provided in request body")
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusForbidden,
+			Message:    "invalid csrf token",
+		}
+		e.SendJsonErr(w)
 		return
 	}
 
