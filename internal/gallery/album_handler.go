@@ -187,7 +187,7 @@ func (h *albumHandler) getAlbum(w http.ResponseWriter, r *http.Request) {
 	// get the slug to determine if user is going to /albums/staged or /albums/{slug}
 	slug := r.PathValue("slug")
 
-	if slug == "" || (slug != "staged" && !validate.IsValidUuid(slug)) {
+	if slug == "" {
 		log.Error("invalid album slug submitted to gateway")
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusBadRequest,
@@ -195,6 +195,18 @@ func (h *albumHandler) getAlbum(w http.ResponseWriter, r *http.Request) {
 		}
 		e.SendJsonErr(w)
 		return
+	}
+
+	if slug != "staged" {
+		if err := validate.ValidateUuid(slug); err != nil {
+			log.Error("invalid album slug submitted to gateway")
+			e := connect.ErrorHttp{
+				StatusCode: http.StatusBadRequest,
+				Message:    "invalid album slug submitted to gateway",
+			}
+			e.SendJsonErr(w)
+			return
+		}
 	}
 
 	// get service token for gallery service

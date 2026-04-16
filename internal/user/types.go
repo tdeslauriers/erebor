@@ -85,23 +85,23 @@ func (cmd *ProfileCmd) ValidateCmd() error {
 	// Username is immutable at this time, and will be dropped for update operations
 	// in the identity service, however, it is used as a lookup field for the profile service,
 	// so it is required for all operations.
-	if err := validate.IsValidEmail(strings.TrimSpace(cmd.Username)); err != nil {
+	if err := validate.ValidateEmail(strings.TrimSpace(cmd.Username)); err != nil {
 		return fmt.Errorf("invalid username: %v", err)
 	}
 
 	// validate firstname
-	if err := validate.IsValidName(strings.TrimSpace(cmd.Firstname)); err != nil {
+	if err := validate.ValidateName(strings.TrimSpace(cmd.Firstname)); err != nil {
 		return fmt.Errorf("invalid firstname: %v", err)
 	}
 
 	// validate lastname
-	if err := validate.IsValidName(strings.TrimSpace(cmd.Lastname)); err != nil {
+	if err := validate.ValidateName(strings.TrimSpace(cmd.Lastname)); err != nil {
 		return fmt.Errorf("invalid lastname: %v", err)
 	}
 
 	// validate nickname - optional but if present must be validate nickname
 	if strings.TrimSpace(cmd.NickName) != "" {
-		if err := validate.IsValidName(strings.TrimSpace(cmd.NickName)); err != nil {
+		if err := validate.ValidateName(strings.TrimSpace(cmd.NickName)); err != nil {
 			return fmt.Errorf("invalid nickname: %v", err)
 		}
 	}
@@ -167,17 +167,17 @@ type UserScopesCmd struct {
 // ValidateCmd performs input validation check on user scopes fields.
 func (cmd *UserScopesCmd) ValidateCmd() error {
 
-	if !validate.IsValidUuid(cmd.Csrf) {
+	if err := validate.ValidateUuid(cmd.Csrf); err != nil {
 		return fmt.Errorf("invalid csrf token")
 	}
 
-	if !validate.IsValidUuid(cmd.UserSlug) {
+	if err := validate.ValidateUuid(cmd.UserSlug); err != nil {
 		return fmt.Errorf("invalid user slug")
 	}
 
 	if len(cmd.ScopeSlugs) > 0 {
 		for _, slug := range cmd.ScopeSlugs {
-			if !validate.IsValidUuid(slug) {
+			if err := validate.ValidateUuid(slug); err != nil {
 				return fmt.Errorf("invalid scope slug submitted: all slugs must be valid uuids")
 			}
 		}
@@ -234,7 +234,7 @@ func (cmd *AddressCmd) ValidateCmd() error {
 	}
 
 	// username is required and must be a valid email
-	if err := validate.IsValidEmail(strings.TrimSpace(cmd.Username)); err != nil {
+	if err := validate.ValidateEmail(strings.TrimSpace(cmd.Username)); err != nil {
 		return fmt.Errorf("invalid username: %v", err)
 	}
 
@@ -295,7 +295,7 @@ func (cmd *DeleteAddressCmd) ValidateCmd() error {
 	}
 
 	// username is required and must be a valid email
-	if err := validate.IsValidEmail(strings.TrimSpace(cmd.Username)); err != nil {
+	if err := validate.ValidateEmail(strings.TrimSpace(cmd.Username)); err != nil {
 		return fmt.Errorf("invalid username: %v", err)
 	}
 
@@ -327,7 +327,7 @@ func (cmd *PhoneCmd) ValidateCmd() error {
 	}
 
 	// username is required and must be a valid email
-	if err := validate.IsValidEmail(strings.TrimSpace(cmd.Username)); err != nil {
+	if err := validate.ValidateEmail(strings.TrimSpace(cmd.Username)); err != nil {
 		return fmt.Errorf("invalid username: %v", err)
 	}
 
@@ -379,7 +379,7 @@ func (cmd *DeletePhoneCmd) ValidateCmd() error {
 	}
 
 	// username is required and must be a valid email
-	if err := validate.IsValidEmail(strings.TrimSpace(cmd.Username)); err != nil {
+	if err := validate.ValidateEmail(strings.TrimSpace(cmd.Username)); err != nil {
 		return fmt.Errorf("invalid username: %v", err)
 	}
 

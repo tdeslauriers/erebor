@@ -55,21 +55,21 @@ type RegisterClientCmd struct {
 // ValidateCmd performs input validation check on client registration fields.
 func (c *RegisterClientCmd) ValidateCmd() error {
 
-	if !validate.IsValidUuid(c.Csrf) {
+	if err := validate.ValidateUuid(c.Csrf); err != nil {
 		return fmt.Errorf("invalid csrf token")
 	}
 
 	// Id is generated at time of registration upstream, no validation needed
 
-	if valid, err := validate.IsValidServiceName(c.Name); !valid {
+	if err := validate.ValidateServiceName(c.Name); err != nil {
 		return fmt.Errorf("invalid client name: %v", err)
 	}
 
-	if err := validate.IsValidName(c.Owner); err != nil {
+	if err := validate.ValidateName(c.Owner); err != nil {
 		return fmt.Errorf("invalid client owner: %v", err)
 	}
 
-	if err := validate.IsValidPassword(c.Password); err != nil {
+	if err := validate.ValidatePassword(c.Password); err != nil {
 		return fmt.Errorf("invalid password: %v", err)
 	}
 
@@ -97,19 +97,21 @@ type ServiceClientCmd struct {
 // ValidateCmd performs input validation check on client fields.
 func (c *ServiceClientCmd) ValidateCmd() error {
 
-	if !validate.IsValidUuid(c.Csrf) {
+	if err := validate.ValidateUuid(c.Csrf); err != nil {
 		return fmt.Errorf("invalid csrf token")
 	}
 
-	if c.Id != "" && !validate.IsValidUuid(c.Id) {
-		return fmt.Errorf("invalid or not well formatted client id")
+	if c.Id != "" {
+		if err := validate.ValidateUuid(c.Id); err != nil {
+			return fmt.Errorf("invalid or not well formatted client id")
+		}
 	}
 
-	if valid, err := validate.IsValidServiceName(c.Name); !valid {
+	if err := validate.ValidateServiceName(c.Name); err != nil {
 		return fmt.Errorf("invalid client name: %v", err)
 	}
 
-	if err := validate.IsValidName(c.Owner); err != nil {
+	if err := validate.ValidateName(c.Owner); err != nil {
 		return fmt.Errorf("invalid client owner: %v", err)
 	}
 
@@ -122,8 +124,10 @@ func (c *ServiceClientCmd) ValidateCmd() error {
 
 	// AccountLocked is a boolean, no validation needed
 
-	if c.Slug != "" && !validate.IsValidUuid(c.Slug) {
-		return fmt.Errorf("invalid or not well formatted slug")
+	if c.Slug != "" {
+		if err := validate.ValidateUuid(c.Slug); err != nil {
+			return fmt.Errorf("invalid or not well formatted slug")
+		}
 	}
 
 	return nil
@@ -139,17 +143,17 @@ type ClientScopesCmd struct {
 // ValidateCmd performs input validation check on client scopes fields.
 func (cmd *ClientScopesCmd) ValidateCmd() error {
 
-	if !validate.IsValidUuid(cmd.Csrf) {
+	if err := validate.ValidateUuid(cmd.Csrf); err != nil {
 		return fmt.Errorf("invalid csrf token")
 	}
 
-	if !validate.IsValidUuid(cmd.ClientSlug) {
+	if err := validate.ValidateUuid(cmd.ClientSlug); err != nil {
 		return fmt.Errorf("invalid client slug")
 	}
 
 	if len(cmd.ScopeSlugs) > 0 {
 		for _, slug := range cmd.ScopeSlugs {
-			if !validate.IsValidUuid(slug) {
+			if err := validate.ValidateUuid(slug); err != nil {
 				return fmt.Errorf("invalid scope slug submitted: all slugs must be valid uuids")
 			}
 		}

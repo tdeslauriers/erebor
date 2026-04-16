@@ -46,19 +46,19 @@ type CreateAllowanceCmd struct {
 // ValidateCmd performs input validation check on allowance account creation fields.
 func (c *CreateAllowanceCmd) ValidateCmd() error {
 
-	if !validate.IsValidUuid(c.Csrf) {
+	if err := validate.ValidateUuid(c.Csrf); err != nil {
 		return fmt.Errorf("invalid csrf token")
 	}
 
-	if err := validate.IsValidEmail(c.Username); err != nil {
+	if err := validate.ValidateEmail(c.Username); err != nil {
 		return fmt.Errorf("invalid username: %v", err)
 	}
 
-	if !validate.IsValidUuid(c.Slug) {
+	if err := validate.ValidateUuid(c.Slug); err != nil {
 		return fmt.Errorf("invalid slug")
 	}
 
-	if err := validate.IsValidBirthday(c.BirthDate); err != nil {
+	if err := validate.ValidateBirthday(c.BirthDate); err != nil {
 		return fmt.Errorf("invalid birth date: %v", err)
 	}
 

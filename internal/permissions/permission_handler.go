@@ -264,7 +264,7 @@ func (h *handler) getPermissionBySlug(w http.ResponseWriter, r *http.Request) {
 	}
 
 	slug := parts[1]
-	if valid := validate.IsValidUuid(slug); !valid {
+	if err := validate.ValidateUuid(slug); err != nil {
 		log.Error(fmt.Sprintf("invalid permission slug: %s", slug))
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusBadRequest,
@@ -546,7 +546,7 @@ func (h *handler) updatePermission(w http.ResponseWriter, r *http.Request) {
 	}
 
 	slug := parts[1]
-	if valid := validate.IsValidUuid(slug); !valid {
+	if err := validate.ValidateUuid(slug); err != nil {
 		log.Error(fmt.Sprintf("invalid permission slug: %s", slug))
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusBadRequest,

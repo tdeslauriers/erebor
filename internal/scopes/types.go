@@ -21,25 +21,25 @@ type ScopeCmd struct {
 
 func (s *ScopeCmd) Validate() error {
 
-	if !validate.IsValidUuid(s.Csrf) {
+	if err := validate.ValidateUuid(s.Csrf); err != nil {
 		return fmt.Errorf("invalid csrf token")
 	}
 
 	if s.Uuid != "" {
-		if !validate.IsValidUuid(s.Uuid) {
+		if err := validate.ValidateUuid(s.Uuid); err != nil {
 			return fmt.Errorf("invalid scope id in scope payload")
 		}
 	}
 
-	if ok, err := validate.IsValidServiceName(s.ServiceName); !ok {
+	if err := validate.ValidateServiceName(s.ServiceName); err != nil {
 		return fmt.Errorf("invalid service name in scope payload: %v", err)
 	}
 
-	if ok, err := validate.IsValidScope(s.Scope); !ok {
+	if err := validate.ValidateScope(s.Scope); err != nil {
 		return fmt.Errorf("invalid scope in scope payload: %v", err)
 	}
 
-	if ok, err := validate.IsValidScopeName(s.Name); !ok {
+	if err := validate.ValidateScopeName(s.Name); err != nil {
 		return fmt.Errorf("invalid scope name in scope payload: %v", err)
 	}
 
@@ -48,7 +48,7 @@ func (s *ScopeCmd) Validate() error {
 	}
 
 	if s.Slug != "" {
-		if !validate.IsValidUuid(s.Slug) {
+		if err := validate.ValidateUuid(s.Slug); err != nil {
 			return fmt.Errorf("invalid slug in scope payload")
 		}
 	}

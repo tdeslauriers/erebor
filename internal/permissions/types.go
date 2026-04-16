@@ -42,12 +42,12 @@ type ServicePermission struct {
 // Validate checks if the UpdatePermissionsGateway payload is valid
 func (p *UpdatePermissionsCmd) Validate() error {
 	// check csrf token
-	if !validate.IsValidUuid(p.Csrf) {
+	if err := validate.ValidateUuid(p.Csrf); err != nil {
 		return fmt.Errorf("invalid csrf token in update permissions payload")
 	}
 
 	// check entity slug
-	if !validate.IsValidUuid(p.EntitySlug) {
+	if err := validate.ValidateUuid(p.EntitySlug); err != nil {
 		return fmt.Errorf("invalid entity slug in update permissions payload")
 	}
 
@@ -64,7 +64,7 @@ func (p *UpdatePermissionsCmd) Validate() error {
 		}
 
 		// check if permission slug is well formed uuid
-		if !validate.IsValidUuid(perm.PermissionSlug) {
+		if err := validate.ValidateUuid(perm.PermissionSlug); err != nil {
 			return fmt.Errorf("invalid permission name in update permissions payload: %s", perm)
 		}
 	}
