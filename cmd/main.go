@@ -1,8 +1,11 @@
 package main
 
 import (
+	"context"
 	"erebor/internal/util"
 	"fmt"
+	"os/signal"
+	"syscall"
 
 	"erebor/internal/gateway"
 	"log/slog"
@@ -61,10 +64,13 @@ func main() {
 
 	defer gateway.Close()
 
-	if err := gateway.Run(); err != nil {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	if err := gateway.Run(ctx); err != nil {
 		logger.Error(fmt.Sprintf("failed to run %s gateway", config.ServiceName), "err", err.Error())
 		os.Exit(1)
 	}
 
-	select {}
+	<-ctx.Done()
 }

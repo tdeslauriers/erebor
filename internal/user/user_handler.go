@@ -502,7 +502,7 @@ func (h *userHandler) getPermissions(
 ) ([]permissions.PermissionRecord, error) {
 
 	// check user scopes to determine which services to call for permissions
-	jot, err := jwt.BuildFromToken(accessToken)
+	jot, err := jwt.BuildTokenFromRaw(accessToken)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build JWT from access token: %v", err)
 	}

@@ -131,7 +131,7 @@ func (h *resetHandler) HandleReset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	jot, err := jwt.BuildFromToken(accessToken)
+	jot, err := jwt.BuildTokenFromRaw(accessToken)
 	if err != nil {
 		h.logger.Error(fmt.Sprintf("failed to build jwt from access token: %v", err))
 		// no error needed since this is a convenience function

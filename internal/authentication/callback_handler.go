@@ -314,7 +314,7 @@ func (h *callbackHandler) verify(token, errMsg string, jot *jwt.Token, ch chan e
 
 	defer wg.Done()
 
-	tkn, err := jwt.BuildFromToken(token)
+	tkn, err := jwt.BuildTokenFromRaw(token)
 	if err != nil {
 		ch <- fmt.Errorf("%s: %v", errMsg, err)
 		return

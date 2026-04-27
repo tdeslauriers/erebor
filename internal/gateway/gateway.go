@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"context"
 	"crypto/ecdsa"
 	"crypto/tls"
 	"crypto/x509"
@@ -38,7 +39,7 @@ import (
 )
 
 type Gateway interface {
-	Run() error
+	Run(ctx context.Context) error
 	Close() error
 }
 
@@ -240,7 +241,7 @@ func (g *gateway) Close() error {
 	return nil
 }
 
-func (g *gateway) Run() error {
+func (g *gateway) Run(ctx context.Context) error {
 
 	// setup mux
 	mux := http.NewServeMux()
@@ -365,9 +366,9 @@ func (g *gateway) Run() error {
 		}
 	}()
 
-	g.cleanup.ExpiredAccess()
-	g.cleanup.ExpiredS2s()
-	g.cleanup.ExpiredSession(1)
+	g.cleanup.ExpiredAccess(ctx)
+	g.cleanup.ExpiredS2s(ctx)
+	g.cleanup.ExpiredSession(ctx, 1)
 	g.cleanup.ReconcileGalleryAccounts()
 	g.cleanup.ReconcileProfileAccounts()
 
