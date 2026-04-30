@@ -4,7 +4,7 @@ go 1.25.4
 
 require (
 	github.com/tdeslauriers/apprentice v0.1.4
-	github.com/tdeslauriers/carapace v0.4.3
+	github.com/tdeslauriers/carapace v0.4.4
 	github.com/tdeslauriers/pixie v0.1.8
 	github.com/tdeslauriers/ran v0.1.4
 	github.com/tdeslauriers/shaw v0.1.7
