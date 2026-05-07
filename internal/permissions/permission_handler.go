@@ -405,7 +405,7 @@ func (h *handler) createPermission(w http.ResponseWriter, r *http.Request) {
 	cmd.Csrf = ""
 
 	// determine which service to send the permission to
-	service, err := selectService(cmd.ServiceName)
+	service, err := selectService(strings.TrimSpace(strings.ToLower(cmd.ServiceName)))
 	if err != nil {
 		log.Error(fmt.Sprintf("failed to provide valid service for permission creation: %s", err.Error()))
 		e := connect.ErrorHttp{
@@ -534,7 +534,7 @@ func (h *handler) updatePermission(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// determine which service to send the permission to
-	service, err := selectService(parts[0])
+	service, err := selectService(strings.TrimSpace(strings.ToLower(parts[0])))
 	if err != nil {
 		log.Error("failed to select valid service for permission update", "err", err.Error())
 		e := connect.ErrorHttp{
