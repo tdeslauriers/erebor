@@ -17,9 +17,8 @@ var serviceSelection = map[string]struct{}{
 // selectSerivce returns the canonical name of the service
 func selectService(service string) (string, error) {
 	// check if the service is in the selection map
-	key := strings.TrimSpace(strings.ToLower(service))
-	if _, ok := serviceSelection[key]; ok {
-		return key, nil
+	if _, ok := serviceSelection[service]; ok {
+		return service, nil
 	}
 	return "", fmt.Errorf("service %s not found in allowed service selection", service)
 }

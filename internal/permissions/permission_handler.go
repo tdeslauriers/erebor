@@ -252,7 +252,7 @@ func (h *handler) getPermissionBySlug(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// determine which service to send the permission to
-	service, err := selectService(parts[0])
+	service, err := selectService(strings.TrimSpace(strings.ToLower(parts[0])))
 	if err != nil {
 		log.Error("failed to select service for permission retrieval", "err", err.Error())
 		e := connect.ErrorHttp{
