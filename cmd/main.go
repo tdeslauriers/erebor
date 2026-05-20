@@ -71,6 +71,4 @@ func main() {
 		logger.Error(fmt.Sprintf("failed to run %s gateway", config.ServiceName), "err", err.Error())
 		os.Exit(1)
 	}
-
-	<-ctx.Done()
 }

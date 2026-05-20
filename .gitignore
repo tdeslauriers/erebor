@@ -38,3 +38,5 @@ build-errors.log
 **/*.pb.go
 **/*.pb.gw.go
 gen/
+
+.claude/

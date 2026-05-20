@@ -11,6 +11,7 @@ import (
 
 	"github.com/tdeslauriers/apprentice/pkg/api/allowances"
 	"github.com/tdeslauriers/carapace/pkg/connect"
+	"github.com/tdeslauriers/carapace/pkg/connect/telemetry"
 	"github.com/tdeslauriers/carapace/pkg/session/provider"
 )
 
@@ -69,7 +70,7 @@ func (h *allowanceHandler) HandleAccount(w http.ResponseWriter, r *http.Request)
 		return
 	default:
 		// build/collect telemetry and add fields to the logger
-		tel := connect.NewTelemetry(r, h.logger)
+		tel := telemetry.ObtainHttpTelemetry(r, h.logger)
 		log := h.logger.With(tel.TelemetryFields()...)
 
 		log.Error(fmt.Sprintf("unsupported method %s for endpoint %s", r.Method, r.URL.Path))
@@ -86,11 +87,11 @@ func (h *allowanceHandler) HandleAccount(w http.ResponseWriter, r *http.Request)
 func (h *allowanceHandler) handleGetAccount(w http.ResponseWriter, r *http.Request) {
 
 	// build/collect telemetry and add fields to the logger
-	tel := connect.NewTelemetry(r, h.logger)
+	tel := telemetry.ObtainHttpTelemetry(r, h.logger)
 	log := h.logger.With(tel.TelemetryFields()...)
 
 	// add telemetry to context for call stack + service functions
-	ctx := context.WithValue(r.Context(), connect.TelemetryKey, tel)
+	ctx := context.WithValue(r.Context(), telemetry.TelemetryKey, tel)
 
 	// get session token from the request header
 	session, err := connect.GetSessionToken(r)
@@ -155,11 +156,11 @@ func (h *allowanceHandler) handleGetAccount(w http.ResponseWriter, r *http.Reque
 func (h *allowanceHandler) handleUpdateAccount(w http.ResponseWriter, r *http.Request) {
 
 	// build/collect telemetry and add fields to the logger
-	tel := connect.NewTelemetry(r, h.logger)
+	tel := telemetry.ObtainHttpTelemetry(r, h.logger)
 	log := h.logger.With(tel.TelemetryFields()...)
 
 	// add telemetry to context for downstream calls + service functions
-	ctx := context.WithValue(r.Context(), connect.TelemetryKey, tel)
+	ctx := context.WithValue(r.Context(), telemetry.TelemetryKey, tel)
 
 	// get session token from the request header
 	session, err := connect.GetSessionToken(r)
@@ -279,7 +280,7 @@ func (h *allowanceHandler) HandleAllowances(w http.ResponseWriter, r *http.Reque
 		return
 	default:
 		// generate telemetry
-		tel := connect.NewTelemetry(r, h.logger)
+		tel := telemetry.ObtainHttpTelemetry(r, h.logger)
 		log := h.logger.With(tel.TelemetryFields()...)
 
 		log.Error(fmt.Sprintf("unsupported method %s for endpoint %s", r.Method, r.URL.Path))
@@ -297,11 +298,11 @@ func (h *allowanceHandler) HandleAllowances(w http.ResponseWriter, r *http.Reque
 func (h *allowanceHandler) handleGetAll(w http.ResponseWriter, r *http.Request) {
 
 	// build/collect telemetry and add fields to the logger
-	tel := connect.NewTelemetry(r, h.logger)
+	tel := telemetry.ObtainHttpTelemetry(r, h.logger)
 	log := h.logger.With(tel.TelemetryFields()...)
 
 	// add telemetry to context for downstream calls + service functions
-	ctx := context.WithValue(r.Context(), connect.TelemetryKey, tel)
+	ctx := context.WithValue(r.Context(), telemetry.TelemetryKey, tel)
 
 	// get session token from the request header
 	session, err := connect.GetSessionToken(r)
@@ -367,11 +368,11 @@ func (h *allowanceHandler) handleGetAll(w http.ResponseWriter, r *http.Request) 
 func (h *allowanceHandler) handleGetAllowance(w http.ResponseWriter, r *http.Request) {
 
 	// build/collect telemetry and add fields to the logger
-	tel := connect.NewTelemetry(r, h.logger)
+	tel := telemetry.ObtainHttpTelemetry(r, h.logger)
 	log := h.logger.With(tel.TelemetryFields()...)
 
 	// add telemetry to context for downstream calls + service functions
-	ctx := context.WithValue(r.Context(), connect.TelemetryKey, tel)
+	ctx := context.WithValue(r.Context(), telemetry.TelemetryKey, tel)
 
 	// get session token from the request header
 	session, err := connect.GetSessionToken(r)
@@ -448,11 +449,11 @@ func (h *allowanceHandler) handleGetAllowance(w http.ResponseWriter, r *http.Req
 func (h *allowanceHandler) handleCreate(w http.ResponseWriter, r *http.Request) {
 
 	// build/collect telemetry and add fields to the logger
-	tel := connect.NewTelemetry(r, h.logger)
+	tel := telemetry.ObtainHttpTelemetry(r, h.logger)
 	log := h.logger.With(tel.TelemetryFields()...)
 
 	// add telemetry to context for downstream calls + service functions
-	ctx := context.WithValue(r.Context(), connect.TelemetryKey, tel)
+	ctx := context.WithValue(r.Context(), telemetry.TelemetryKey, tel)
 
 	// get session token from the request header
 	session, err := connect.GetSessionToken(r)
@@ -552,11 +553,11 @@ func (h *allowanceHandler) handleCreate(w http.ResponseWriter, r *http.Request) 
 func (h *allowanceHandler) handleUpdateAllowance(w http.ResponseWriter, r *http.Request) {
 
 	// build/collect telemetry and add fields to the logger
-	tel := connect.NewTelemetry(r, h.logger)
+	tel := telemetry.ObtainHttpTelemetry(r, h.logger)
 	log := h.logger.With(tel.TelemetryFields()...)
 
 	// add telemetry to context for downstream calls + service functions
-	ctx := context.WithValue(r.Context(), connect.TelemetryKey, tel)
+	ctx := context.WithValue(r.Context(), telemetry.TelemetryKey, tel)
 
 	// get session token from the request header
 	session, err := connect.GetSessionToken(r)

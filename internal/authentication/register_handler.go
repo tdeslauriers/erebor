@@ -15,7 +15,7 @@ import (
 
 	"github.com/tdeslauriers/carapace/pkg/config"
 	"github.com/tdeslauriers/carapace/pkg/connect"
-	exo "github.com/tdeslauriers/carapace/pkg/connect/grpc"
+	"github.com/tdeslauriers/carapace/pkg/connect/telemetry"
 	"github.com/tdeslauriers/carapace/pkg/session/provider"
 	"github.com/tdeslauriers/pixie/pkg/api"
 	"github.com/tdeslauriers/shaw/pkg/api/register"
@@ -65,12 +65,12 @@ type registrationHandler struct {
 
 func (h *registrationHandler) HandleRegistration(w http.ResponseWriter, r *http.Request) {
 
-	// build/collect telemetry and add fields to the logger
-	telemetry := connect.NewTelemetry(r, h.logger)
-	log := h.logger.With(telemetry.TelemetryFields()...)
+	// build/collect tel and add fields to the logger
+	tel := telemetry.ObtainHttpTelemetry(r, h.logger)
+	log := h.logger.With(tel.TelemetryFields()...)
 
 	// add telemetry to context for downstream calls
-	ctx := context.WithValue(r.Context(), connect.TelemetryKey, telemetry)
+	ctx := context.WithValue(r.Context(), telemetry.TelemetryKey, tel)
 
 	if r.Method != "POST" {
 		log.Error("only POST requests are allowed")
@@ -210,11 +210,8 @@ func (h *registrationHandler) HandleRegistration(w http.ResponseWriter, r *http.
 	// profile account creation
 	go func(username string) {
 
-		// convert http telemetry to grpc telemetry
-		grpcTelemetry := exo.GrpcTelemetry{Traceparent: telemetry.Traceparent}
-
-		// add grpc telemetry to context for downstream grpc call
-		detachedCtx, _ = exo.GetTraceparentForOutgoingCall(detachedCtx, &grpcTelemetry, log)
+		// add telemetry to context for downstream grpc call
+		detachedCtx = context.WithValue(detachedCtx, telemetry.TelemetryKey, tel)
 
 		// call profile service to create ghost profile for user
 		_, err = h.profileSvc.CreateProfile(detachedCtx, &gen.CreateProfileRequest{Username: username}, WithS2SOnly())

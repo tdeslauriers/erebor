@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/tdeslauriers/carapace/pkg/connect"
+	"github.com/tdeslauriers/carapace/pkg/connect/telemetry"
 	"github.com/tdeslauriers/carapace/pkg/session/provider"
 	"github.com/tdeslauriers/pixie/pkg/api"
 	"github.com/tdeslauriers/shaw/pkg/api/user"
@@ -67,14 +68,14 @@ func (s *userAccountService) ReconcileGalleryAccounts() {
 		for {
 
 			// generate httpTelemetry -> in this case just a trace parent for web calls
-			httpTelemetry := &connect.Telemetry{
-				Traceparent: *connect.GenerateTraceParent(),
+			httpTelemetry := &telemetry.Telemetry{
+				Traceparent: *telemetry.NewTraceparent(),
 			}
 
 			log := s.logger.With(httpTelemetry.TelemetryFields()...)
 
 			// add telemetry to context for downstream calls
-			ctx := context.WithValue(context.Background(), connect.TelemetryKey, httpTelemetry)
+			ctx := context.WithValue(context.Background(), telemetry.TelemetryKey, httpTelemetry)
 
 			// using local time to make sure in low traffic conditions
 			now := time.Now()
@@ -158,12 +159,14 @@ func (s *userAccountService) ReconcileProfileAccounts() {
 		for {
 
 			// generate httpTelemetry -> in this case just a trace parent for web calls
-			httpTelemetry := connect.NewTelemetry(nil, s.logger)
+			httpTelemetry := &telemetry.Telemetry{
+				Traceparent: *telemetry.NewTraceparent(),
+			}
 
 			log := s.logger.With(httpTelemetry.TelemetryFields()...)
 
 			// add telemetry to context for downstream calls
-			ctx := context.WithValue(context.Background(), connect.TelemetryKey, httpTelemetry)
+			ctx := context.WithValue(context.Background(), telemetry.TelemetryKey, httpTelemetry)
 
 			// using local time to make sure in low traffic conditions
 			now := time.Now()

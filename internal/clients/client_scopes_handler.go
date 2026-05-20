@@ -10,6 +10,7 @@ import (
 	"net/http"
 
 	"github.com/tdeslauriers/carapace/pkg/connect"
+	"github.com/tdeslauriers/carapace/pkg/connect/telemetry"
 	"github.com/tdeslauriers/carapace/pkg/session/provider"
 )
 
@@ -47,12 +48,12 @@ type scopesHandler struct {
 // HandleScopes is the concrete implementation of the interface function that handles the request to udpate a client's assigned scopes.
 func (h *scopesHandler) HandleScopes(w http.ResponseWriter, r *http.Request) {
 
-	// build/collect telemetry and add fields to the logger
-	telemetry := connect.NewTelemetry(r, h.logger)
-	logger := h.logger.With(telemetry.TelemetryFields()...)
+	// build/collect tel and add fields to the logger
+	tel := telemetry.ObtainHttpTelemetry(r, h.logger)
+	logger := h.logger.With(tel.TelemetryFields()...)
 
 	// add telemetry to context for downstream calls
-	ctx := context.WithValue(r.Context(), connect.TelemetryKey, telemetry)
+	ctx := context.WithValue(r.Context(), telemetry.TelemetryKey, tel)
 
 	if r.Method != "PUT" {
 		logger.Error("only PUT requests are allowed")

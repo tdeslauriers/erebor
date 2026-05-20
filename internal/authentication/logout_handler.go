@@ -9,6 +9,7 @@ import (
 	"net/http"
 
 	"github.com/tdeslauriers/carapace/pkg/connect"
+	"github.com/tdeslauriers/carapace/pkg/connect/telemetry"
 )
 
 // LogoutHandler is the interface for handling logout requests from the client.
@@ -40,11 +41,11 @@ type logoutHandler struct {
 func (h *logoutHandler) HandleLogout(w http.ResponseWriter, r *http.Request) {
 
 	// build/collect telemetry and add fields to the logger
-	telemetry := connect.NewTelemetry(r, h.logger)
-	logger := h.logger.With(telemetry.TelemetryFields()...)
+	tel := telemetry.ObtainHttpTelemetry(r, h.logger)
+	logger := h.logger.With(tel.TelemetryFields()...)
 
 	// add telemetry to context
-	ctx := context.WithValue(r.Context(), connect.TelemetryKey, telemetry)
+	ctx := context.WithValue(r.Context(), telemetry.TelemetryKey, tel)
 
 	if r.Method != "POST" {
 		logger.Error("only POST requests are allowed")

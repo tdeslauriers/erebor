@@ -10,6 +10,7 @@ import (
 	"net/http"
 
 	"github.com/tdeslauriers/carapace/pkg/connect"
+	"github.com/tdeslauriers/carapace/pkg/connect/telemetry"
 	"github.com/tdeslauriers/carapace/pkg/session/provider"
 	"github.com/tdeslauriers/ran/pkg/api/clients"
 	"github.com/tdeslauriers/ran/pkg/api/pat"
@@ -77,7 +78,7 @@ func (h *clientHandler) HandleClients(w http.ResponseWriter, r *http.Request) {
 		return
 	default:
 		// generate telemetry
-		telemetry := connect.NewTelemetry(r, h.logger)
+		telemetry := telemetry.ObtainHttpTelemetry(r, h.logger)
 		logger := h.logger.With(telemetry.TelemetryFields()...)
 
 		logger.Error(fmt.Sprintf("unsupported method %s for endpoint %s", r.Method, r.URL.Path))
@@ -95,11 +96,11 @@ func (h *clientHandler) HandleClients(w http.ResponseWriter, r *http.Request) {
 func (h *clientHandler) handleGetAllClients(w http.ResponseWriter, r *http.Request) {
 
 	// generate telemetry
-	tel := connect.NewTelemetry(r, h.logger)
+	tel := telemetry.ObtainHttpTelemetry(r, h.logger)
 	log := h.logger.With(tel.TelemetryFields()...)
 
 	// add telemetry to context for downstream calls
-	ctx := context.WithValue(r.Context(), connect.TelemetryKey, tel)
+	ctx := context.WithValue(r.Context(), telemetry.TelemetryKey, tel)
 
 	// get the user token from the request
 	session, err := connect.GetSessionToken(r)
@@ -162,11 +163,11 @@ func (h *clientHandler) handleGetAllClients(w http.ResponseWriter, r *http.Reque
 func (h *clientHandler) handleGetClient(w http.ResponseWriter, r *http.Request) {
 
 	// generate telemetry
-	tel := connect.NewTelemetry(r, h.logger)
+	tel := telemetry.ObtainHttpTelemetry(r, h.logger)
 	log := h.logger.With(tel.TelemetryFields()...)
 
 	// add telemetry to context for downstream calls
-	ctx := context.WithValue(r.Context(), connect.TelemetryKey, tel)
+	ctx := context.WithValue(r.Context(), telemetry.TelemetryKey, tel)
 
 	// get the user's session token from the request
 	session, err := connect.GetSessionToken(r)
@@ -242,11 +243,11 @@ func (h *clientHandler) handleGetClient(w http.ResponseWriter, r *http.Request) 
 func (h *clientHandler) handlePutClient(w http.ResponseWriter, r *http.Request) {
 
 	// generate telemetry
-	tel := connect.NewTelemetry(r, h.logger)
+	tel := telemetry.ObtainHttpTelemetry(r, h.logger)
 	log := h.logger.With(tel.TelemetryFields()...)
 
 	// add telemetry to context for downstream calls
-	ctx := context.WithValue(r.Context(), connect.TelemetryKey, tel)
+	ctx := context.WithValue(r.Context(), telemetry.TelemetryKey, tel)
 
 	// get the user's session token from the request
 	session, err := connect.GetSessionToken(r)
@@ -366,11 +367,11 @@ func (h *clientHandler) handlePutClient(w http.ResponseWriter, r *http.Request) 
 func (h *clientHandler) handlePostClient(w http.ResponseWriter, r *http.Request) {
 
 	// generate telemetry
-	tel := connect.NewTelemetry(r, h.logger)
+	tel := telemetry.ObtainHttpTelemetry(r, h.logger)
 	log := h.logger.With(tel.TelemetryFields()...)
 
 	// add telemetry to context for downstream calls
-	ctx := context.WithValue(r.Context(), connect.TelemetryKey, tel)
+	ctx := context.WithValue(r.Context(), telemetry.TelemetryKey, tel)
 
 	// get the url slug from the request
 	slug := r.PathValue("slug")
@@ -481,12 +482,12 @@ func (h *clientHandler) handlePostClient(w http.ResponseWriter, r *http.Request)
 // HandleGeneratePat handles a request from the client to generate a personal access token (PAT) for service clients.
 func (h *clientHandler) HandleGeneratePat(w http.ResponseWriter, r *http.Request) {
 
-	// generate telemetry
-	telemetry := connect.NewTelemetry(r, h.logger)
-	logger := h.logger.With(telemetry.TelemetryFields()...)
+	// generate tel
+	tel := telemetry.ObtainHttpTelemetry(r, h.logger)
+	logger := h.logger.With(tel.TelemetryFields()...)
 
 	// add telemetry to context for downstream calls
-	ctx := context.WithValue(r.Context(), connect.TelemetryKey, telemetry)
+	ctx := context.WithValue(r.Context(), telemetry.TelemetryKey, tel)
 
 	if r.Method != http.MethodPost {
 		logger.Error("only POST requests are allowed to /clients/generate/pat endpoint")

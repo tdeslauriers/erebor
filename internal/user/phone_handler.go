@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/tdeslauriers/carapace/pkg/connect"
+	"github.com/tdeslauriers/carapace/pkg/connect/telemetry"
 	"github.com/tdeslauriers/carapace/pkg/session/provider"
 	"google.golang.org/grpc"
 )
@@ -69,7 +70,7 @@ func (h *phoneHandler) HandlePhones(w http.ResponseWriter, r *http.Request) {
 		return
 	default:
 		// generate telemetry
-		tel := connect.NewTelemetry(r, h.logger)
+		tel := telemetry.ObtainHttpTelemetry(r, h.logger)
 		log := h.logger.With(tel.TelemetryFields()...)
 
 		log.Error(fmt.Sprintf("unsupported method %s for endpoint %s", r.Method, r.URL.Path))
@@ -86,11 +87,11 @@ func (h *phoneHandler) HandlePhones(w http.ResponseWriter, r *http.Request) {
 func (h *phoneHandler) createPhone(w http.ResponseWriter, r *http.Request) {
 
 	// build/collect telemetry and add to logger
-	tel := connect.NewTelemetry(r, h.logger)
+	tel := telemetry.ObtainHttpTelemetry(r, h.logger)
 	log := h.logger.With(tel.TelemetryFields()...)
 
 	// add telemetry to context for downstream calls + service functions
-	ctx := context.WithValue(r.Context(), connect.TelemetryKey, tel)
+	ctx := context.WithValue(r.Context(), telemetry.TelemetryKey, tel)
 
 	// get session token from request
 	session, err := connect.GetSessionToken(r)
@@ -189,11 +190,11 @@ func (h *phoneHandler) createPhone(w http.ResponseWriter, r *http.Request) {
 func (h *phoneHandler) updatePhone(w http.ResponseWriter, r *http.Request) {
 
 	// build/collect telemetry and add fields to the logger
-	tel := connect.NewTelemetry(r, h.logger)
+	tel := telemetry.ObtainHttpTelemetry(r, h.logger)
 	log := h.logger.With(tel.TelemetryFields()...)
 
 	// add telemetry to context for downstream calls + service functions
-	ctx := context.WithValue(r.Context(), connect.TelemetryKey, tel)
+	ctx := context.WithValue(r.Context(), telemetry.TelemetryKey, tel)
 
 	// get session token from request
 	session, err := connect.GetSessionToken(r)
@@ -294,11 +295,11 @@ func (h *phoneHandler) updatePhone(w http.ResponseWriter, r *http.Request) {
 func (h *phoneHandler) deletePhone(w http.ResponseWriter, r *http.Request) {
 
 	// build/collect telemetry and add fields to the logger
-	tel := connect.NewTelemetry(r, h.logger)
+	tel := telemetry.ObtainHttpTelemetry(r, h.logger)
 	log := h.logger.With(tel.TelemetryFields()...)
 
 	// add telemetry to context for downstream calls + service functions
-	ctx := context.WithValue(r.Context(), connect.TelemetryKey, tel)
+	ctx := context.WithValue(r.Context(), telemetry.TelemetryKey, tel)
 
 	// get session token from request
 	session, err := connect.GetSessionToken(r)

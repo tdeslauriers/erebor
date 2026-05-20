@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/tdeslauriers/carapace/pkg/config"
 	"github.com/tdeslauriers/carapace/pkg/connect"
+	"github.com/tdeslauriers/carapace/pkg/connect/telemetry"
 	"github.com/tdeslauriers/carapace/pkg/data"
 	"github.com/tdeslauriers/carapace/pkg/session/provider"
 	"github.com/tdeslauriers/carapace/pkg/session/types"
@@ -34,7 +35,6 @@ type TokenService interface {
 
 	// PersistXref persists the xref between the authenticated uxsession and the access token.
 	PersistXref(xref SessionAccessXref) error
-
 }
 
 // NewTokenService creates a new instance of the TokenService interface, returning a concrete implementation.
@@ -77,7 +77,7 @@ func (s *tokenService) GetAccessToken(ctx context.Context, session string) (stri
 
 	// get telemetry from context -> set up logger
 	logger := s.logger
-	telemetry, ok := ctx.Value(connect.TelemetryKey).(*connect.Telemetry)
+	telemetry, ok := ctx.Value(telemetry.TelemetryKey).(*telemetry.Telemetry)
 	if ok && telemetry != nil {
 		logger = logger.With(telemetry.TelemetryFields()...)
 	} else {

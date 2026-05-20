@@ -12,6 +12,7 @@ import (
 	"erebor/internal/util"
 
 	"github.com/tdeslauriers/carapace/pkg/connect"
+	"github.com/tdeslauriers/carapace/pkg/connect/telemetry"
 	"github.com/tdeslauriers/carapace/pkg/session/provider"
 	"github.com/tdeslauriers/carapace/pkg/session/types"
 	"github.com/tdeslauriers/shaw/pkg/api/login"
@@ -53,12 +54,12 @@ type loginHandler struct {
 
 func (h *loginHandler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 
-	// build/collect telemetry and add fields to the logger
-	telemetry := connect.NewTelemetry(r, h.logger)
-	telemetryLogger := h.logger.With(telemetry.TelemetryFields()...)
+	// build/collect tel and add fields to the logger
+	tel := telemetry.ObtainHttpTelemetry(r, h.logger)
+	telemetryLogger := h.logger.With(tel.TelemetryFields()...)
 
 	// add telemetry to context for downstream calls
-	ctx := context.WithValue(r.Context(), connect.TelemetryKey, telemetry)
+	ctx := context.WithValue(r.Context(), telemetry.TelemetryKey, tel)
 
 	if r.Method != "POST" {
 		telemetryLogger.Error("only POST requests are allowed")

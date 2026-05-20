@@ -8,6 +8,7 @@ import (
 	"net/http"
 
 	"github.com/tdeslauriers/carapace/pkg/connect"
+	"github.com/tdeslauriers/carapace/pkg/connect/telemetry"
 )
 
 type Handler interface {
@@ -35,7 +36,7 @@ type handler struct {
 func (h *handler) HandleGetState(w http.ResponseWriter, r *http.Request) {
 
 	// generate telemetry
-	telemetry := connect.NewTelemetry(r, h.logger)
+	telemetry := telemetry.ObtainHttpTelemetry(r, h.logger)
 	log := h.logger.With(telemetry.TelemetryFields()...)
 
 	if r.Method != http.MethodPost {

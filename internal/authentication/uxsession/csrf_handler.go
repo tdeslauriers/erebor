@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/tdeslauriers/carapace/pkg/connect"
+	"github.com/tdeslauriers/carapace/pkg/connect/telemetry"
 )
 
 type CsrfHandler interface {
@@ -39,7 +40,7 @@ type csrfHandler struct {
 func (h *csrfHandler) HandleGetCsrf(w http.ResponseWriter, r *http.Request) {
 
 	// generate telemetry
-	telemetry := connect.NewTelemetry(r, h.logger)
+	telemetry := telemetry.ObtainHttpTelemetry(r, h.logger)
 	log := h.logger.With(telemetry.TelemetryFields()...)
 
 	// validate http method

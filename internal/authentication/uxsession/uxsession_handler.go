@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"github.com/tdeslauriers/carapace/pkg/connect"
+	"github.com/tdeslauriers/carapace/pkg/connect/telemetry"
 )
 
 // Handler is the interface for handling session requests from the client.
@@ -41,7 +42,7 @@ type handler struct {
 func (h *handler) HandleGetSession(w http.ResponseWriter, r *http.Request) {
 
 	// build/collect telemetry and add fields to the logger
-	telemetry := connect.NewTelemetry(r, h.logger)
+	telemetry := telemetry.ObtainHttpTelemetry(r, h.logger)
 	logger := h.logger.With(telemetry.TelemetryFields()...)
 
 	if r.Method != http.MethodGet {

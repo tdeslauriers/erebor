@@ -13,6 +13,7 @@ import (
 	"sync"
 
 	"github.com/tdeslauriers/carapace/pkg/connect"
+	"github.com/tdeslauriers/carapace/pkg/connect/telemetry"
 	"github.com/tdeslauriers/carapace/pkg/permissions"
 	"github.com/tdeslauriers/carapace/pkg/session/provider"
 	"github.com/tdeslauriers/carapace/pkg/validate"
@@ -79,7 +80,7 @@ func (h *handler) HandlePermissions(w http.ResponseWriter, r *http.Request) {
 		return
 	default:
 		// generate telemetry
-		telemetry := connect.NewTelemetry(r, h.logger)
+		telemetry := telemetry.ObtainHttpTelemetry(r, h.logger)
 		logger := h.logger.With(telemetry.TelemetryFields()...)
 
 		logger.Error(fmt.Sprintf("unsupported method %s for endpoint %s", r.Method, r.URL.Path))
@@ -98,11 +99,11 @@ func (h *handler) HandlePermissions(w http.ResponseWriter, r *http.Request) {
 func (h *handler) getAllPermissions(w http.ResponseWriter, r *http.Request) {
 
 	// generate telemetry
-	tel := connect.NewTelemetry(r, h.logger)
+	tel := telemetry.ObtainHttpTelemetry(r, h.logger)
 	log := h.logger.With(tel.TelemetryFields()...)
 
 	// add telemetry to context for downstream calls + service functions
-	ctx := context.WithValue(r.Context(), connect.TelemetryKey, tel)
+	ctx := context.WithValue(r.Context(), telemetry.TelemetryKey, tel)
 
 	// get the session token from the request
 	session, err := connect.GetSessionToken(r)
@@ -213,11 +214,11 @@ func (h *handler) getServicePermissions(
 func (h *handler) getPermissionBySlug(w http.ResponseWriter, r *http.Request) {
 
 	// generate telemetry
-	tel := connect.NewTelemetry(r, h.logger)
+	tel := telemetry.ObtainHttpTelemetry(r, h.logger)
 	log := h.logger.With(tel.TelemetryFields()...)
 
 	// add telemetry to context for downstream calls + service functions
-	ctx := context.WithValue(r.Context(), connect.TelemetryKey, tel)
+	ctx := context.WithValue(r.Context(), telemetry.TelemetryKey, tel)
 
 	// get session token from request
 	session, err := connect.GetSessionToken(r)
@@ -349,11 +350,11 @@ func (h *handler) getPermissionBySlug(w http.ResponseWriter, r *http.Request) {
 func (h *handler) createPermission(w http.ResponseWriter, r *http.Request) {
 
 	// generate telemetry
-	tel := connect.NewTelemetry(r, h.logger)
+	tel := telemetry.ObtainHttpTelemetry(r, h.logger)
 	log := h.logger.With(tel.TelemetryFields()...)
 
 	// add telemetry to context for downstream calls + service functions
-	ctx := context.WithValue(r.Context(), connect.TelemetryKey, tel)
+	ctx := context.WithValue(r.Context(), telemetry.TelemetryKey, tel)
 
 	// get session token from request
 	session, err := connect.GetSessionToken(r)
@@ -495,11 +496,11 @@ func (h *handler) createPermission(w http.ResponseWriter, r *http.Request) {
 func (h *handler) updatePermission(w http.ResponseWriter, r *http.Request) {
 
 	// generate telemetry
-	tel := connect.NewTelemetry(r, h.logger)
+	tel := telemetry.ObtainHttpTelemetry(r, h.logger)
 	log := h.logger.With(tel.TelemetryFields()...)
 
 	// add telemetry to context for downstream calls + service functions
-	ctx := context.WithValue(r.Context(), connect.TelemetryKey, tel)
+	ctx := context.WithValue(r.Context(), telemetry.TelemetryKey, tel)
 
 	// get session token from request
 	session, err := connect.GetSessionToken(r)

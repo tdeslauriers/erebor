@@ -9,6 +9,7 @@ import (
 	"net/http"
 
 	"github.com/tdeslauriers/carapace/pkg/connect"
+	"github.com/tdeslauriers/carapace/pkg/connect/telemetry"
 	"github.com/tdeslauriers/carapace/pkg/pat"
 	"github.com/tdeslauriers/carapace/pkg/session/provider"
 	"github.com/tdeslauriers/carapace/pkg/storage"
@@ -52,11 +53,11 @@ type handler struct {
 func (h *handler) HandleImageUploadNotification(w http.ResponseWriter, r *http.Request) {
 
 	// generate telemetry
-	tel := connect.NewTelemetry(r, h.logger)
+	tel := telemetry.ObtainHttpTelemetry(r, h.logger)
 	log := h.logger.With(tel.TelemetryFields()...)
 
 	// add telemetry to context for downstream calls + service functions
-	ctx := context.WithValue(r.Context(), connect.TelemetryKey, tel)
+	ctx := context.WithValue(r.Context(), telemetry.TelemetryKey, tel)
 
 	// validate method
 	if r.Method != http.MethodPost {

@@ -23,12 +23,11 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"os"
 	"time"
 
 	"github.com/tdeslauriers/carapace/pkg/config"
 	"github.com/tdeslauriers/carapace/pkg/connect"
-	exo "github.com/tdeslauriers/carapace/pkg/connect/grpc"
+	"github.com/tdeslauriers/carapace/pkg/connect/telemetry"
 	"github.com/tdeslauriers/carapace/pkg/data"
 	"github.com/tdeslauriers/carapace/pkg/diagnostics"
 	"github.com/tdeslauriers/carapace/pkg/jwt"
@@ -97,7 +96,12 @@ func New(config *config.Config) (Gateway, error) {
 	}
 
 	// set up indexer to create blind indexes for encrypted data tables
-	indexer, err := data.NewIndexer([]byte(config.Database.IndexSecret))
+	hmacSecret, err := base64.StdEncoding.DecodeString(config.Database.IndexSecret)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode database index secret Env var: %v", err)
+	}
+
+	indexer, err := data.NewIndexer(hmacSecret)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create data indexer: %v", err)
 	}
@@ -153,7 +157,7 @@ func New(config *config.Config) (Gateway, error) {
 		config.Profiles.Url,
 		grpc.WithTransportCredentials(tlsCreds),
 		grpc.WithChainUnaryInterceptor(
-			exo.UnaryClientWithTelemetry(slog.Default()),
+			telemetry.UnaryClientWithTelemetry(slog.Default()),
 			authentication.NewAuthInterceptor(tkn, sn).Unary(),
 		),
 	)
@@ -357,26 +361,24 @@ func (g *gateway) Run(ctx context.Context) error {
 	mux.HandleFunc("/images/notify/upload", glry.HandleImageUploadNotification)
 	mux.HandleFunc("/images/permissions", glry.HandlePermissions)
 
-	erebor := &connect.TlsServer{
-		Addr:      g.config.ServicePort,
-		Mux:       mux,
-		TlsConfig: g.serverTls,
-	}
-
-	go func() {
-
-		g.logger.Info(fmt.Sprintf("starting %s gateway service on %s...", g.config.ServiceName, erebor.Addr[1:]))
-		if err := erebor.Initialize(); err != http.ErrServerClosed {
-			g.logger.Error(fmt.Sprintf("failed to start %s gateway service: %v", g.config.ServiceName, err.Error()))
-			os.Exit(1)
-		}
-	}()
+	// instatiate and start server
+	erebor := connect.NewTlsServer(
+		g.config.ServicePort,
+		mux,
+		g.serverTls,
+	)
 
 	g.cleanup.ExpiredAccess(ctx)
 	g.cleanup.ExpiredS2s(ctx)
 	g.cleanup.ExpiredSession(ctx, 1)
 	g.cleanup.ReconcileGalleryAccounts()
 	g.cleanup.ReconcileProfileAccounts()
+
+	g.logger.Info(fmt.Sprintf("starting %s gateway service on %s...", g.config.ServiceName, g.config.ServicePort[1:]))
+	if err := erebor.Initialize(ctx); err != nil && err != http.ErrServerClosed {
+		g.logger.Error(fmt.Sprintf("failed to start %s gateway service: %v", g.config.ServiceName, err.Error()))
+		return err
+	}
 
 	return nil
 }

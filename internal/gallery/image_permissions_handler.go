@@ -10,6 +10,7 @@ import (
 	"net/http"
 
 	"github.com/tdeslauriers/carapace/pkg/connect"
+	"github.com/tdeslauriers/carapace/pkg/connect/telemetry"
 	"github.com/tdeslauriers/carapace/pkg/permissions"
 	"github.com/tdeslauriers/carapace/pkg/session/provider"
 )
@@ -56,7 +57,7 @@ func (h *permissionsHandler) HandlePermissions(w http.ResponseWriter, r *http.Re
 		return
 	default:
 		// generate telemetry
-		tel := connect.NewTelemetry(r, h.logger)
+		tel := telemetry.ObtainHttpTelemetry(r, h.logger)
 		log := h.logger.With(tel.TelemetryFields()...)
 
 		log.Error("unsupported method for /images/permissions endpoint")
@@ -72,11 +73,11 @@ func (h *permissionsHandler) HandlePermissions(w http.ResponseWriter, r *http.Re
 func (h *permissionsHandler) getPermissionsData(w http.ResponseWriter, r *http.Request) {
 
 	// generate telemetry
-	tel := connect.NewTelemetry(r, h.logger)
+	tel := telemetry.ObtainHttpTelemetry(r, h.logger)
 	log := h.logger.With(tel.TelemetryFields()...)
 
 	// add telemetry to context for downstream calls + service functions
-	ctx := context.WithValue(r.Context(), connect.TelemetryKey, tel)
+	ctx := context.WithValue(r.Context(), telemetry.TelemetryKey, tel)
 	// get the session token
 	session, err := connect.GetSessionToken(r)
 	if err != nil {

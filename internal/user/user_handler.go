@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/tdeslauriers/carapace/pkg/connect"
+	"github.com/tdeslauriers/carapace/pkg/connect/telemetry"
 	"github.com/tdeslauriers/carapace/pkg/jwt"
 	"github.com/tdeslauriers/carapace/pkg/permissions"
 	"github.com/tdeslauriers/carapace/pkg/session/provider"
@@ -84,7 +85,7 @@ func (h *userHandler) HandleUsers(w http.ResponseWriter, r *http.Request) {
 		return
 	default:
 		// generate telemetry
-		tel := connect.NewTelemetry(r, h.logger)
+		tel := telemetry.ObtainHttpTelemetry(r, h.logger)
 		log := h.logger.With(tel.TelemetryFields()...)
 
 		log.Error(fmt.Sprintf("unsupported method %s for endpoint %s", r.Method, r.URL.Path))
@@ -100,11 +101,11 @@ func (h *userHandler) HandleUsers(w http.ResponseWriter, r *http.Request) {
 func (h *userHandler) getAllUsers(w http.ResponseWriter, r *http.Request) {
 
 	// build/collect telemetry and add fields to the logger
-	tel := connect.NewTelemetry(r, h.logger)
+	tel := telemetry.ObtainHttpTelemetry(r, h.logger)
 	log := h.logger.With(tel.TelemetryFields()...)
 
 	// add telemetry to context for downstream calls + service functions
-	ctx := context.WithValue(r.Context(), connect.TelemetryKey, tel)
+	ctx := context.WithValue(r.Context(), telemetry.TelemetryKey, tel)
 
 	// get the user token from the request
 	session, err := connect.GetSessionToken(r)
@@ -167,11 +168,11 @@ func (h *userHandler) getAllUsers(w http.ResponseWriter, r *http.Request) {
 func (h *userHandler) getUser(w http.ResponseWriter, r *http.Request) {
 
 	// build/collect telemetry and add fields to the logger
-	tel := connect.NewTelemetry(r, h.logger)
+	tel := telemetry.ObtainHttpTelemetry(r, h.logger)
 	log := h.logger.With(tel.TelemetryFields()...)
 
 	// add telemetry to context for downstream calls + service functions
-	ctx := context.WithValue(r.Context(), connect.TelemetryKey, tel)
+	ctx := context.WithValue(r.Context(), telemetry.TelemetryKey, tel)
 
 	// get the user token from the request
 	session, err := connect.GetSessionToken(r)
@@ -318,11 +319,11 @@ func (h *userHandler) getUser(w http.ResponseWriter, r *http.Request) {
 func (h *userHandler) putUser(w http.ResponseWriter, r *http.Request) {
 
 	// build/collect telemetry and add fields to the logger
-	tel := connect.NewTelemetry(r, h.logger)
+	tel := telemetry.ObtainHttpTelemetry(r, h.logger)
 	log := h.logger.With(tel.TelemetryFields()...)
 
 	// add telemetry to context for downstream calls + service functions
-	ctx := context.WithValue(r.Context(), connect.TelemetryKey, tel)
+	ctx := context.WithValue(r.Context(), telemetry.TelemetryKey, tel)
 
 	// get the user token from the request
 	session, err := connect.GetSessionToken(r)

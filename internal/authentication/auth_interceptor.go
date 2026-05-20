@@ -8,7 +8,7 @@ import (
 	"log/slog"
 	"strings"
 
-	exo "github.com/tdeslauriers/carapace/pkg/connect/grpc"
+	"github.com/tdeslauriers/carapace/pkg/connect/telemetry"
 	"github.com/tdeslauriers/carapace/pkg/session/provider"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
@@ -61,12 +61,12 @@ func (a *authInterceptor) Unary() grpc.UnaryClientInterceptor {
 		// introspect the method to determine service name and method name
 		grpcSvcName, methodName := parseMethod(method)
 
-		// get telemetry
-		telemetry, ok := exo.GetTelemetryFromContext(ctx)
+		// get tel
+		tel, ok := ctx.Value(telemetry.TelemetryKey).(*telemetry.Telemetry)
 		if !ok {
 			a.logger.Error("failed to extract telemetry from context in client auth interceptor")
 		}
-		log := a.logger.With(telemetry.TelemetryFields()...)
+		log := a.logger.With(tel.TelemetryFields()...)
 
 		// extract auth mode from options to determine if user token is required
 		// and if so, pull session from options

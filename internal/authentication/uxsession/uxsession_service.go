@@ -15,6 +15,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/tdeslauriers/carapace/pkg/config"
 	"github.com/tdeslauriers/carapace/pkg/connect"
+	"github.com/tdeslauriers/carapace/pkg/connect/telemetry"
 	"github.com/tdeslauriers/carapace/pkg/data"
 	"github.com/tdeslauriers/carapace/pkg/session/provider"
 	"github.com/tdeslauriers/carapace/pkg/session/types"
@@ -364,7 +365,7 @@ func (s *uxSession) RevokeSession(session string) error {
 func (s *uxSession) DestroySession(ctx context.Context, session string) error {
 
 	// get telemtry from context
-	telemetry, ok := connect.GetTelemetryFromContext(ctx)
+	telemetry, ok := ctx.Value(telemetry.TelemetryKey).(*telemetry.Telemetry)
 	if !ok {
 		s.logger.Warn("failed to extract telemetry from context of DestroySession call")
 	}
@@ -376,7 +377,7 @@ func (s *uxSession) DestroySession(ctx context.Context, session string) error {
 	}
 
 	// add telemetryLogger to context for call stack
-	ctx = context.WithValue(ctx, connect.TelemetryLoggerKey, telemetryLogger)
+	ctx = context.WithValue(ctx, "telemetryLogger", telemetryLogger)
 
 	// light weight input validation
 	if len(session) < 16 || len(session) > 64 {
@@ -440,7 +441,7 @@ func (s *uxSession) removeAccessTokens(ctx context.Context, sessionId string, er
 	defer wg.Done()
 
 	// get logger from context
-	telemetryLogger, ok := ctx.Value(connect.TelemetryLoggerKey).(*slog.Logger)
+	telemetryLogger, ok := ctx.Value("telemetryLogger").(*slog.Logger)
 	if !ok {
 		s.logger.Warn("failed to extract telemetryLogger from context of removeAccessTokens call")
 		telemetryLogger = s.logger // set to default logger if not found in context

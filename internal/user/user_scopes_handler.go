@@ -10,6 +10,7 @@ import (
 	"net/http"
 
 	"github.com/tdeslauriers/carapace/pkg/connect"
+	"github.com/tdeslauriers/carapace/pkg/connect/telemetry"
 	"github.com/tdeslauriers/carapace/pkg/session/provider"
 )
 
@@ -47,11 +48,11 @@ type scopesHandler struct {
 func (h *scopesHandler) HandleScopes(w http.ResponseWriter, r *http.Request) {
 
 	// generate telemetry
-	tel := connect.NewTelemetry(r, h.logger)
+	tel := telemetry.ObtainHttpTelemetry(r, h.logger)
 	log := h.logger.With(tel.TelemetryFields()...)
 
 	// add telemetry to context for downstream calls + service functions
-	ctx := context.WithValue(r.Context(), connect.TelemetryKey, tel)
+	ctx := context.WithValue(r.Context(), telemetry.TelemetryKey, tel)
 
 	if r.Method != http.MethodPut {
 		log.Error("failed to update scopes", "err", "only PUT requests are allowed")
