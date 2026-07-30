@@ -61,6 +61,9 @@ func (h *imageHandler) HandleImage(w http.ResponseWriter, r *http.Request) {
 	case http.MethodPost:
 		h.postImageData(w, r)
 		return
+	case http.MethodDelete:
+		h.deleteImageData(w, r)
+		return
 	default:
 		// generate telemetry
 		tel := telemetry.ObtainHttpTelemetry(r, h.logger)
@@ -360,4 +363,71 @@ func (h *imageHandler) postImageData(w http.ResponseWriter, r *http.Request) {
 		e.SendJsonErr(w)
 		return
 	}
+}
+
+func (h *imageHandler) deleteImageData(w http.ResponseWriter, r *http.Request) {
+
+	// generate telemetry
+	tel := telemetry.ObtainHttpTelemetry(r, h.logger)
+	log := h.logger.With(tel.TelemetryFields()...)
+
+	// add telemetry to context for downstream calls + service functions
+	ctx := context.WithValue(r.Context(), telemetry.TelemetryKey, tel)
+
+	// get session token from the request header
+	session, err := connect.GetSessionToken(r)
+	if err != nil {
+		log.Error("invalid session token on /images/slug get request", "err", err.Error())
+		h.ux.HandleSessionErr(err, w)
+		return
+	}
+
+	// get access token tied to the session
+	// validates the session is active and authenticated
+	accessToken, err := h.ux.GetAccessToken(ctx, session)
+	if err != nil {
+		log.Error("failed to exchange service token for access token", "err", err.Error())
+		h.ux.HandleSessionErr(err, w)
+		return
+	}
+
+	// get the template slug from the request URL
+	slug, err := connect.GetValidSlug(r)
+	if err != nil {
+		log.Error("invalid image slug", "err", err.Error())
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusBadRequest,
+			Message:    err.Error(),
+		}
+		e.SendJsonErr(w)
+		return
+	}
+
+	// get service token
+	galleryToken, err := h.tkn.GetServiceToken(ctx, util.ServiceGallery)
+	if err != nil {
+		log.Error("failed to get service token for gallery service", "err", err.Error())
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusInternalServerError,
+			Message:    "internal server error",
+		}
+		e.SendJsonErr(w)
+		return
+	}
+
+	// send delete call to gallery service
+	if _, err := connect.DeleteFromService[struct{}](
+		ctx,
+		*h.gallery,
+		fmt.Sprintf("/images/%s", slug),
+		galleryToken,
+		accessToken,
+	); err != nil {
+		log.Error("failed to delete image data", "image_slug", slug, "err", err.Error())
+		h.gallery.RespondUpstreamError(err, w)
+		return
+	}
+
+	log.Info("image data successfully deleted ", "image_slug", slug)
+	w.WriteHeader(http.StatusNoContent) // 204 No Content
 }

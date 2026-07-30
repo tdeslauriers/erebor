@@ -140,7 +140,7 @@ func (h *resetHandler) HandleReset(w http.ResponseWriter, r *http.Request) {
 
 	// send the request to the identity service to update the password
 	// there will be no response body, only a status code -> identity will not return password data
-	_, err = connect.PutToService[profile.ResetCmd, struct{}](
+	_, err = connect.PostToService[profile.ResetCmd, struct{}](
 		ctx,
 		h.identity,
 		"/reset",

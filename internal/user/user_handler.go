@@ -136,7 +136,7 @@ func (h *userHandler) getAllUsers(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// get users from identity service
-	users, err := connect.GetServiceData[[]user.User](
+	users, err := connect.GetServiceData[[]user.Profile](
 		ctx,
 		h.identity,
 		"/users",
