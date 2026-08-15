@@ -3,10 +3,12 @@ package gallery
 import (
 	"erebor/internal/authentication/uxsession"
 	"erebor/internal/notification"
+	"fmt"
 
 	"github.com/tdeslauriers/carapace/pkg/connect"
 	"github.com/tdeslauriers/carapace/pkg/pat"
 	"github.com/tdeslauriers/carapace/pkg/session/provider"
+	"github.com/tdeslauriers/carapace/pkg/validate"
 )
 
 // Handler is a composite interface that aggregates all gallery-service-related handlers.
@@ -34,4 +36,21 @@ type handler struct {
 	ImageHandler
 	notification.Handler
 	PermissionsHandler
+}
+
+// DeleteImageCmd is the model for issuing a delete image call to
+// the gallery service
+type DeleteImageCmd struct {
+	Csrf string `json:"csrf"`
+}
+
+// Validate checks the DeleteImageCmd fields are well formed.
+func (cmd *DeleteImageCmd) Validate() error {
+
+	// check the csrf is a valid uuid
+	if err := validate.ValidateUuid(cmd.Csrf); err != nil {
+		return fmt.Errorf("invalid csrf token")
+	}
+
+	return nil
 }

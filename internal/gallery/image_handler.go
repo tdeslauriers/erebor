@@ -148,7 +148,7 @@ func (h *imageHandler) getImageData(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(img); err != nil {
-		log.Error("failed to encode image data to JSON", "err", err.Error())
+		log.Error("failed to encode image data to json", "err", err.Error())
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusInternalServerError,
 			Message:    "failed to encode image data to json",
@@ -199,7 +199,7 @@ func (h *imageHandler) updateImageData(w http.ResponseWriter, r *http.Request) {
 	// decode the request body
 	var cmd api.UpdateMetadataCmd
 	if err := json.NewDecoder(r.Body).Decode(&cmd); err != nil {
-		log.Error("failed to decode JSON in image metadata update request body", "err", err.Error())
+		log.Error("failed to decode json in image metadata update request body", "err", err.Error())
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusBadRequest,
 			Message:    "improperly formatted json",
@@ -293,7 +293,7 @@ func (h *imageHandler) postImageData(w http.ResponseWriter, r *http.Request) {
 	// get request body
 	var cmd api.AddMetaDataCmd
 	if err := json.NewDecoder(r.Body).Decode(&cmd); err != nil {
-		log.Error("failed to decode JSON in image upload request body: %s", "err", err.Error())
+		log.Error("failed to decode json in image upload request body", "err", err.Error())
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusBadRequest,
 			Message:    "improperly formatted json",
@@ -315,7 +315,7 @@ func (h *imageHandler) postImageData(w http.ResponseWriter, r *http.Request) {
 
 	// validate the csrf token
 	if valid, err := h.ux.IsValidCsrf(session, cmd.Csrf); !valid {
-		log.Error("invalid session or csrf token: %s", "err", err.Error())
+		log.Error("invalid session or csrf token", "err", err.Error())
 		h.ux.HandleSessionErr(err, w)
 		return
 	}
@@ -355,7 +355,7 @@ func (h *imageHandler) postImageData(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	if err := json.NewEncoder(w).Encode(data); err != nil {
-		log.Error("failed to encode image placeholder data to JSON", "err", err.Error())
+		log.Error("failed to encode image placeholder data to json", "err", err.Error())
 		e := connect.ErrorHttp{
 			StatusCode: http.StatusInternalServerError,
 			Message:    "failed to encode image data to json",
@@ -400,6 +400,36 @@ func (h *imageHandler) deleteImageData(w http.ResponseWriter, r *http.Request) {
 			Message:    err.Error(),
 		}
 		e.SendJsonErr(w)
+		return
+	}
+
+	// get cmd from request body
+	var cmd DeleteImageCmd
+	if err := json.NewDecoder(r.Body).Decode(&cmd); err != nil {
+		log.Error("failed to decode json in image delete request body", "err", err.Error())
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusBadRequest,
+			Message:    "improperly formatted json",
+		}
+		e.SendJsonErr(w)
+		return
+	}
+
+	// input validation
+	if err := cmd.Validate(); err != nil {
+		log.Error("failed to validate image delete command", "err", err.Error())
+		e := connect.ErrorHttp{
+			StatusCode: http.StatusUnprocessableEntity,
+			Message:    err.Error(),
+		}
+		e.SendJsonErr(w)
+		return
+	}
+
+	// validate the csrf token
+	if valid, err := h.ux.IsValidCsrf(session, cmd.Csrf); !valid {
+		log.Error("invalid session or csrf token", "err", err.Error())
+		h.ux.HandleSessionErr(err, w)
 		return
 	}
 

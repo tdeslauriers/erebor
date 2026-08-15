@@ -43,12 +43,12 @@ github.com/stretchr/testify v1.9.0 h1:HtqpIVDClZ4nwg75+f6Lvsy/wHu+3BoSGCbBAcpTsT
 github.com/stretchr/testify v1.9.0/go.mod h1:r2ic/lqez/lEtzL7wO/rwa5dbSLXVDPFyf8C91i36aY=
 github.com/tdeslauriers/apprentice v0.1.4 h1:EnZUZkiNHQc1SzxMJftZ3yBgA7B8h7UvHMql5+N4A9g=
 github.com/tdeslauriers/apprentice v0.1.4/go.mod h1:QmpgtofO43Fabzj3Y8wP0MUf9FtxAWdalTCzAhzCdT4=
-github.com/tdeslauriers/carapace v0.4.16 h1:sRWffix5vrvbpLL4s3c/1Ru2q1C4NzHShtcFfOXPr9c=
-github.com/tdeslauriers/carapace v0.4.16/go.mod h1:POP1x+ktyMrZye396aId6f88NdbqJmNnJZp6pZNEMww=
+github.com/tdeslauriers/carapace v0.4.19 h1:Tv0DRtGLg7Cg/bAuPc4jmZUIt7dOxqChrrXQka44UsI=
+github.com/tdeslauriers/carapace v0.4.19/go.mod h1:POP1x+ktyMrZye396aId6f88NdbqJmNnJZp6pZNEMww=
 github.com/tdeslauriers/pixie v0.1.8 h1:EYzgrba7ZGY4aG/ms9+703J2uc21cVXf3BqTf0bL+k0=
 github.com/tdeslauriers/pixie v0.1.8/go.mod h1:JwP6oDdcWTJ1BCVA3LffjpWs8y2iaXVVv/dDp8AhFk0=
-github.com/tdeslauriers/ran v0.1.5 h1:RgbfsOyOIEU+0/HlceS1nWMrY7VC09yYBBMFtXQxIv0=
-github.com/tdeslauriers/ran v0.1.5/go.mod h1:xHGKipKNYB/Ovz8MCJk5P8d6aR+LXDq1Vg2mQos5nTg=
+github.com/tdeslauriers/ran v0.1.6 h1:MJ9E6frIc9I8vhGAOhBJmtqqdArN+vhDxS0bh/VRPx4=
+github.com/tdeslauriers/ran v0.1.6/go.mod h1:xHGKipKNYB/Ovz8MCJk5P8d6aR+LXDq1Vg2mQos5nTg=
 github.com/tdeslauriers/shaw v0.1.7 h1:c+dpfMlLibXji9dsXmzg9OjDrmI0gOZtAyTl7ydvHCs=
 github.com/tdeslauriers/shaw v0.1.7/go.mod h1:l/CVltLSksTe+0E+wZVlJJxaMiiAxEJizBIFd41T9pQ=
 github.com/tinylib/msgp v1.6.2 h1:D40LN895O9HJpN8n5Ksqk+abl7zw6RtizDwgRCE7hXk=

@@ -112,7 +112,7 @@ func New(config *config.Config) (Gateway, error) {
 		return nil, fmt.Errorf("failed to decode field level encryption key Env var: %v", err)
 	}
 
-	cryptor, err := data.NewServiceAesGcmKey(aes)
+	cryptor, err := data.NewServiceAesGcm(aes)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create field level encryption service: %v", err)
 	}

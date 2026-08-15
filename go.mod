@@ -4,9 +4,9 @@ go 1.25.4
 
 require (
 	github.com/tdeslauriers/apprentice v0.1.4
-	github.com/tdeslauriers/carapace v0.4.16
+	github.com/tdeslauriers/carapace v0.4.19
 	github.com/tdeslauriers/pixie v0.1.8
-	github.com/tdeslauriers/ran v0.1.5
+	github.com/tdeslauriers/ran v0.1.6
 	github.com/tdeslauriers/shaw v0.1.7
 	google.golang.org/grpc v1.79.1
 	google.golang.org/protobuf v1.36.11
